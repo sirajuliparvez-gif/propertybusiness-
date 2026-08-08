@@ -1,0 +1,692 @@
+// Property management company dashboard — schema derived from DATA_MODEL.md / LOGIC_MODEL.md
+// Get a free hosted Postgres database in seconds: `npx create-db`
+
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum UserRole {
+  ADMIN
+  MANAGER
+}
+
+enum PropertyStatus {
+  ACTIVE
+  INACTIVE
+}
+
+enum LeaseStatus {
+  ACTIVE
+  ENDED
+}
+
+enum TenantLeaseStatus {
+  ACTIVE
+  VACATED
+  TERMINATED
+}
+
+enum UnitStatus {
+  ACTIVE
+  INACTIVE
+}
+
+enum RentPaymentStatus {
+  PAID
+  UNPAID
+  PARTIAL
+  ADJUSTED_FROM_DOWNPAYMENT
+}
+
+enum EmployeeStatus {
+  ACTIVE
+  INACTIVE
+  TERMINATED
+}
+
+enum PayrollStatus {
+  PAID
+  PENDING
+}
+
+enum UtilityType {
+  GAS
+  ELECTRICITY
+  WATER
+  OTHER
+}
+
+enum BillStatus {
+  PAID
+  UNPAID
+}
+
+enum ServiceChargeType {
+  FLAT
+  PERCENTAGE
+}
+
+enum TransactionType {
+  RENT_PAID_TO_OWNER
+  RENT_RECEIVED_FROM_TENANT
+  DOWNPAYMENT_PAID_TO_OWNER
+  DOWNPAYMENT_RECEIVED_FROM_TENANT
+  DOWNPAYMENT_REFUND_TO_TENANT
+  DOWNPAYMENT_REFUND_FROM_OWNER
+  UTILITY_REIMBURSEMENT_FROM_TENANT
+  SERVICE_CHARGE_RECEIVED_FROM_TENANT
+  GUEST_STAY_PAYMENT_RECEIVED
+  GUEST_DEPOSIT_REFUND
+  PAYROLL_EXPENSE
+  UTILITY_EXPENSE
+  MAINTENANCE_EXPENSE
+  OTHER
+}
+
+enum TransactionDirection {
+  INCOMING
+  OUTGOING
+}
+
+// How money physically moved — matters for reconciliation (cash vs mobile
+// banking vs bank transfer are handled very differently day-to-day).
+enum PaymentMethod {
+  CASH
+  BKASH
+  NAGAD
+  BANK
+  OTHER
+}
+
+// Individual renter vs a business/company tenant — a business tenant is
+// typically identified by trade license / company registration instead of
+// (or in addition to) a personal NID.
+enum TenantType {
+  INDIVIDUAL
+  BUSINESS
+}
+
+enum DocumentOwnerType {
+  OWNER_LEASE_AGREEMENT
+  TENANT_LEASE
+  UTILITY_BILL
+  TENANT
+  GUEST_STAY
+}
+
+enum NotificationType {
+  RENT_DUE_SOON
+  RENT_OVERDUE
+  RENT_RECEIVED
+  OWNER_RENT_DUE
+  PAYROLL_DUE
+  UTILITY_BILL_DUE
+  OWNER_AGREEMENT_EXPIRING
+  TENANT_LEASE_EXPIRING
+  DOWNPAYMENT_EXHAUSTED
+  GUEST_CHECKIN_TODAY
+  GUEST_CHECKOUT_TODAY
+}
+
+// What kind of record a bulk CSV upload populated. Drives which import
+// template/parser the upload UI uses.
+enum ImportEntityType {
+  PROPERTY_OWNER
+  PROPERTY
+  UNIT_TYPE
+  TENANT
+  TENANT_LEASE
+  EMPLOYEE
+  RENT_PAYMENT
+  OWNER_RENT_PAYMENT
+  PAYROLL_RECORD
+  UTILITY_BILL
+  EXPENSE
+  GUEST_STAY
+}
+
+// A room/unit can be leased long-term (TenantLease, monthly) OR booked for
+// short stays (GuestStay, nightly) — a hotel-type property commonly needs
+// both, sometimes for the very same room at different points in time.
+enum GuestStayStatus {
+  RESERVED
+  CHECKED_IN
+  CHECKED_OUT
+  CANCELLED
+  NO_SHOW
+}
+
+// Matches what a front desk actually asks for at check-in.
+enum GuestIdType {
+  NID
+  PASSPORT
+  OTHER
+}
+
+// Dashboard login — admin/manager only. Employees never get an account.
+// id matches the Supabase Auth user id (auth.users.id) — Supabase Auth owns
+// password/session, this table only stores app-level profile fields.
+model User {
+  id        String   @id
+  name      String
+  email     String   @unique
+  role      UserRole @default(MANAGER)
+  createdAt DateTime @default(now())
+
+  transactionsRecorded Transaction[]
+  importBatches        ImportBatch[]
+}
+
+model PropertyOwner {
+  id            String       @id @default(cuid())
+  name          String
+  contactInfo   String?
+  address       String?
+  notes         String?
+  createdAt     DateTime     @default(now())
+  importBatchId String?
+  importBatch   ImportBatch? @relation(fields: [importBatchId], references: [id])
+
+  properties Property[]
+}
+
+model Property {
+  id            String         @id @default(cuid())
+  ownerId       String
+  owner         PropertyOwner  @relation(fields: [ownerId], references: [id])
+  name          String
+  address       String?
+  type          String?
+  notes         String?
+  status        PropertyStatus @default(ACTIVE)
+  createdAt     DateTime       @default(now())
+  deletedAt     DateTime?
+  importBatchId String?
+  importBatch   ImportBatch?   @relation(fields: [importBatchId], references: [id])
+
+  ownerLeaseAgreements OwnerLeaseAgreement[]
+  unitTypes            UnitType[]
+  employees            Employee[]
+  utilityBills         UtilityBill[]
+  transactions         Transaction[]
+}
+
+// Contract between the company and the PropertyOwner for one Property.
+// A Property can have MULTIPLE agreements over time (renewal/renegotiation) —
+// only one should be status=ACTIVE at a time; the rest are historical record.
+// Both the monthly rent AND the downpayment/advance to the owner share the
+// SAME two modes, chosen per agreement: either tracked per UnitType/Unit
+// (different unit types/units can have different rent AND different
+// downpayment — e.g. a 1st-floor vs 3rd-floor unit, or a 120 sqft vs 2000 sqft
+// shop, realistically command different advances), OR a single fixed lump sum
+// for the whole property — e.g. leasing an entire building/market/office floor
+// for one flat monthly fee and one flat advance, then subdividing it into
+// units for tenants without the owner caring about a per-unit breakdown. When
+// fixedMonthlyRentAmount/downpaymentAmount are set, they are the source of
+// truth for the total owner obligation instead of summing each
+// UnitType's/Unit's ownerRentAmount/ownerDownpaymentAmount.
+model OwnerLeaseAgreement {
+  id                     String      @id @default(cuid())
+  propertyId             String
+  property               Property    @relation(fields: [propertyId], references: [id])
+  downpaymentAmount      Decimal?
+  fixedMonthlyRentAmount Decimal?
+  startDate              DateTime
+  endDate                DateTime?
+  status                 LeaseStatus @default(ACTIVE)
+  notes                  String?
+  createdAt              DateTime    @default(now())
+
+  documents         Document[]
+  ownerRentPayments OwnerRentPayment[]
+}
+
+// Monthly rent-to-owner ledger — mirrors RentPayment (tenant) / PayrollRecord
+// (employee) in shape, so the same due/paid/overdue pattern applies uniformly
+// across all three money-out-the-door directions. dueAmount is computed by
+// the app at record-creation time from whichever rent mode is active for the
+// property right then (OwnerLeaseAgreement.fixedMonthlyRentAmount if set,
+// else the sum of each Unit's/UnitType's ownerRentAmount) — this table just
+// stores the resulting number, it doesn't re-derive it.
+model OwnerRentPayment {
+  id                    String              @id @default(cuid())
+  ownerLeaseAgreementId String
+  ownerLeaseAgreement   OwnerLeaseAgreement @relation(fields: [ownerLeaseAgreementId], references: [id])
+  // Optional: this payment covers one specific unit's rent rather than the
+  // whole property's lump sum — null means whole-property, same nullability
+  // convention as Transaction.unitId / UtilityBill.unitId. Both forms can
+  // coexist across different months for the same agreement.
+  unitId                String?
+  unit                  Unit?               @relation(fields: [unitId], references: [id])
+  month                 String // YYYY-MM
+  dueDate               DateTime
+  dueAmount             Decimal
+  paidAmount            Decimal             @default(0)
+  status                RentPaymentStatus   @default(UNPAID)
+  paidAt                DateTime?
+  createdAt             DateTime            @default(now())
+  importBatchId         String?
+  importBatch           ImportBatch?        @relation(fields: [importBatchId], references: [id])
+
+  transactions Transaction[]
+
+  // NOTE: with unitId nullable, Postgres treats each NULL as distinct, so this
+  // constraint only actually de-duplicates the per-unit case — the
+  // whole-property (null-unit) case is de-duplicated in application code via
+  // an explicit findFirst-then-update, not via this index.
+  @@unique([ownerLeaseAgreementId, month, unitId])
+}
+
+// A category of unit within a Property — e.g. "2000 sqft flats" vs "800 sqft flats".
+// A property with uniform units simply has ONE UnitType record; a property with
+// varied unit sizes/rent has several. This is the single mechanism for both cases,
+// no separate "universal vs multi-type" flag needed.
+model UnitType {
+  id         String   @id @default(cuid())
+  propertyId String
+  property   Property @relation(fields: [propertyId], references: [id])
+  label      String
+  sizeValue  Decimal?
+  sizeUnit   String?  @default("sqft")
+  unitCount  Int
+
+  // What the company pays the owner, per unit of this type, per month — and
+  // the matching per-unit-type advance/downpayment to the owner. Both
+  // nullable because when the property's active OwnerLeaseAgreement uses
+  // fixedMonthlyRentAmount/downpaymentAmount instead, individual unit types
+  // don't carry their own owner-rent/owner-downpayment figure.
+  ownerRentAmount        Decimal?
+  ownerDownpaymentAmount Decimal?
+
+  // Suggested defaults for the tenant-facing side, used to prefill new
+  // TenantLease terms — the actual lease can still override these per tenant.
+  tenantDefaultRentAmount        Decimal?
+  tenantDefaultDownpaymentAmount Decimal?
+
+  // Suggested default nightly rate, for prefilling a new GuestStay booking
+  // on hotel-style properties (a property can freely mix both — this is
+  // just a prefill convenience, not a hard mode lock).
+  tenantDefaultNightlyRateAmount Decimal?
+
+  createdAt     DateTime     @default(now())
+  importBatchId String?
+  importBatch   ImportBatch? @relation(fields: [importBatchId], references: [id])
+
+  units Unit[]
+}
+
+// A physical unit/room. Can be used for a long-term TenantLease (monthly),
+// short-stay GuestStay bookings (nightly), or both over its lifetime —
+// nothing on Unit itself locks it to one mode.
+model Unit {
+  id         String     @id @default(cuid())
+  unitTypeId String
+  unitType   UnitType   @relation(fields: [unitTypeId], references: [id])
+  label      String
+  // Whether this physical unit is currently available to be leased at all —
+  // separate from "vacant" (no active tenant). A unit under renovation or
+  // otherwise pulled from service is INACTIVE regardless of occupancy.
+  status     UnitStatus @default(ACTIVE)
+  createdAt  DateTime   @default(now())
+
+  // Per-unit overrides — same real-world case as UnitType's own fields, but
+  // one level more granular: within a single UnitType (e.g. all "2 Bedroom
+  // Flat" units in a 50-unit building), individual units can still each
+  // command a different rent/downpayment (floor, view, negotiation) — on
+  // BOTH sides: what the owner charges the company (ownerRentAmount /
+  // ownerDownpaymentAmount) and what the company charges the tenant
+  // (tenantDefaultRentAmount / tenantDefaultDownpaymentAmount). When set,
+  // these take priority over the parent UnitType's matching field for this
+  // one unit; when null, the UnitType-level value applies as before.
+  ownerRentAmount                Decimal?
+  ownerDownpaymentAmount         Decimal?
+  tenantDefaultRentAmount        Decimal?
+  tenantDefaultDownpaymentAmount Decimal?
+  tenantDefaultNightlyRateAmount Decimal?
+  sizeValue                      Decimal?
+  sizeUnit                       String?
+
+  tenantLeases      TenantLease[]
+  guestStays        GuestStay[]
+  utilityBills      UtilityBill[]
+  transactions      Transaction[]
+  ownerRentPayments OwnerRentPayment[]
+}
+
+model Tenant {
+  id                         String       @id @default(cuid())
+  name                       String
+  contactInfo                String?
+  type                       TenantType   @default(INDIVIDUAL)
+  nidNumber                  String?
+  businessRegistrationNumber String?
+  occupation                 String?
+  notes                      String?
+  createdAt                  DateTime     @default(now())
+  importBatchId              String?
+  importBatch                ImportBatch? @relation(fields: [importBatchId], references: [id])
+
+  leases    TenantLease[]
+  documents Document[]
+}
+
+model TenantLease {
+  id                        String            @id @default(cuid())
+  unitId                    String
+  unit                      Unit              @relation(fields: [unitId], references: [id])
+  tenantId                  String
+  tenant                    Tenant            @relation(fields: [tenantId], references: [id])
+  initialDownpaymentAmount  Decimal
+  currentDownpaymentBalance Decimal
+  monthlyRentAmount         Decimal
+  // Optional add-on the company charges some tenants on top of rent — not
+  // every tenant has one. When set, serviceChargeType decides how
+  // serviceChargeValue is interpreted (a flat taka amount, or a percentage of
+  // monthlyRentAmount computed fresh each time rent is collected so it tracks
+  // rent changes on renewal). Collected together with rent, not its own due
+  // item — see recordTenantRentPayment.
+  serviceChargeType         ServiceChargeType?
+  serviceChargeValue        Decimal?
+  startDate                 DateTime
+  endDate                   DateTime?
+  status                    TenantLeaseStatus @default(ACTIVE)
+  movedOutAt                DateTime?
+  notes                     String?
+  createdAt                 DateTime          @default(now())
+  importBatchId             String?
+  importBatch               ImportBatch?      @relation(fields: [importBatchId], references: [id])
+
+  documents              Document[]
+  rentPayments           RentPayment[]
+  downpaymentAdjustments DownpaymentAdjustment[]
+  transactions           Transaction[]
+  utilityBills           UtilityBill[]
+}
+
+// Company policy: rent (and utility bills) are officially due on the 10th of
+// each month. dueDate stores the concrete computed date for this month's
+// record (application logic sets it when generating the row) rather than
+// re-deriving "10th" from `month` every time it's needed for a query/alert.
+model RentPayment {
+  id            String            @id @default(cuid())
+  tenantLeaseId String
+  tenantLease   TenantLease       @relation(fields: [tenantLeaseId], references: [id])
+  month         String // YYYY-MM
+  dueDate       DateTime
+  dueAmount     Decimal
+  paidAmount    Decimal           @default(0)
+  status        RentPaymentStatus @default(UNPAID)
+  paidAt        DateTime?
+  createdAt     DateTime          @default(now())
+  importBatchId String?
+  importBatch   ImportBatch?      @relation(fields: [importBatchId], references: [id])
+
+  downpaymentAdjustments DownpaymentAdjustment[]
+  transactions           Transaction[]
+
+  @@unique([tenantLeaseId, month])
+}
+
+// A short (nightly) stay booking — the hotel-mode counterpart to TenantLease.
+// Since the same room turns over guests daily/nightly, each stay captures its
+// own guest identity details (name/phone/address/ID) rather than reusing a
+// long-lived Tenant record. A Unit can have many GuestStay rows over time,
+// same as it can have many historical TenantLease rows — the two are
+// independent, a room isn't locked into one mode or the other.
+model GuestStay {
+  id             String          @id @default(cuid())
+  unitId         String
+  unit           Unit            @relation(fields: [unitId], references: [id])
+  guestName      String
+  guestPhone     String?
+  guestAddress   String?
+  guestIdType    GuestIdType?
+  guestIdNumber  String?
+  numberOfGuests Int             @default(1)
+  checkInDate    DateTime
+  checkOutDate   DateTime?
+  ratePerNight   Decimal
+  totalAmount    Decimal
+  depositAmount  Decimal?
+  status         GuestStayStatus @default(RESERVED)
+  notes          String?
+  createdAt      DateTime        @default(now())
+  importBatchId  String?
+  importBatch    ImportBatch?    @relation(fields: [importBatchId], references: [id])
+
+  documents    Document[]
+  transactions Transaction[]
+}
+
+// Ledger of downpayment used to cover unpaid/partial rent — never mutate
+// TenantLease.currentDownpaymentBalance without writing a row here (audit trail).
+model DownpaymentAdjustment {
+  id             String      @id @default(cuid())
+  tenantLeaseId  String
+  tenantLease    TenantLease @relation(fields: [tenantLeaseId], references: [id])
+  rentPaymentId  String
+  rentPayment    RentPayment @relation(fields: [rentPaymentId], references: [id])
+  amountAdjusted Decimal
+  reason         String?
+  createdAt      DateTime    @default(now())
+}
+
+// Property maintenance staff (watchman, cleaner, etc) OR company-level staff
+// with no single property (manager, office receptionist, admin) — propertyId
+// null means "company staff": their salary still counts as a real company
+// expense (Transaction.propertyId is null too, in that case), it just never
+// attaches to any one property's own income/expense numbers. No dashboard login.
+model Employee {
+  id            String         @id @default(cuid())
+  propertyId    String?
+  property      Property?      @relation(fields: [propertyId], references: [id])
+  name          String
+  role          String
+  contactInfo   String?
+  nidNumber     String?
+  notes         String?
+  salaryAmount  Decimal
+  status        EmployeeStatus @default(ACTIVE)
+  joinedAt      DateTime       @default(now())
+  terminatedAt  DateTime?
+  importBatchId String?
+  importBatch   ImportBatch?   @relation(fields: [importBatchId], references: [id])
+
+  payrollRecords PayrollRecord[]
+}
+
+// Company policy: payroll is officially due on the 15th of each month.
+model PayrollRecord {
+  id            String        @id @default(cuid())
+  employeeId    String
+  employee      Employee      @relation(fields: [employeeId], references: [id])
+  month         String // YYYY-MM
+  dueDate       DateTime
+  amountPaid    Decimal
+  status        PayrollStatus @default(PENDING)
+  paidAt        DateTime?
+  createdAt     DateTime      @default(now())
+  importBatchId String?
+  importBatch   ImportBatch?  @relation(fields: [importBatchId], references: [id])
+
+  transactions Transaction[]
+
+  @@unique([employeeId, month])
+}
+
+// Company policy: same due date as rent — the 10th of each month.
+// unitId/tenantLeaseId are both nullable: leave them null for a shared/common
+// bill that's the company's own expense (e.g. one building-wide meter); set
+// them when the bill is attributable to one specific tenant (their own meter,
+// or their share billed directly rather than through the reimbursement flow) —
+// gas/electricity/water each get their own row via `type`, so entering
+// "gas 1000, electricity 3000, water 500" for one tenant is three UtilityBill
+// rows, same unitId/tenantLeaseId, different type+amount.
+model UtilityBill {
+  id            String       @id @default(cuid())
+  propertyId    String
+  property      Property     @relation(fields: [propertyId], references: [id])
+  unitId        String?
+  unit          Unit?        @relation(fields: [unitId], references: [id])
+  tenantLeaseId String?
+  tenantLease   TenantLease? @relation(fields: [tenantLeaseId], references: [id])
+  type          UtilityType
+  month         String // YYYY-MM
+  dueDate       DateTime
+  amount        Decimal
+  status        BillStatus   @default(UNPAID)
+  // Who actually settles this bill, decided per bill at add-time (defaults
+  // true when type is WATER, per company policy, but editable either way —
+  // see the "company pays" checkbox in the add-bill form). When true, marking
+  // the bill paid records a real UTILITY_EXPENSE/OUTGOING transaction (counts
+  // toward netProfit). When false (the normal case), it records
+  // UTILITY_REIMBURSEMENT_FROM_TENANT/INCOMING — a pass-through, excluded
+  // from netProfit, same as every other utility bill has always worked.
+  paidByCompany Boolean      @default(false)
+  // Cumulative electricity meter reading at this bill (ELECTRICITY only —
+  // stays null for every other type). Consumption for this month is derived
+  // at read time as this reading minus the previous month's own reading for
+  // the same unit, never stored separately, so it can never drift out of
+  // sync — see attachElectricityConsumption().
+  meterReading  Decimal?
+  createdAt     DateTime     @default(now())
+  importBatchId String?
+  importBatch   ImportBatch? @relation(fields: [importBatchId], references: [id])
+
+  documents    Document[]
+  transactions Transaction[]
+}
+
+// Central cash-flow ledger — every money movement in the business gets a row here.
+// recordedByUserId keeps every entry accountable to the admin/manager who logged it.
+// The rentPaymentId/payrollRecordId/utilityBillId links trace a transaction back
+// to the specific due-item it satisfies (a due-item may be settled by more than
+// one transaction — e.g. a partial payment followed by a top-up).
+// tenantLeaseId covers tenant-specific money that ISN'T a formal RentPayment —
+// e.g. a tenant reimbursing their share of a shared-meter utility bill, or a
+// one-off charge — without forcing every such case through the rent ledger.
+model Transaction {
+  id                 String               @id @default(cuid())
+  // Null means a company-wide transaction not tied to any single property —
+  // currently only company-staff payroll (see Employee.propertyId), but the
+  // column stays generic rather than a payroll-specific flag.
+  propertyId         String?
+  property           Property?            @relation(fields: [propertyId], references: [id])
+  type               TransactionType
+  direction          TransactionDirection
+  amount             Decimal
+  method             PaymentMethod?
+  rentPaymentId      String?
+  rentPayment        RentPayment?         @relation(fields: [rentPaymentId], references: [id])
+  payrollRecordId    String?
+  payrollRecord      PayrollRecord?       @relation(fields: [payrollRecordId], references: [id])
+  utilityBillId      String?
+  utilityBill        UtilityBill?         @relation(fields: [utilityBillId], references: [id])
+  ownerRentPaymentId String?
+  ownerRentPayment   OwnerRentPayment?    @relation(fields: [ownerRentPaymentId], references: [id])
+  tenantLeaseId      String?
+  tenantLease        TenantLease?         @relation(fields: [tenantLeaseId], references: [id])
+  guestStayId        String?
+  guestStay          GuestStay?           @relation(fields: [guestStayId], references: [id])
+  // Optional: attributes a maintenance/other expense to one specific physical
+  // unit (e.g. "AC repair, Unit 5") rather than the whole property. Null means
+  // a property-wide expense, same nullability convention as UtilityBill.unitId.
+  unitId             String?
+  unit               Unit?                @relation(fields: [unitId], references: [id])
+  recordedByUserId   String?
+  recordedBy         User?                @relation(fields: [recordedByUserId], references: [id])
+  date               DateTime             @default(now())
+  notes              String?
+  createdAt          DateTime             @default(now())
+  // Only ever set for bulk-imported ad-hoc expenses (ImportEntityType.EXPENSE)
+  // — every other Transaction is a side effect of some other action (rent
+  // collection, utility payment, etc.) and gets traced via THAT record's own
+  // importBatchId instead, not its own.
+  importBatchId      String?
+  importBatch        ImportBatch?         @relation(fields: [importBatchId], references: [id])
+}
+
+// Polymorphic file reference (agreement copies, utility bill images, tenant ID docs).
+// Actual file lives in UploadThing; only the URL is stored here.
+model Document {
+  id         String            @id @default(cuid())
+  ownerType  DocumentOwnerType
+  fileUrl    String
+  fileType   String?
+  // What kind of document this is within its ownerType (e.g. "NID_CARD" vs
+  // "TENANT_PHOTO" for a TENANT-owned doc) — a stable key translated at
+  // display time, not a raw label string. Null on documents created before
+  // this field existed (e.g. the original OwnerLeaseAgreement uploads),
+  // which fall back to a generic positional label in the UI.
+  label      String?
+  uploadedAt DateTime          @default(now())
+  uploadedBy String?
+
+  ownerLeaseAgreementId String?
+  ownerLeaseAgreement   OwnerLeaseAgreement? @relation(fields: [ownerLeaseAgreementId], references: [id])
+
+  tenantLeaseId String?
+  tenantLease   TenantLease? @relation(fields: [tenantLeaseId], references: [id])
+
+  utilityBillId String?
+  utilityBill   UtilityBill? @relation(fields: [utilityBillId], references: [id])
+
+  tenantId String?
+  tenant   Tenant? @relation(fields: [tenantId], references: [id])
+
+  guestStayId String?
+  guestStay   GuestStay? @relation(fields: [guestStayId], references: [id])
+}
+
+// Telegram chat IDs that should receive financial/due-date notifications.
+// Company-wide recipients (not tied to a specific User) — add/remove freely.
+model TelegramSubscriber {
+  id        String   @id @default(cuid())
+  chatId    String   @unique
+  label     String?
+  active    Boolean  @default(true)
+  createdAt DateTime @default(now())
+}
+
+// Records that a given due-date/financial reminder was already sent, so the
+// same RentPayment/PayrollRecord/etc. doesn't get re-notified every run.
+model NotificationLog {
+  id          String           @id @default(cuid())
+  type        NotificationType
+  referenceId String
+  sentAt      DateTime         @default(now())
+
+  @@unique([type, referenceId])
+}
+
+// One CSV upload event — covers both bulk-migrating old historical records and
+// ongoing bulk entry of new data (e.g. a month's worth of rent payments at once).
+// Rows created by an import are tagged with this batch's id (see importBatchId
+// on the entities above), so a bad import can be identified/traced back later.
+model ImportBatch {
+  id           String           @id @default(cuid())
+  entityType   ImportEntityType
+  fileName     String
+  rowCount     Int
+  importedById String?
+  importedBy   User?            @relation(fields: [importedById], references: [id])
+  importedAt   DateTime         @default(now())
+
+  propertyOwners    PropertyOwner[]
+  properties        Property[]
+  unitTypes         UnitType[]
+  tenants           Tenant[]
+  tenantLeases      TenantLease[]
+  employees         Employee[]
+  rentPayments      RentPayment[]
+  ownerRentPayments OwnerRentPayment[]
+  payrollRecords    PayrollRecord[]
+  utilityBills      UtilityBill[]
+  transactions      Transaction[]
+  guestStays        GuestStay[]
+}
