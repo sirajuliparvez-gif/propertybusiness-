@@ -24,10 +24,13 @@ import {
 } from "@/components/ui/dialog";
 import { FormField } from "@/components/properties/form-field";
 import { formatTaka } from "@/lib/format";
-import { recordTenantRentPayment } from "@/lib/actions/tenant-rent";
+import { recordTenantRentPayment, recordAdvanceRentPayment } from "@/lib/actions/tenant-rent";
 import { computeServiceChargeAmount } from "@/lib/service-charge";
 
-type Mode = "cash" | "downpaymentAdjustment";
+type Mode = "cash" | "downpaymentAdjustment" | "advance";
+const ADVANCE_MONTH_PRESETS = [3, 6, 12];
+const ADVANCE_MONTHS_MIN = 1;
+const ADVANCE_MONTHS_MAX = 36;
 
 export function RecordTenantRentPaymentDialog({
   propertyId,
@@ -65,8 +68,11 @@ export function RecordTenantRentPaymentDialog({
   const [mode, setMode] = useState<Mode>("cash");
   const [method, setMethod] = useState("NONE");
   const [amount, setAmount] = useState(String(monthlyRentAmount || ""));
+  const [startMonth, setStartMonth] = useState(new Date().toISOString().slice(0, 7));
+  const [monthsCount, setMonthsCount] = useState("3");
   const todayValue = new Date().toISOString().slice(0, 10);
   const serviceChargeAmount = computeServiceChargeAmount(monthlyRentAmount, serviceChargeType, serviceChargeValue);
+  const advanceTotal = (monthlyRentAmount + serviceChargeAmount) * (Number(monthsCount) || 0);
 
   function handleModeChange(next: Mode) {
     setMode(next);
@@ -110,13 +116,17 @@ export function RecordTenantRentPaymentDialog({
           <DialogTitle>{t("collectRent")}</DialogTitle>
         </DialogHeader>
         <form
-          action={(formData: FormData) => startTransition(() => recordTenantRentPayment(formData))}
+          action={(formData: FormData) =>
+            startTransition(() =>
+              mode === "advance" ? recordAdvanceRentPayment(formData) : recordTenantRentPayment(formData)
+            )
+          }
           className="flex flex-col gap-3"
         >
           <input type="hidden" name="propertyId" value={propertyId} />
           <input type="hidden" name="tenantLeaseId" value={tenantLeaseId} />
           <input type="hidden" name="mode" value={mode} />
-          <input type="hidden" name="method" value={mode === "cash" ? method : ""} />
+          <input type="hidden" name="method" value={mode !== "downpaymentAdjustment" ? method : ""} />
           {returnTo ? <input type="hidden" name="returnTo" value={returnTo} /> : null}
 
           <FormField label={t("paymentMode")} htmlFor="rentPaymentModeTabs">
@@ -124,6 +134,9 @@ export function RecordTenantRentPaymentDialog({
               <TabsList className="h-8 w-full">
                 <TabsTrigger value="cash" className="flex-1 text-xs">
                   {t("cashPayment")}
+                </TabsTrigger>
+                <TabsTrigger value="advance" className="flex-1 text-xs">
+                  {t("advanceRentPayment")}
                 </TabsTrigger>
                 <TabsTrigger value="downpaymentAdjustment" className="flex-1 text-xs">
                   {t("adjustFromDownpayment")}
@@ -138,33 +151,81 @@ export function RecordTenantRentPaymentDialog({
             </p>
           ) : null}
 
-          <FormField label={t("amount")} htmlFor="rentPaymentAmount" required>
-            <Input
-              id="rentPaymentAmount"
-              name="amount"
-              type="number"
-              step="any"
-              min={0}
-              max={mode === "downpaymentAdjustment" ? currentDownpaymentBalance : undefined}
-              required
-              value={amount}
-              onChange={(e) => setAmount(e.target.value)}
-            />
-            {mode === "cash" && serviceChargeAmount > 0 ? (
-              <p className="mt-1 text-xs text-muted-foreground">
-                {t("serviceChargeBundledHint", {
-                  amount: formatTaka(serviceChargeAmount),
-                  total: formatTaka(Number(amount || 0) + serviceChargeAmount),
-                })}
+          {mode === "advance" ? (
+            <>
+              <FormField label={t("advanceStartMonth")} htmlFor="rentAdvanceStartMonth" required>
+                <Input
+                  id="rentAdvanceStartMonth"
+                  name="startMonth"
+                  type="month"
+                  required
+                  value={startMonth}
+                  onChange={(e) => setStartMonth(e.target.value)}
+                />
+              </FormField>
+
+              <FormField label={t("advanceMonthsCount")} htmlFor="rentAdvanceMonthsCount" required>
+                <Input
+                  id="rentAdvanceMonthsCount"
+                  name="monthsCount"
+                  type="number"
+                  min={ADVANCE_MONTHS_MIN}
+                  max={ADVANCE_MONTHS_MAX}
+                  required
+                  value={monthsCount}
+                  onChange={(e) => setMonthsCount(e.target.value)}
+                />
+                <div className="mt-1.5 flex flex-wrap gap-1.5">
+                  {ADVANCE_MONTH_PRESETS.map((n) => (
+                    <button
+                      key={n}
+                      type="button"
+                      onClick={() => setMonthsCount(String(n))}
+                      className={`rounded-full border px-2.5 py-0.5 text-xs transition-colors ${
+                        Number(monthsCount) === n
+                          ? "border-primary bg-primary/10 text-primary"
+                          : "border-input text-muted-foreground hover:bg-muted"
+                      }`}
+                    >
+                      {t("advanceMonthsPreset", { count: n })}
+                    </button>
+                  ))}
+                </div>
+              </FormField>
+
+              <p className="text-xs text-muted-foreground">
+                {t("advanceTotalHint", { total: formatTaka(advanceTotal) })}
               </p>
-            ) : null}
-          </FormField>
+            </>
+          ) : (
+            <FormField label={t("amount")} htmlFor="rentPaymentAmount" required>
+              <Input
+                id="rentPaymentAmount"
+                name="amount"
+                type="number"
+                step="any"
+                min={0}
+                max={mode === "downpaymentAdjustment" ? currentDownpaymentBalance : undefined}
+                required
+                value={amount}
+                onChange={(e) => setAmount(e.target.value)}
+              />
+              {mode === "cash" && serviceChargeAmount > 0 ? (
+                <p className="mt-1 text-xs text-muted-foreground">
+                  {t("serviceChargeBundledHint", {
+                    amount: formatTaka(serviceChargeAmount),
+                    total: formatTaka(Number(amount || 0) + serviceChargeAmount),
+                  })}
+                </p>
+              ) : null}
+            </FormField>
+          )}
 
           <FormField label={t("paymentDate")} htmlFor="rentPaymentDate" required>
             <Input id="rentPaymentDate" name="date" type="date" defaultValue={todayValue} required />
           </FormField>
 
-          {mode === "cash" ? (
+          {mode !== "downpaymentAdjustment" ? (
             <FormField label={t("paymentMethod")} htmlFor="rentPaymentMethod">
               <Select
                 value={method}

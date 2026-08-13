@@ -86,6 +86,13 @@ enum TransactionType {
   UTILITY_EXPENSE
   MAINTENANCE_EXPENSE
   OTHER
+  // Money leaving the company that isn't a real operating expense — the
+  // owner/admin taking cash out, or asking the company to pay someone else on
+  // their behalf. Deliberately excluded from every P&L classification list
+  // (reports-data.ts, transactions-data.ts, properties-data.ts) so it never
+  // reduces reported net profit, same pass-through treatment as the
+  // DOWNPAYMENT_* types — it's an equity/cash movement, not an operating cost.
+  OWNER_WITHDRAWAL
 }
 
 enum TransactionDirection {

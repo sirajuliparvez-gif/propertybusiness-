@@ -101,3 +101,30 @@ export async function getAllTransactionsData() {
 }
 
 export type AllTransactionsData = Awaited<ReturnType<typeof getAllTransactionsData>>;
+
+export async function getPropertyUnitOptions() {
+  const properties = await prisma.property.findMany({
+    where: { deletedAt: null },
+    orderBy: { name: "asc" },
+    select: {
+      id: true,
+      name: true,
+      unitTypes: {
+        select: {
+          label: true,
+          units: { select: { id: true, label: true } },
+        },
+      },
+    },
+  });
+
+  return properties.map((p) => ({
+    id: p.id,
+    name: p.name,
+    units: p.unitTypes.flatMap((ut) =>
+      ut.units.map((u) => ({ id: u.id, label: u.label, unitTypeLabel: ut.label }))
+    ),
+  }));
+}
+
+export type PropertyUnitOptions = Awaited<ReturnType<typeof getPropertyUnitOptions>>;

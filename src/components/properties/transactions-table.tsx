@@ -40,6 +40,7 @@ const TYPE_LABEL_KEYS: Record<string, string> = {
   UTILITY_EXPENSE: "transactionTypeUtilityExpense",
   MAINTENANCE_EXPENSE: "expenseTypeMaintenance",
   OTHER: "expenseTypeOther",
+  OWNER_WITHDRAWAL: "transactionTypeOwnerWithdrawal",
 };
 
 export function TransactionsTable({ transactions }: { transactions: AllTransactionsData["transactions"] }) {

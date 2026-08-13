@@ -10,20 +10,20 @@ function str(formData: FormData, key: string) {
   return typeof v === "string" && v.trim() !== "" ? v.trim() : null;
 }
 
-// propertyId is null for a company-wide/office expense (rent isn't tied to
-// any single property's P&L) — same nullable convention as company-staff
-// Employee.propertyId. Reports already fold a null-propertyId
-// MAINTENANCE_EXPENSE/OTHER transaction into the synthetic company row
-// (reports-data.ts's COMPANY_KEY), so no reporting changes were needed.
-export async function addExpense(formData: FormData) {
+// The company owner/admin taking cash out of the office, or asking the
+// company to pay a third party on their behalf — always propertyId null
+// (never tied to a single property's P&L) and always TransactionType
+// OWNER_WITHDRAWAL, which is deliberately excluded from every P&L
+// classification list (reports-data.ts, transactions-data.ts) so it reduces
+// cash flow but never reported net profit, same pass-through treatment as
+// the DOWNPAYMENT_* types.
+export async function recordOwnerWithdrawal(formData: FormData) {
   const locale = await getLocale();
-  const propertyId = str(formData, "propertyId");
 
-  const type = formData.get("type") === "OTHER" ? "OTHER" : "MAINTENANCE_EXPENSE";
   const amount = str(formData, "amount");
   const date = str(formData, "date");
+  const recipientName = str(formData, "recipientName");
   const notes = str(formData, "notes");
-  const unitId = propertyId ? str(formData, "unitId") : null;
   const methodRaw = formData.get("method");
   const method =
     methodRaw === "CASH" ||
@@ -34,22 +34,21 @@ export async function addExpense(formData: FormData) {
       ? methodRaw
       : null;
 
-  if (!amount || !date) throw new Error("Missing required expense fields");
+  if (!amount || !date || !recipientName) throw new Error("Missing required withdrawal fields");
 
   await prisma.transaction.create({
     data: {
-      propertyId,
-      type,
+      propertyId: null,
+      type: "OWNER_WITHDRAWAL",
       direction: "OUTGOING",
       amount,
       date: new Date(date),
-      notes,
-      unitId,
+      notes: notes ? `${recipientName} — ${notes}` : recipientName,
       method,
     },
   });
 
-  const returnTo = str(formData, "returnTo") ?? (propertyId ? `/properties/${propertyId}` : "/transactions");
+  const returnTo = str(formData, "returnTo") ?? "/transactions";
   revalidatePath(returnTo);
   redirect({ href: returnTo, locale });
 }

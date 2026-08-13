@@ -2,7 +2,7 @@
 
 import { useTranslations } from "next-intl";
 import { Link } from "@/i18n/navigation";
-import { Building2, Wallet, Zap, HardHat, Users } from "lucide-react";
+import { Building2, Wallet, Zap, HardHat, Users, Receipt, HandCoins } from "lucide-react";
 import {
   Sheet,
   SheetContent,
@@ -26,6 +26,8 @@ export function QuickActionsSheet({
     { href: "/tenants", label: t("newTenant"), icon: Users, tone: "text-blue-600 dark:text-blue-400 bg-linear-to-br from-blue-500/20 to-blue-500/5" },
     { href: "/utility-bills", label: t("newUtilityBill"), icon: Zap, tone: "text-warning bg-linear-to-br from-warning/25 to-warning/5" },
     { href: "/employees", label: t("newEmployee"), icon: HardHat, tone: "text-violet-600 dark:text-violet-400 bg-linear-to-br from-violet-500/20 to-violet-500/5" },
+    { href: "/transactions", label: t("companyExpenseAction"), icon: Receipt, tone: "text-rose-600 dark:text-rose-400 bg-linear-to-br from-rose-500/20 to-rose-500/5" },
+    { href: "/transactions", label: t("ownerWithdrawalAction"), icon: HandCoins, tone: "text-amber-600 dark:text-amber-400 bg-linear-to-br from-amber-500/20 to-amber-500/5" },
   ];
 
   return (
@@ -38,7 +40,7 @@ export function QuickActionsSheet({
         <div className="grid grid-cols-2 gap-3 px-4 pb-4">
           {actions.map((action) => (
             <Link
-              key={action.href}
+              key={action.label}
               href={action.href}
               onClick={() => onOpenChange(false)}
               className="flex flex-col items-center gap-2 rounded-xl bg-muted/50 p-4 text-center transition-colors active:bg-muted"
