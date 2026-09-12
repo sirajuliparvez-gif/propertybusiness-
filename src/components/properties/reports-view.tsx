@@ -50,8 +50,12 @@ export function ReportsView({ months, propertyPLByMonth, defaultMonth }: Reports
   const [selectedMonth, setSelectedMonth] = useState(defaultMonth);
 
   const monthLabels = useMemo(() => {
-    const fmt = new Intl.DateTimeFormat("bn", { month: "long" });
-    const fmtShort = new Intl.DateTimeFormat("bn", { month: "short" });
+    // A fixed timeZone here too — same reasoning as format.ts's
+    // BUSINESS_TIMEZONE: without one, this renders differently on the
+    // server (UTC) vs. the client's own browser timezone, which is exactly
+    // the kind of text mismatch React's hydration flags.
+    const fmt = new Intl.DateTimeFormat("bn", { month: "long", timeZone: "Asia/Dhaka" });
+    const fmtShort = new Intl.DateTimeFormat("bn", { month: "short", timeZone: "Asia/Dhaka" });
     return new Map(months.map((m) => [m.month, { full: fmt.format(m.date), short: fmtShort.format(m.date) }]));
   }, [months]);
 
