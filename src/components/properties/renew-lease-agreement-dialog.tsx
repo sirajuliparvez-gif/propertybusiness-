@@ -75,14 +75,13 @@ export function RenewLeaseAgreementDialog({
           </FormField>
 
           {rentMode === "fixed" ? (
-            <FormField label={t("fixedMonthlyRentAmount")} htmlFor="renewFixedMonthlyRentAmount" required>
+            <FormField label={t("fixedMonthlyRentAmount")} htmlFor="renewFixedMonthlyRentAmount">
               <Input
                 id="renewFixedMonthlyRentAmount"
                 name="fixedMonthlyRentAmount"
                 type="number"
                 step="any"
                 min={0}
-                required
                 defaultValue={currentFixedMonthlyRentAmount ?? ""}
               />
               <p className="mt-1 text-xs text-muted-foreground">{t("fixedRentHint")}</p>
@@ -91,14 +90,13 @@ export function RenewLeaseAgreementDialog({
 
           {rentMode === "fixed" ? (
             <div className="grid gap-3 sm:grid-cols-2">
-              <FormField label={t("downpaymentAmount")} htmlFor="renewDownpaymentAmount" required>
+              <FormField label={t("downpaymentAmount")} htmlFor="renewDownpaymentAmount">
                 <Input
                   id="renewDownpaymentAmount"
                   name="downpaymentAmount"
                   type="number"
                   step="any"
                   min={0}
-                  required
                 />
               </FormField>
               <FormField label={t("paymentMethod")} htmlFor="renewDownpaymentMethod">

@@ -271,14 +271,13 @@ export function PropertyCreateForm({ owners }: { owners: { id: string; name: str
               </Tabs>
             </FormField>
             {rentMode === "fixed" ? (
-              <FormField label={t("fixedMonthlyRentAmount")} htmlFor="fixedMonthlyRentAmount" required className="sm:max-w-xs">
+              <FormField label={t("fixedMonthlyRentAmount")} htmlFor="fixedMonthlyRentAmount" className="sm:max-w-xs">
                 <Input
                   id="fixedMonthlyRentAmount"
                   name="fixedMonthlyRentAmount"
                   type="number"
                   step="any"
                   min={0}
-                  required
                   value={fixedMonthlyRentAmount}
                   onChange={(e) => setFixedMonthlyRentAmount(e.target.value)}
                 />
@@ -287,8 +286,8 @@ export function PropertyCreateForm({ owners }: { owners: { id: string; name: str
             ) : null}
             {rentMode === "fixed" ? (
               <div className="grid gap-3 sm:grid-cols-2">
-                <FormField label={t("downpaymentAmount")} htmlFor="downpaymentAmount" required>
-                  <Input id="downpaymentAmount" name="downpaymentAmount" type="number" step="any" min={0} required />
+                <FormField label={t("downpaymentAmount")} htmlFor="downpaymentAmount">
+                  <Input id="downpaymentAmount" name="downpaymentAmount" type="number" step="any" min={0} />
                 </FormField>
                 <FormField label={t("paymentMethod")} htmlFor="downpaymentMethod">
                   <input type="hidden" name="downpaymentMethod" value={downpaymentMethod} />

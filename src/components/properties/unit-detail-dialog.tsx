@@ -446,14 +446,13 @@ export function UnitDetailDialog({
                         defaultValue={unit.tenantDefaultRentAmount ?? ""}
                       />
                     </FormField>
-                    <FormField label={t("leaseDownpayment")} htmlFor="initialDownpaymentAmount" required>
+                    <FormField label={t("leaseDownpayment")} htmlFor="initialDownpaymentAmount">
                       <Input
                         id="initialDownpaymentAmount"
                         name="initialDownpaymentAmount"
                         type="number"
                         step="any"
                         min={0}
-                        required
                         defaultValue={unit.tenantDefaultDownpaymentAmount ?? ""}
                       />
                     </FormField>

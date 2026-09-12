@@ -168,9 +168,9 @@ export async function renewLeaseAgreement(formData: FormData) {
   const endDate = str(formData, "endDate");
   const notes = str(formData, "notes");
   if (!startDate) throw new Error("Missing required agreement fields");
-  if (rentMode === "fixed" && !downpaymentAmount) {
-    throw new Error("Downpayment amount is required for fixed rent mode");
-  }
+  // Both rent and advance are optional for the fixed mode — the owner may
+  // not have settled on a figure (or received an advance) yet when the
+  // agreement is renewed.
 
   await prisma.$transaction(async (tx) => {
     if (oldAgreementId) {

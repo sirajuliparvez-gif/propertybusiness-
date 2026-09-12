@@ -119,14 +119,13 @@ export async function createProperty(formData: FormData) {
   if (!name || !unitTypeLabel || !unitCount || unitCount < 1 || !startDate) {
     throw new Error("Missing required fields");
   }
+  // Owner rent/advance are both optional for the "fixed" mode — a property
+  // can be added without knowing (or without the company owing) either yet,
+  // same nullability OwnerLeaseAgreement.fixedMonthlyRentAmount/downpaymentAmount
+  // already allow at the schema level. Per-unit mode still needs ownerRentAmount
+  // since that's the only place the per-unit rent figure comes from.
   if (rentMode === "perUnit" && !ownerRentAmount) {
     throw new Error("Owner rent amount is required for per-unit rent mode");
-  }
-  if (rentMode === "fixed" && !fixedMonthlyRentAmount) {
-    throw new Error("Fixed monthly rent amount is required for fixed rent mode");
-  }
-  if (rentMode === "fixed" && !downpaymentAmount) {
-    throw new Error("Downpayment amount is required for fixed rent mode");
   }
   if (ownerMode === "new" && !str(formData, "newOwnerName")) {
     throw new Error("Owner name is required");

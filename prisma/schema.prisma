@@ -388,8 +388,11 @@ model TenantLease {
   unit                      Unit              @relation(fields: [unitId], references: [id])
   tenantId                  String
   tenant                    Tenant            @relation(fields: [tenantId], references: [id])
-  initialDownpaymentAmount  Decimal
-  currentDownpaymentBalance Decimal
+  // Optional: some tenants aren't asked for an advance at all. Null means no
+  // advance was ever collected — not the same as 0, though the app treats
+  // both the same way (nothing to adjust rent against, nothing to refund).
+  initialDownpaymentAmount  Decimal?
+  currentDownpaymentBalance Decimal?
   monthlyRentAmount         Decimal
   // Optional add-on the company charges some tenants on top of rent — not
   // every tenant has one. When set, serviceChargeType decides how

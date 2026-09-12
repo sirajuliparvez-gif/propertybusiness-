@@ -118,7 +118,9 @@ export async function addTenantToUnit(formData: FormData) {
     serviceChargeTypeRaw === "FLAT" || serviceChargeTypeRaw === "PERCENTAGE" ? serviceChargeTypeRaw : null;
   const serviceChargeValue = serviceChargeType ? str(formData, "serviceChargeValue") : null;
 
-  if (!monthlyRentAmount || !initialDownpaymentAmount || !startDate) {
+  // initialDownpaymentAmount is optional — some tenants aren't asked for an
+  // advance at all; monthlyRentAmount and startDate stay required.
+  if (!monthlyRentAmount || !startDate) {
     throw new Error("Missing required lease fields");
   }
   if (tenantMode === "new" && !str(formData, "newTenantName")) {
@@ -198,7 +200,7 @@ export async function addTenantToUnit(formData: FormData) {
     // Not income — this is the tenant's own deposit, held on the company's
     // behalf (a liability, refunded later via DOWNPAYMENT_REFUND_TO_TENANT).
     // Recorded for ledger/history purposes only.
-    if (Number(initialDownpaymentAmount) > 0) {
+    if (initialDownpaymentAmount && Number(initialDownpaymentAmount) > 0) {
       await tx.transaction.create({
         data: {
           propertyId,

@@ -39,7 +39,9 @@ export async function updateTenantLease(formData: FormData) {
   const initialDownpaymentAmount = str(formData, "initialDownpaymentAmount");
   const currentDownpaymentBalance = str(formData, "currentDownpaymentBalance");
   const notes = str(formData, "notes");
-  if (!monthlyRentAmount || !initialDownpaymentAmount || !currentDownpaymentBalance) {
+  // initialDownpaymentAmount/currentDownpaymentBalance are optional — some
+  // tenants aren't asked for an advance at all; monthlyRentAmount stays required.
+  if (!monthlyRentAmount) {
     throw new Error("Missing required lease fields");
   }
 

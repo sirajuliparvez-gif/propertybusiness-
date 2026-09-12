@@ -248,14 +248,13 @@ export function AddTenantDialogGlobal({
               onChange={(e) => setMonthlyRentAmount(e.target.value)}
             />
           </FormField>
-          <FormField label={t("leaseDownpayment")} htmlFor="addTenantDownpayment" required>
+          <FormField label={t("leaseDownpayment")} htmlFor="addTenantDownpayment">
             <Input
               id="addTenantDownpayment"
               name="initialDownpaymentAmount"
               type="number"
               step="any"
               min={0}
-              required
               value={initialDownpaymentAmount}
               onChange={(e) => setInitialDownpaymentAmount(e.target.value)}
             />

@@ -158,21 +158,19 @@ export function EditTenantDialog({
               defaultValue={monthlyRentAmount}
             />
           </FormField>
-          <FormField label={t("initialDownpayment")} htmlFor="editTenantInitialDownpayment" required>
+          <FormField label={t("initialDownpayment")} htmlFor="editTenantInitialDownpayment">
             <Input
               id="editTenantInitialDownpayment"
               name="initialDownpaymentAmount"
               type="number"
               step="any"
               min={0}
-              required
               defaultValue={initialDownpaymentAmount}
             />
           </FormField>
           <FormField
             label={t("downpaymentBalance")}
             htmlFor="editTenantCurrentDownpayment"
-            required
             className="sm:col-span-2"
           >
             <Input
@@ -181,7 +179,6 @@ export function EditTenantDialog({
               type="number"
               step="any"
               min={0}
-              required
               defaultValue={currentDownpaymentBalance}
             />
             <p className="mt-1 text-xs text-primary">{t("currentTenantBalanceHint")}</p>

@@ -136,26 +136,24 @@ export function PropertyEditForm({
               </FormField>
               {rentMode === "fixed" ? (
                 <div className="grid gap-3 sm:grid-cols-2">
-                  <FormField label={t("fixedMonthlyRentAmount")} htmlFor="fixedMonthlyRentAmount" required>
+                  <FormField label={t("fixedMonthlyRentAmount")} htmlFor="fixedMonthlyRentAmount">
                     <Input
                       id="fixedMonthlyRentAmount"
                       name="fixedMonthlyRentAmount"
                       type="number"
                       step="any"
                       min={0}
-                      required
                       defaultValue={property.activeAgreement.fixedMonthlyRentAmount ?? ""}
                     />
                     <p className="mt-1 text-xs text-muted-foreground">{t("fixedRentHint")}</p>
                   </FormField>
-                  <FormField label={t("downpaymentAmount")} htmlFor="downpaymentAmount" required>
+                  <FormField label={t("downpaymentAmount")} htmlFor="downpaymentAmount">
                     <Input
                       id="downpaymentAmount"
                       name="downpaymentAmount"
                       type="number"
                       step="any"
                       min={0}
-                      required
                       defaultValue={property.activeAgreement.downpaymentAmount ?? ""}
                     />
                   </FormField>
