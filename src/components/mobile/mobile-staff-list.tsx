@@ -29,7 +29,7 @@ export function MobileStaffList({
   const t = useTranslations("Properties");
   const [filter, setFilter] = useState<Filter>("all");
 
-  const payrollStatusLabels = { PAID: t("paid"), PENDING: t("pending") };
+  const payrollStatusLabels = { PAID: t("paid"), PENDING: t("overdueStatus"), PARTIAL: t("pending") };
 
   const filtered = useMemo(() => {
     if (filter === "paid") return staff.filter((s) => s.status === "ACTIVE" && s.overdueAmount <= 0);
@@ -111,7 +111,14 @@ export function MobileStaffList({
                         {t("inactiveLabel")}
                       </Badge>
                     ) : (
-                      <StatusPill status={s.payrollStatus} labels={payrollStatusLabels} />
+                      <>
+                        <StatusPill status={s.payrollStatus} labels={payrollStatusLabels} />
+                        {s.overdueMonths.length > 1 ? (
+                          <p className="text-xs font-medium text-destructive">
+                            {t("monthsOverdueCount", { count: s.overdueMonths.length })}
+                          </p>
+                        ) : null}
+                      </>
                     )}
                   </div>
                 </Link>
@@ -126,6 +133,7 @@ export function MobileStaffList({
                         propertyId={rowPropertyId}
                         employeeId={s.id}
                         defaultAmount={s.salaryAmount}
+                        overdueMonths={s.overdueMonths}
                         returnTo={propertyId ? undefined : "/employees"}
                         iconOnly
                       />

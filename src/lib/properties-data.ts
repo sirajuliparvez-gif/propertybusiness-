@@ -1,6 +1,9 @@
 import { prisma } from "@/lib/prisma";
 import { computeServiceChargeAmount } from "@/lib/service-charge";
 import { attachElectricityConsumption, latestElectricityReadingByUnit } from "@/lib/electricity-consumption";
+import { buildRentLedger, overdueEntries, totalOverdue } from "@/lib/rent-ledger";
+import { splitUtilityBillTransactions } from "@/lib/utility-bill-split";
+import { fromLedgerStatus } from "@/lib/employees-data";
 
 // Utility bills get their own dedicated feature/flow (see the "ইউটিলিটি বিল"
 // nav item) rather than living in this generic property-level expense list —
@@ -23,18 +26,19 @@ export async function getPropertiesList() {
   const { monthStart, monthEnd } = monthRange(now);
 
   // Ordered ascending once to assign stable "P-001"-style display IDs by
-  // creation order, independent of whatever sort the UI displays them in.
-  const idOrder = await prisma.property.findMany({
-    where: { deletedAt: null },
-    orderBy: { createdAt: "asc" },
-    select: { id: true },
-  });
-  const displayIdByPropertyId = new Map(idOrder.map((p, i) => [p.id, `P-${String(i + 1).padStart(3, "0")}`]));
-
-  const properties = await prisma.property.findMany({
-    where: { deletedAt: null },
-    orderBy: { createdAt: "desc" },
-    include: {
+  // creation order, independent of whatever sort the UI displays them in —
+  // independent of the main `properties` query below, so run both together
+  // instead of paying two round trips back-to-back.
+  const [idOrder, properties] = await Promise.all([
+    prisma.property.findMany({
+      where: { deletedAt: null },
+      orderBy: { createdAt: "asc" },
+      select: { id: true },
+    }),
+    prisma.property.findMany({
+      where: { deletedAt: null },
+      orderBy: { createdAt: "desc" },
+      include: {
       owner: { select: { name: true } },
       unitTypes: {
         select: {
@@ -73,7 +77,9 @@ export async function getPropertiesList() {
         select: { amount: true, direction: true, type: true },
       },
     },
-  });
+    }),
+  ]);
+  const displayIdByPropertyId = new Map(idOrder.map((p, i) => [p.id, `P-${String(i + 1).padStart(3, "0")}`]));
 
   return properties.map((p) => {
     const totalUnits = p.unitTypes.reduce((sum, ut) => sum + ut.unitCount, 0);
@@ -172,7 +178,11 @@ export async function getAllTenants() {
 }
 
 export async function getPropertyDetail(id: string) {
-  const property = await prisma.property.findUnique({
+  const now = new Date();
+  const { monthStart, monthEnd } = monthRange(now);
+
+  const [property, idOrder, monthTransactions] = await Promise.all([
+    prisma.property.findUnique({
     where: { id, deletedAt: null },
     include: {
       owner: true,
@@ -222,13 +232,19 @@ export async function getPropertyDetail(id: string) {
                   endDate: true,
                   movedOutAt: true,
                   tenant: { select: { name: true, contactInfo: true } },
+                  // Full history, not just the latest month — the active
+                  // lease's overdueAmount below needs every row to sum
+                  // multi-month arrears correctly (see rent-ledger.ts).
                   rentPayments: {
                     orderBy: { dueDate: "desc" },
-                    take: 1,
                     select: {
+                      id: true,
+                      month: true,
                       status: true,
                       dueAmount: true,
                       paidAmount: true,
+                      dueDate: true,
+                      paidAt: true,
                       transactions: {
                         orderBy: { date: "desc" },
                         take: 1,
@@ -269,12 +285,18 @@ export async function getPropertyDetail(id: string) {
         // employee" history view, mirroring the tenant vacate-history pattern.
         orderBy: { joinedAt: "asc" },
         include: {
+          // Full history, not just the latest month — overdueAmount below
+          // needs every row to sum multi-month arrears correctly.
           payrollRecords: {
             orderBy: { dueDate: "desc" },
-            take: 1,
             select: {
+              id: true,
+              month: true,
+              dueDate: true,
+              dueAmount: true,
               status: true,
               amountPaid: true,
+              paidAt: true,
               transactions: {
                 orderBy: { date: "desc" },
                 take: 1,
@@ -293,25 +315,21 @@ export async function getPropertyDetail(id: string) {
           month: true,
           dueDate: true,
           amount: true,
+          paidAmount: true,
           status: true,
           paidByCompany: true,
           meterReading: true,
           transactions: {
             orderBy: { date: "desc" },
-            take: 1,
-            select: { method: true },
+            select: { type: true, amount: true, method: true },
           },
         },
       },
     },
-  });
-
-  if (!property) return null;
-
-  const now = new Date();
-  const { monthStart, monthEnd } = monthRange(now);
-
-  const [idOrder, monthTransactions] = await Promise.all([
+    }),
+    // Independent of the property fetch above (only needs `id`/nothing at
+    // all) — run alongside it instead of waiting for that much larger query
+    // to finish first.
     prisma.property.findMany({
       where: { deletedAt: null },
       orderBy: { createdAt: "asc" },
@@ -332,6 +350,9 @@ export async function getPropertyDetail(id: string) {
       },
     }),
   ]);
+
+  if (!property) return null;
+
   const displayId = `P-${String(idOrder.findIndex((p) => p.id === id) + 1).padStart(3, "0")}`;
 
   const activeAgreement = property.ownerLeaseAgreements.find((a) => a.status === "ACTIVE") ?? null;
@@ -366,6 +387,23 @@ export async function getPropertyDetail(id: string) {
           u.tenantLeases.find((tl) => tl.status !== "ACTIVE") ?? null;
         const activeGuestStay = u.guestStays.find((g) => g.status === "CHECKED_IN") ?? null;
 
+        const activeLeaseLedger = activeLease
+          ? buildRentLedger(
+              activeLease.startDate,
+              Number(activeLease.monthlyRentAmount),
+              activeLease.rentPayments.map((rp) => ({
+                id: rp.id,
+                month: rp.month,
+                dueDate: rp.dueDate,
+                dueAmount: Number(rp.dueAmount),
+                paidAmount: Number(rp.paidAmount),
+                status: rp.status,
+                paidAt: rp.paidAt,
+                method: rp.transactions[0]?.method ?? null,
+              }))
+            )
+          : null;
+
         const currentTenant = activeLease
           ? {
               leaseId: activeLease.id,
@@ -375,6 +413,10 @@ export async function getPropertyDetail(id: string) {
               currentDownpaymentBalance: Number(activeLease.currentDownpaymentBalance),
               startDate: activeLease.startDate,
               endDate: activeLease.endDate,
+              // Sum of every month still owing something (real rows AND
+              // months nobody ever recorded) — not just the latest month.
+              overdueAmount: totalOverdue(activeLeaseLedger!),
+              overdueMonthsCount: overdueEntries(activeLeaseLedger!).length,
             }
           : null;
 
@@ -470,7 +512,7 @@ export async function getPropertyDetail(id: string) {
   // ordered dueDate desc, so the first hit per unitId is the most recent one.
   // Bills with no unitId (property-wide, e.g. one shared meter) don't map to
   // any single tenant's row, so those stay unrepresented here on purpose.
-  const latestUtilityBillStatusByUnitId = new Map<string, "PAID" | "UNPAID">();
+  const latestUtilityBillStatusByUnitId = new Map<string, "PAID" | "UNPAID" | "PARTIAL">();
   for (const b of property.utilityBills) {
     if (b.unitId && !latestUtilityBillStatusByUnitId.has(b.unitId)) {
       latestUtilityBillStatusByUnitId.set(b.unitId, b.status);
@@ -484,11 +526,25 @@ export async function getPropertyDetail(id: string) {
   const tenants = property.unitTypes.flatMap((ut) =>
     ut.units.flatMap((u) =>
       u.tenantLeases.map((tl) => {
-        const latestPayment = tl.rentPayments[0];
-        const isOverdue = latestPayment?.status === "UNPAID" || latestPayment?.status === "PARTIAL";
-        const overdueAmount = tl.status === "ACTIVE" && isOverdue
-          ? Number(latestPayment.dueAmount) - Number(latestPayment.paidAmount)
-          : 0;
+        const asOf = tl.status === "ACTIVE" ? new Date() : (tl.movedOutAt ?? tl.endDate ?? new Date());
+        const ledger = buildRentLedger(
+          tl.startDate,
+          Number(tl.monthlyRentAmount),
+          tl.rentPayments.map((rp) => ({
+            id: rp.id,
+            month: rp.month,
+            dueDate: rp.dueDate,
+            dueAmount: Number(rp.dueAmount),
+            paidAmount: Number(rp.paidAmount),
+            status: rp.status,
+            paidAt: rp.paidAt,
+            method: rp.transactions[0]?.method ?? null,
+          })),
+          asOf
+        );
+        const overdue = overdueEntries(ledger);
+        const overdueAmount = tl.status === "ACTIVE" ? totalOverdue(ledger) : 0;
+        const currentEntry = ledger[ledger.length - 1] ?? null;
         const monthlyRentAmount = Number(tl.monthlyRentAmount);
         const serviceChargeValue = tl.serviceChargeValue != null ? Number(tl.serviceChargeValue) : null;
         return {
@@ -504,9 +560,10 @@ export async function getPropertyDetail(id: string) {
           serviceChargeValue,
           serviceChargeAmount: computeServiceChargeAmount(monthlyRentAmount, tl.serviceChargeType, serviceChargeValue),
           leaseStatus: tl.status,
-          rentStatus: tl.status === "ACTIVE" ? (latestPayment?.status ?? null) : null,
+          rentStatus: tl.status === "ACTIVE" ? (currentEntry?.status ?? null) : null,
           overdueAmount,
-          paymentMethod: latestPayment?.transactions[0]?.method ?? null,
+          overdueMonths: tl.status === "ACTIVE" ? overdue : [],
+          paymentMethod: currentEntry?.method ?? null,
           startDate: tl.startDate,
           leftOn: tl.status !== "ACTIVE" ? (tl.movedOutAt ?? tl.endDate) : null,
           utilityBillStatus: latestUtilityBillStatusByUnitId.get(u.id) ?? null,
@@ -561,9 +618,25 @@ export async function getPropertyDetail(id: string) {
     activeTenants.reduce((sum, t) => sum + t.monthlyRentAmount + t.serviceChargeAmount, 0) + guestStayIncome;
 
   const staff = property.employees.map((e) => {
-    const latestPayroll = e.payrollRecords[0];
-    const isOverdue = e.status === "ACTIVE" && latestPayroll?.status === "PENDING";
-    const overdueAmount = isOverdue ? Number(latestPayroll.amountPaid) : 0;
+    const asOf = e.status === "ACTIVE" ? new Date() : (e.terminatedAt ?? new Date());
+    const ledger = buildRentLedger(
+      e.joinedAt,
+      Number(e.salaryAmount),
+      e.payrollRecords.map((pr) => ({
+        id: pr.id,
+        month: pr.month,
+        dueDate: pr.dueDate,
+        dueAmount: pr.dueAmount != null ? Number(pr.dueAmount) : Number(pr.amountPaid),
+        paidAmount: Number(pr.amountPaid),
+        status: pr.status === "PENDING" ? "UNPAID" : pr.status,
+        paidAt: pr.paidAt,
+        method: pr.transactions[0]?.method ?? null,
+      })),
+      asOf
+    );
+    const overdue = overdueEntries(ledger);
+    const overdueAmount = e.status === "ACTIVE" ? totalOverdue(ledger) : 0;
+    const currentEntry = ledger[ledger.length - 1] ?? null;
     return {
       id: e.id,
       name: e.name,
@@ -573,9 +646,10 @@ export async function getPropertyDetail(id: string) {
       salaryAmount: Number(e.salaryAmount),
       status: e.status,
       terminatedAt: e.terminatedAt,
-      payrollStatus: e.status === "ACTIVE" ? (latestPayroll?.status ?? null) : null,
-      paymentMethod: latestPayroll?.transactions[0]?.method ?? null,
+      payrollStatus: e.status === "ACTIVE" ? (currentEntry ? fromLedgerStatus(currentEntry.status) : null) : null,
+      paymentMethod: currentEntry?.method ?? null,
       overdueAmount,
+      overdueMonths: e.status === "ACTIVE" ? overdue : [],
     };
   });
   const activeStaff = staff.filter((s) => s.status === "ACTIVE");
@@ -639,21 +713,29 @@ export async function getPropertyDetail(id: string) {
     }))
   );
 
-  const utilityBills = property.utilityBills.map((b) => ({
-    id: b.id,
-    type: b.type,
-    dueDate: b.dueDate,
-    amount: Number(b.amount),
-    status: b.status,
-    paidByCompany: b.paidByCompany,
-    paymentMethod: b.transactions[0]?.method ?? null,
-    unitLabel: b.unitId ? (unitLabelById.get(b.unitId) ?? null) : null,
-    propertyId: property.id,
-    propertyName: property.name,
-    meterReading: b.meterReading != null ? Number(b.meterReading) : null,
-    previousMeterReading: consumptionByBillId.get(b.id)?.previousReading ?? null,
-    consumptionUnits: consumptionByBillId.get(b.id)?.consumption ?? null,
-  }));
+  const utilityBills = property.utilityBills.map((b) => {
+    const split = splitUtilityBillTransactions(
+      b.transactions.map((t) => ({ type: t.type, amount: Number(t.amount), method: t.method }))
+    );
+    return {
+      id: b.id,
+      type: b.type,
+      dueDate: b.dueDate,
+      amount: Number(b.amount),
+      paidAmount: Number(b.paidAmount),
+      status: b.status,
+      paidByCompany: b.paidByCompany,
+      paymentMethod: split.method,
+      collectedFromTenant: split.collectedFromTenant,
+      companyAbsorbedAmount: split.companyAbsorbedAmount,
+      unitLabel: b.unitId ? (unitLabelById.get(b.unitId) ?? null) : null,
+      propertyId: property.id,
+      propertyName: property.name,
+      meterReading: b.meterReading != null ? Number(b.meterReading) : null,
+      previousMeterReading: consumptionByBillId.get(b.id)?.previousReading ?? null,
+      consumptionUnits: consumptionByBillId.get(b.id)?.consumption ?? null,
+    };
+  });
 
   const collectedIncome = monthTransactions
     .filter((t) => t.direction === "INCOMING")

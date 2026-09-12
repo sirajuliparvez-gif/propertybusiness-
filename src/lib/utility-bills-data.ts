@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import { attachElectricityConsumption, latestElectricityReadingByUnit } from "@/lib/electricity-consumption";
+import { splitUtilityBillTransactions } from "@/lib/utility-bill-split";
 
 function monthRange(now: Date) {
   return {
@@ -30,13 +31,15 @@ function getPropertiesWithBills() {
           month: true,
           dueDate: true,
           amount: true,
+          paidAmount: true,
           status: true,
           paidByCompany: true,
           meterReading: true,
+          // Both possible transactions (tenant reimbursement + company
+          // write-off) — a partially/split-paid bill can have one of each.
           transactions: {
             orderBy: { date: "desc" },
-            take: 1,
-            select: { method: true },
+            select: { type: true, amount: true, method: true },
           },
         },
       },
@@ -95,28 +98,36 @@ export async function getAllUtilityBillsData() {
           meterReading: b.meterReading != null ? Number(b.meterReading) : null,
         }))
       );
-      return p.utilityBills.map((b) => ({
-        id: b.id,
-        type: b.type,
-        dueDate: b.dueDate,
-        amount: Number(b.amount),
-        status: b.status,
-        paidByCompany: b.paidByCompany,
-        paymentMethod: b.transactions[0]?.method ?? null,
-        unitLabel: b.unitId ? (unitLabelById.get(b.unitId) ?? null) : null,
-        propertyId: p.id,
-        propertyName: p.name,
-        meterReading: b.meterReading != null ? Number(b.meterReading) : null,
-        previousMeterReading: consumptionByBillId.get(b.id)?.previousReading ?? null,
-        consumptionUnits: consumptionByBillId.get(b.id)?.consumption ?? null,
-      }));
+      return p.utilityBills.map((b) => {
+        const split = splitUtilityBillTransactions(
+          b.transactions.map((t) => ({ type: t.type, amount: Number(t.amount), method: t.method }))
+        );
+        return {
+          id: b.id,
+          type: b.type,
+          dueDate: b.dueDate,
+          amount: Number(b.amount),
+          paidAmount: Number(b.paidAmount),
+          status: b.status,
+          paidByCompany: b.paidByCompany,
+          paymentMethod: split.method,
+          collectedFromTenant: split.collectedFromTenant,
+          companyAbsorbedAmount: split.companyAbsorbedAmount,
+          unitLabel: b.unitId ? (unitLabelById.get(b.unitId) ?? null) : null,
+          propertyId: p.id,
+          propertyName: p.name,
+          meterReading: b.meterReading != null ? Number(b.meterReading) : null,
+          previousMeterReading: consumptionByBillId.get(b.id)?.previousReading ?? null,
+          consumptionUnits: consumptionByBillId.get(b.id)?.consumption ?? null,
+        };
+      });
     })
     .sort((a, b) => b.dueDate.getTime() - a.dueDate.getTime());
 
   const totalUnpaid = bills
-    .filter((b) => b.status === "UNPAID")
-    .reduce((sum, b) => sum + b.amount, 0);
-  const unpaidCount = bills.filter((b) => b.status === "UNPAID").length;
+    .filter((b) => b.status !== "PAID")
+    .reduce((sum, b) => sum + Math.max(0, b.amount - b.paidAmount), 0);
+  const unpaidCount = bills.filter((b) => b.status !== "PAID").length;
   const paidThisMonth = Number(paidThisMonthAgg._sum.amount ?? 0);
   const paidCount = bills.filter((b) => b.status === "PAID").length;
   const paymentRate = bills.length > 0 ? Math.round((paidCount / bills.length) * 100) : 0;

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { memo, useCallback, useEffect, useRef, useState } from "react";
 import { useTranslations } from "next-intl";
 import { ChevronDown, ChevronUp, Plus, RotateCcw, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -91,6 +91,137 @@ function syncRows(
   });
 }
 
+// Split out of the parent's render and wrapped in memo() so typing in one
+// unit's field only re-renders that one <tr> — not every row in the table.
+// This only actually helps because updateRow/removeRow below are stable
+// (useCallback with an empty dep array, via refs) and each row's own object
+// only gets a new reference when THAT row changes (see updateRow's map()) —
+// without both of those, every keystroke would still hand this component a
+// "new" onUpdate/onRemove prop and defeat the memo. Previously every field
+// lived inline in one big render, so a property with 30-50 units reconciled
+// all 30-50 rows' inputs on every single keystroke in any one of them.
+const UnitOverrideRow = memo(function UnitOverrideRow({
+  row,
+  index,
+  showOwnerRent,
+  showNightlyRate,
+  canRemove,
+  onUpdate,
+  onRemove,
+  t,
+}: {
+  row: UnitRow;
+  index: number;
+  showOwnerRent: boolean;
+  showNightlyRate: boolean;
+  canRemove: boolean;
+  onUpdate: (index: number, patch: Partial<UnitRow>) => void;
+  onRemove: (index: number) => void;
+  t: ReturnType<typeof useTranslations>;
+}) {
+  return (
+    <tr>
+      <td className="py-2 pr-3">
+        <Input
+          value={row.label}
+          onChange={(e) => onUpdate(index, { label: e.target.value })}
+          className="h-9 text-sm"
+        />
+      </td>
+      <td className="py-2 pr-3">
+        <Input
+          type="number"
+          step="any"
+          min={0}
+          value={row.sizeValue}
+          onChange={(e) => onUpdate(index, { sizeValue: e.target.value })}
+          className="h-9 text-sm"
+        />
+      </td>
+      <td className="py-2 pr-3">
+        <Input
+          value={row.sizeUnit}
+          onChange={(e) => onUpdate(index, { sizeUnit: e.target.value })}
+          className="h-9 text-sm"
+        />
+      </td>
+      {showOwnerRent ? (
+        <td className="py-2 pr-3">
+          <Input
+            type="number"
+            step="any"
+            min={0}
+            value={row.ownerRent}
+            onChange={(e) => onUpdate(index, { ownerRent: e.target.value })}
+            className="h-9 text-sm"
+          />
+        </td>
+      ) : null}
+      {showOwnerRent ? (
+        <td className="py-2 pr-3">
+          <Input
+            type="number"
+            step="any"
+            min={0}
+            value={row.ownerDownpayment}
+            onChange={(e) => onUpdate(index, { ownerDownpayment: e.target.value })}
+            className="h-9 text-sm"
+          />
+        </td>
+      ) : null}
+      <td className="py-2 pr-3">
+        <Input
+          type="number"
+          step="any"
+          min={0}
+          value={row.tenantRent}
+          onChange={(e) => onUpdate(index, { tenantRent: e.target.value })}
+          className="h-9 text-sm"
+        />
+      </td>
+      <td className="py-2 pr-3">
+        <Input
+          type="number"
+          step="any"
+          min={0}
+          value={row.tenantDownpayment}
+          onChange={(e) => onUpdate(index, { tenantDownpayment: e.target.value })}
+          className="h-9 text-sm"
+        />
+        {row.tenantLeaseId ? (
+          <p className="mt-1 whitespace-nowrap text-xs text-primary">{t("currentTenantBalanceHint")}</p>
+        ) : null}
+      </td>
+      {showNightlyRate ? (
+        <td className="py-2 pr-3">
+          <Input
+            type="number"
+            step="any"
+            min={0}
+            value={row.nightlyRate}
+            onChange={(e) => onUpdate(index, { nightlyRate: e.target.value })}
+            className="h-9 text-sm"
+          />
+        </td>
+      ) : null}
+      <td className="py-2 text-right">
+        {row.id ? null : (
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon-sm"
+            disabled={!canRemove}
+            onClick={() => onRemove(index)}
+            className="text-destructive hover:bg-destructive/10"
+          >
+            <Trash2 className="size-3.5" />
+          </Button>
+        )}
+      </td>
+    </tr>
+  );
+});
+
 export function UnitOverridesTable({
   unitCount,
   defaultSizeValue,
@@ -138,6 +269,14 @@ export function UnitOverridesTable({
     tenantDownpayment: "",
     nightlyRate: "",
   });
+  // Kept in a ref (not a useCallback dep) purely so removeRow's own identity
+  // never changes on a parent re-render either — see updateRow's comment
+  // below for why that matters. Updated via effect, not inline during
+  // render, since mutating a ref during render isn't pure.
+  const onCountChangeRef = useRef(onCountChange);
+  useEffect(() => {
+    onCountChangeRef.current = onCountChange;
+  }, [onCountChange]);
 
   useEffect(() => {
     const defaults = {
@@ -163,26 +302,33 @@ export function UnitOverridesTable({
     defaultNightlyRate,
   ]);
 
-  function updateRow(index: number, patch: Partial<UnitRow>) {
+  // Stable across every render (empty dep array) — each row component gets
+  // the exact same function reference every time, so memo() on the row only
+  // has `row` itself left to compare, and only the edited row's object
+  // reference actually changes (the map() below leaves every sibling row's
+  // object untouched).
+  const updateRow = useCallback((index: number, patch: Partial<UnitRow>) => {
     setRows((prev) => prev.map((r, i) => (i === index ? { ...r, ...patch } : r)));
-  }
+  }, []);
 
-  // onCountChange is only called here, directly in response to the user's
-  // own Add/Remove click (never from the sync effect above) — calling it
-  // from a generic "whenever rows.length changes" effect instead created a
-  // feedback loop with the parent's unitCount state (parent update → sync
-  // effect changes rows.length → effect calls back into the parent → ...),
-  // which tripped React's "Maximum update depth exceeded" safeguard.
+  const removeRow = useCallback((index: number) => {
+    setRows((prev) => {
+      if (prev.length <= 1) return prev;
+      if (prev[index]?.id) return prev; // existing persisted units can't be removed here
+      const next = prev.filter((_, i) => i !== index);
+      onCountChangeRef.current?.(next.length);
+      return next;
+    });
+  }, []);
+
+  // onCountChange is only called here and in removeRow, directly in response
+  // to the user's own Add/Remove click (never from the sync effect above) —
+  // calling it from a generic "whenever rows.length changes" effect instead
+  // created a feedback loop with the parent's unitCount state (parent update
+  // → sync effect changes rows.length → effect calls back into the parent →
+  // ...), which tripped React's "Maximum update depth exceeded" safeguard.
   function addRow() {
     const next = [...rows, makeRow(rows.length, startIndex, prevDefaultsRef.current)];
-    setRows(next);
-    onCountChange?.(next.length);
-  }
-
-  function removeRow(index: number) {
-    if (rows.length <= 1) return;
-    if (rows[index]?.id) return; // existing persisted units can't be removed here
-    const next = rows.filter((_, i) => i !== index);
     setRows(next);
     onCountChange?.(next.length);
   }
@@ -258,107 +404,17 @@ export function UnitOverridesTable({
               </thead>
               <tbody>
                 {rows.map((row, i) => (
-                  <tr key={i}>
-                    <td className="py-2 pr-3">
-                      <Input
-                        value={row.label}
-                        onChange={(e) => updateRow(i, { label: e.target.value })}
-                        className="h-9 text-sm"
-                      />
-                    </td>
-                    <td className="py-2 pr-3">
-                      <Input
-                        type="number"
-                        step="any"
-                        min={0}
-                        value={row.sizeValue}
-                        onChange={(e) => updateRow(i, { sizeValue: e.target.value })}
-                        className="h-9 text-sm"
-                      />
-                    </td>
-                    <td className="py-2 pr-3">
-                      <Input
-                        value={row.sizeUnit}
-                        onChange={(e) => updateRow(i, { sizeUnit: e.target.value })}
-                        className="h-9 text-sm"
-                      />
-                    </td>
-                    {showOwnerRent ? (
-                      <td className="py-2 pr-3">
-                        <Input
-                          type="number"
-                          step="any"
-                          min={0}
-                          value={row.ownerRent}
-                          onChange={(e) => updateRow(i, { ownerRent: e.target.value })}
-                          className="h-9 text-sm"
-                        />
-                      </td>
-                    ) : null}
-                    {showOwnerRent ? (
-                      <td className="py-2 pr-3">
-                        <Input
-                          type="number"
-                          step="any"
-                          min={0}
-                          value={row.ownerDownpayment}
-                          onChange={(e) => updateRow(i, { ownerDownpayment: e.target.value })}
-                          className="h-9 text-sm"
-                        />
-                      </td>
-                    ) : null}
-                    <td className="py-2 pr-3">
-                      <Input
-                        type="number"
-                        step="any"
-                        min={0}
-                        value={row.tenantRent}
-                        onChange={(e) => updateRow(i, { tenantRent: e.target.value })}
-                        className="h-9 text-sm"
-                      />
-                    </td>
-                    <td className="py-2 pr-3">
-                      <Input
-                        type="number"
-                        step="any"
-                        min={0}
-                        value={row.tenantDownpayment}
-                        onChange={(e) => updateRow(i, { tenantDownpayment: e.target.value })}
-                        className="h-9 text-sm"
-                      />
-                      {row.tenantLeaseId ? (
-                        <p className="mt-1 whitespace-nowrap text-xs text-primary">
-                          {t("currentTenantBalanceHint")}
-                        </p>
-                      ) : null}
-                    </td>
-                    {showNightlyRate ? (
-                      <td className="py-2 pr-3">
-                        <Input
-                          type="number"
-                          step="any"
-                          min={0}
-                          value={row.nightlyRate}
-                          onChange={(e) => updateRow(i, { nightlyRate: e.target.value })}
-                          className="h-9 text-sm"
-                        />
-                      </td>
-                    ) : null}
-                    <td className="py-2 text-right">
-                      {row.id ? null : (
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="icon-sm"
-                          disabled={rows.length <= 1}
-                          onClick={() => removeRow(i)}
-                          className="text-destructive hover:bg-destructive/10"
-                        >
-                          <Trash2 className="size-3.5" />
-                        </Button>
-                      )}
-                    </td>
-                  </tr>
+                  <UnitOverrideRow
+                    key={i}
+                    row={row}
+                    index={i}
+                    showOwnerRent={showOwnerRent}
+                    showNightlyRate={showNightlyRate}
+                    canRemove={rows.length > 1}
+                    onUpdate={updateRow}
+                    onRemove={removeRow}
+                    t={t}
+                  />
                 ))}
               </tbody>
             </table>

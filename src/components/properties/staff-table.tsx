@@ -53,7 +53,7 @@ export function StaffTable({
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
 
-  const payrollStatusLabels = { PAID: t("paid"), PENDING: t("pending") };
+  const payrollStatusLabels = { PAID: t("paid"), PENDING: t("overdueStatus"), PARTIAL: t("pending") };
 
   // Only meaningful on the cross-property page (showPropertyColumn) — the
   // per-property usage has just one property, so no dropdown is rendered.
@@ -280,7 +280,14 @@ export function StaffTable({
                         {t("inactiveLabel")}
                       </Badge>
                     ) : (
-                      <StatusPill status={s.payrollStatus} labels={payrollStatusLabels} />
+                      <div className="flex flex-col gap-0.5">
+                        <StatusPill status={s.payrollStatus} labels={payrollStatusLabels} />
+                        {s.overdueMonths.length > 1 ? (
+                          <span className="text-xs font-medium text-destructive">
+                            {t("monthsOverdueCount", { count: s.overdueMonths.length })}
+                          </span>
+                        ) : null}
+                      </div>
                     )}
                   </TableCell>
                   <TableCell className="text-right">
@@ -290,6 +297,7 @@ export function StaffTable({
                           propertyId={rowPropertyId}
                           employeeId={s.id}
                           defaultAmount={s.salaryAmount}
+                          overdueMonths={s.overdueMonths}
                           returnTo={showPropertyColumn ? "/employees" : undefined}
                           iconOnly={showPropertyColumn}
                         />

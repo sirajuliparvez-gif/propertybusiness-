@@ -27,7 +27,7 @@ export function MobileUtilityBillsList({
   const [filter, setFilter] = useState<Filter>("all");
 
   const filtered = useMemo(() => {
-    if (filter === "unpaid") return bills.filter((b) => b.status === "UNPAID");
+    if (filter === "unpaid") return bills.filter((b) => b.status !== "PAID");
     if (filter === "paid") return bills.filter((b) => b.status === "PAID");
     return bills;
   }, [bills, filter]);
@@ -88,21 +88,26 @@ export function MobileUtilityBillsList({
                     <Badge
                       className={cn(
                         "border-transparent",
-                        b.status === "PAID" ? "bg-success/15 text-success" : "bg-warning/15 text-warning"
+                        b.status === "PAID"
+                          ? "bg-success/15 text-success"
+                          : b.status === "PARTIAL"
+                            ? "bg-warning/15 text-warning"
+                            : "bg-destructive/15 text-destructive"
                       )}
                     >
-                      {b.status === "PAID" ? t("paid") : t("billStatusUnpaid")}
+                      {b.status === "PAID" ? t("paid") : b.status === "PARTIAL" ? t("pending") : t("billStatusUnpaid")}
                     </Badge>
                   </div>
                 </>
               );
               return (
                 <li key={b.id}>
-                  {b.status === "UNPAID" ? (
+                  {b.status !== "PAID" ? (
                     <PayUtilityBillButton
                       billId={b.id}
                       propertyId={b.propertyId}
                       amount={b.amount}
+                      paidAmount={b.paidAmount}
                       paidByCompany={b.paidByCompany}
                       returnTo={returnTo}
                       variant="row"

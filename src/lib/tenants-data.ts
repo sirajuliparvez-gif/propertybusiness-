@@ -1,6 +1,8 @@
 import { prisma } from "@/lib/prisma";
 import { computeServiceChargeAmount } from "@/lib/service-charge";
 import { attachElectricityConsumption, latestElectricityReadingByUnit } from "@/lib/electricity-consumption";
+import { buildRentLedger, overdueEntries, totalOverdue } from "@/lib/rent-ledger";
+import { splitUtilityBillTransactions } from "@/lib/utility-bill-split";
 
 function monthRange(now: Date) {
   return {
@@ -50,10 +52,15 @@ export async function getAllTenantsData() {
                     movedOutAt: true,
                     endDate: true,
                     tenant: { select: { name: true, contactInfo: true } },
+                    // Every recorded month, not just the latest — overdueAmount
+                    // below needs the full history to sum arrears correctly
+                    // (see rent-ledger.ts for why a missing month isn't "no
+                    // rent due", it's "nobody recorded it yet").
                     rentPayments: {
                       orderBy: { dueDate: "desc" },
-                      take: 1,
                       select: {
+                        id: true,
+                        month: true,
                         status: true,
                         dueAmount: true,
                         paidAmount: true,
@@ -90,7 +97,7 @@ export async function getAllTenantsData() {
   const tenants = properties.flatMap((p) => {
     // Same "first hit per unitId wins" logic as properties-data.ts's
     // per-property version — utilityBills is already ordered dueDate desc.
-    const latestUtilityBillStatusByUnitId = new Map<string, "PAID" | "UNPAID">();
+    const latestUtilityBillStatusByUnitId = new Map<string, "PAID" | "UNPAID" | "PARTIAL">();
     for (const b of p.utilityBills) {
       if (b.unitId && !latestUtilityBillStatusByUnitId.has(b.unitId)) {
         latestUtilityBillStatusByUnitId.set(b.unitId, b.status);
@@ -100,12 +107,31 @@ export async function getAllTenantsData() {
     return p.unitTypes.flatMap((ut) =>
       ut.units.flatMap((u) =>
         u.tenantLeases.map((tl) => {
-          const latestPayment = tl.rentPayments[0];
-          const isOverdue = latestPayment?.status === "UNPAID" || latestPayment?.status === "PARTIAL";
-          const overdueAmount =
-            tl.status === "ACTIVE" && isOverdue
-              ? Number(latestPayment.dueAmount) - Number(latestPayment.paidAmount)
-              : 0;
+          // Ended leases stop owing rent the day they left — building the
+          // ledger up to "now" for a vacated tenant would invent phantom
+          // overdue months for the period after they were gone.
+          const asOf = tl.status === "ACTIVE" ? new Date() : (tl.movedOutAt ?? tl.endDate ?? new Date());
+          const ledger = buildRentLedger(
+            tl.startDate,
+            Number(tl.monthlyRentAmount),
+            tl.rentPayments.map((rp) => ({
+              id: rp.id,
+              month: rp.month,
+              dueDate: rp.dueDate,
+              dueAmount: Number(rp.dueAmount),
+              paidAmount: Number(rp.paidAmount),
+              status: rp.status,
+              paidAt: rp.paidAt,
+              method: rp.transactions[0]?.method ?? null,
+            })),
+            asOf
+          );
+          const overdue = overdueEntries(ledger);
+          const overdueAmount = tl.status === "ACTIVE" ? totalOverdue(ledger) : 0;
+          // The current month's own entry (real row or synthesized) — still
+          // what the status pill/date columns show, now guaranteed to exist
+          // instead of silently falling back to a stale older row.
+          const currentEntry = ledger[ledger.length - 1] ?? null;
           const serviceChargeAmount = computeServiceChargeAmount(
             Number(tl.monthlyRentAmount),
             tl.serviceChargeType,
@@ -124,12 +150,13 @@ export async function getAllTenantsData() {
             serviceChargeValue: tl.serviceChargeValue != null ? Number(tl.serviceChargeValue) : null,
             serviceChargeAmount,
             leaseStatus: tl.status,
-            rentStatus: tl.status === "ACTIVE" ? (latestPayment?.status ?? null) : null,
+            rentStatus: tl.status === "ACTIVE" ? (currentEntry?.status ?? null) : null,
             overdueAmount,
+            overdueMonths: tl.status === "ACTIVE" ? overdue : [],
             utilityBillStatus: latestUtilityBillStatusByUnitId.get(u.id) ?? null,
-            paymentMethod: latestPayment?.transactions[0]?.method ?? null,
-            currentDueDate: latestPayment?.dueDate ?? null,
-            currentPaidAt: latestPayment?.paidAt ?? null,
+            paymentMethod: currentEntry?.method ?? null,
+            currentDueDate: currentEntry?.dueDate ?? null,
+            currentPaidAt: currentEntry?.paidAt ?? null,
             startDate: tl.startDate,
             leftOn: tl.status !== "ACTIVE" ? (tl.movedOutAt ?? tl.endDate) : null,
           };
@@ -270,10 +297,11 @@ export async function getTenantProfile(leaseId: string) {
       month: true,
       dueDate: true,
       amount: true,
+      paidAmount: true,
       status: true,
       paidByCompany: true,
       meterReading: true,
-      transactions: { orderBy: { date: "desc" }, take: 1, select: { method: true } },
+      transactions: { orderBy: { date: "desc" }, select: { type: true, amount: true, method: true } },
     },
   });
   const unitConsumptionByBillId = attachElectricityConsumption(
@@ -298,20 +326,46 @@ export async function getTenantProfile(leaseId: string) {
     )
   );
 
-  const payments = lease.rentPayments.map((rp) => ({
-    id: rp.id,
-    month: rp.month,
-    dueDate: rp.dueDate,
-    dueAmount: Number(rp.dueAmount),
-    paidAmount: Number(rp.paidAmount),
-    status: rp.status,
-    paidAt: rp.paidAt,
-    method: rp.transactions[0]?.method ?? null,
+  // Ended leases stop owing rent the day they left — same reasoning as
+  // getAllTenantsData: build the ledger only through when they were actually
+  // still renting, not all the way to today.
+  const ledgerAsOf =
+    lease.status === "ACTIVE" ? new Date() : (lease.movedOutAt ?? lease.endDate ?? new Date());
+  const ledger = buildRentLedger(
+    lease.startDate,
+    Number(lease.monthlyRentAmount),
+    lease.rentPayments.map((rp) => ({
+      id: rp.id,
+      month: rp.month,
+      dueDate: rp.dueDate,
+      dueAmount: Number(rp.dueAmount),
+      paidAmount: Number(rp.paidAmount),
+      status: rp.status,
+      paidAt: rp.paidAt,
+      method: rp.transactions[0]?.method ?? null,
+    })),
+    ledgerAsOf
+  );
+  // Newest first, matching the payment-history table's existing convention —
+  // the ledger itself builds chronologically ascending.
+  const payments = [...ledger].reverse().map((e) => ({
+    id: e.rentPaymentId ?? `virtual-${e.month}`,
+    month: e.month,
+    dueDate: e.dueDate,
+    dueAmount: e.dueAmount,
+    paidAmount: e.paidAmount,
+    status: e.status,
+    paidAt: e.paidAt,
+    method: e.method ?? null,
+    // No RentPayment row exists yet for this month — nobody has recorded
+    // anything, it's shown purely so the arrears aren't invisible.
+    isVirtual: e.rentPaymentId === null,
   }));
+  const overdueMonths = overdueEntries(ledger);
 
-  const totalDue = payments.reduce((sum, p) => sum + p.dueAmount, 0);
-  const totalPaid = payments.reduce((sum, p) => sum + p.paidAmount, 0);
-  const remaining = Math.max(0, totalDue - totalPaid);
+  const totalDue = ledger.reduce((sum, e) => sum + e.dueAmount, 0);
+  const totalPaid = ledger.reduce((sum, e) => sum + e.paidAmount, 0);
+  const remaining = totalOverdue(ledger);
 
   // "Tracked" stats (on-time rate, average payment day, preferred method)
   // are scoped to the most recent 6 months only — a tenant's payment habits
@@ -372,6 +426,7 @@ export async function getTenantProfile(leaseId: string) {
     serviceChargeValue: lease.serviceChargeValue != null ? Number(lease.serviceChargeValue) : null,
     notes: lease.notes,
     payments,
+    overdueMonths,
     trackedMonths: tracked.length,
     totalDue,
     totalPaid,
@@ -379,7 +434,7 @@ export async function getTenantProfile(leaseId: string) {
     onTimeRate,
     avgPaymentDay,
     preferredMethod,
-    rentStatus: lease.status === "ACTIVE" ? (payments[0]?.status ?? null) : null,
+    rentStatus: lease.status === "ACTIVE" ? (ledger[ledger.length - 1]?.status ?? null) : null,
     // Tenant-level docs (NID/photo) and lease-level docs (agreement copy)
     // kept as separate arrays so the profile page can label them distinctly.
     tenantDocuments: lease.tenant.documents.map((d) => ({
@@ -396,20 +451,28 @@ export async function getTenantProfile(leaseId: string) {
       label: d.label,
       uploadedAt: d.uploadedAt,
     })),
-    utilityBills: unitUtilityBills.map((b) => ({
-      id: b.id,
-      type: b.type,
-      dueDate: b.dueDate,
-      amount: Number(b.amount),
-      status: b.status,
-      paidByCompany: b.paidByCompany,
-      paymentMethod: b.transactions[0]?.method ?? null,
-      unitLabel: lease.unit.label,
-      propertyId: lease.unit.unitType.property.id,
-      meterReading: b.meterReading != null ? Number(b.meterReading) : null,
-      previousMeterReading: unitConsumptionByBillId.get(b.id)?.previousReading ?? null,
-      consumptionUnits: unitConsumptionByBillId.get(b.id)?.consumption ?? null,
-    })),
+    utilityBills: unitUtilityBills.map((b) => {
+      const split = splitUtilityBillTransactions(
+        b.transactions.map((t) => ({ type: t.type, amount: Number(t.amount), method: t.method }))
+      );
+      return {
+        id: b.id,
+        type: b.type,
+        dueDate: b.dueDate,
+        amount: Number(b.amount),
+        paidAmount: Number(b.paidAmount),
+        status: b.status,
+        paidByCompany: b.paidByCompany,
+        paymentMethod: split.method,
+        collectedFromTenant: split.collectedFromTenant,
+        companyAbsorbedAmount: split.companyAbsorbedAmount,
+        unitLabel: lease.unit.label,
+        propertyId: lease.unit.unitType.property.id,
+        meterReading: b.meterReading != null ? Number(b.meterReading) : null,
+        previousMeterReading: unitConsumptionByBillId.get(b.id)?.previousReading ?? null,
+        consumptionUnits: unitConsumptionByBillId.get(b.id)?.consumption ?? null,
+      };
+    }),
     previousElectricityReadingByUnit,
     // Every time rent was settled by drawing down the deposit instead of a
     // real cash payment (round 16's "adjust from downpayment" mode) — this

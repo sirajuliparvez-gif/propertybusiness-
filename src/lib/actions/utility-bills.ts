@@ -50,6 +50,16 @@ export async function addUtilityBill(formData: FormData) {
   redirect({ href: returnTo, locale });
 }
 
+// Settles a bill, possibly only partially, possibly split between the
+// tenant's own reimbursement and the company writing off the rest as its own
+// cost — e.g. a ৳1000 bill where the tenant pays ৳990 and the company
+// absorbs the ৳10 shortfall as a penalty/loss, rather than the old all-one-
+// or-all-the-other choice. `tenantAmount` is how much is being collected
+// from the tenant THIS call (can be 0, can be partial — more can be
+// collected later while the bill sits PARTIAL); `companyCoversRest` closes
+// out whatever's left after that as a real UTILITY_EXPENSE right now. Both
+// default from the bill's own paidByCompany flag when omitted, so the old
+// one-click "pay the whole thing" flow still works unchanged.
 export async function payUtilityBill(formData: FormData) {
   const locale = await getLocale();
   const billId = formData.get("billId") as string;
@@ -65,12 +75,15 @@ export async function payUtilityBill(formData: FormData) {
     methodRaw === "OTHER"
       ? methodRaw
       : null;
+  const tenantAmountStr = str(formData, "tenantAmount");
+  const companyCoversRest = formData.get("companyCoversRest") === "true";
 
   await prisma.$transaction(async (tx) => {
     const bill = await tx.utilityBill.findUnique({
       where: { id: billId },
       select: {
         amount: true,
+        paidAmount: true,
         unitId: true,
         status: true,
         paidByCompany: true,
@@ -81,48 +94,65 @@ export async function payUtilityBill(formData: FormData) {
         },
       },
     });
-    // Bill already paid or gone (stale reference) — silent no-op, the
+    // Bill already fully paid or gone (stale reference) — silent no-op, the
     // redirect below still refreshes the page to the current true state.
-    if (!bill || bill.status !== "UNPAID") return;
+    if (!bill || bill.status === "PAID") return;
 
-    await tx.utilityBill.update({ where: { id: billId }, data: { status: "PAID" } });
+    const totalAmount = Number(bill.amount);
+    const alreadyPaid = Number(bill.paidAmount);
+    const remaining = Math.max(0, totalAmount - alreadyPaid);
 
-    if (bill.paidByCompany) {
-      // Company absorbs this one itself (e.g. water bill, per company policy)
-      // — a real cost, not a pass-through, so it counts toward netProfit.
-      await tx.transaction.create({
-        data: {
-          propertyId,
-          type: "UTILITY_EXPENSE",
-          direction: "OUTGOING",
-          amount: bill.amount,
-          method,
-          unitId: bill.unitId,
-          utilityBillId: billId,
-          date: new Date(),
-        },
-      });
-    } else {
+    const tenantAmountRaw = tenantAmountStr != null ? Number(tenantAmountStr) : bill.paidByCompany ? 0 : remaining;
+    const tenantAmount = Math.min(Math.max(0, tenantAmountRaw), remaining);
+    const companyAmount = companyCoversRest ? remaining - tenantAmount : 0;
+    if (tenantAmount <= 0 && companyAmount <= 0) return;
+
+    const newPaidAmount = alreadyPaid + tenantAmount + companyAmount;
+    const newStatus = newPaidAmount >= totalAmount ? "PAID" : "PARTIAL";
+    const paidDate = new Date();
+
+    await tx.utilityBill.update({
+      where: { id: billId },
+      data: { paidAmount: newPaidAmount, status: newStatus },
+    });
+
+    if (tenantAmount > 0) {
       // The company's policy: every other bill gets assigned to whichever
       // tenant's unit it belongs to, the tenant pays the company, and the
       // company pays the utility company separately (outside this system,
-      // per the user). So clicking this button records the tenant's
-      // reimbursement — not the company's own outgoing expense — and is
-      // excluded from netProfit the same way DOWNPAYMENT_REFUND_TO_TENANT
-      // already is (pass-through, not real income). tenantLeaseId is
-      // auto-derived from the unit's current active lease, since the bill is
-      // only ever assigned by unit.
+      // per the user). So this records the tenant's reimbursement — not the
+      // company's own outgoing expense — and is excluded from netProfit the
+      // same way DOWNPAYMENT_REFUND_TO_TENANT already is (pass-through, not
+      // real income). tenantLeaseId is auto-derived from the unit's current
+      // active lease, since the bill is only ever assigned by unit.
       await tx.transaction.create({
         data: {
           propertyId,
           type: "UTILITY_REIMBURSEMENT_FROM_TENANT",
           direction: "INCOMING",
-          amount: bill.amount,
+          amount: tenantAmount,
           method,
           unitId: bill.unitId,
           tenantLeaseId: bill.unit?.tenantLeases[0]?.id ?? null,
           utilityBillId: billId,
-          date: new Date(),
+          date: paidDate,
+        },
+      });
+    }
+    if (companyAmount > 0) {
+      // Company absorbs this portion itself (e.g. a full water bill, or the
+      // shortfall a tenant didn't cover) — a real cost, not a pass-through,
+      // so it counts toward netProfit.
+      await tx.transaction.create({
+        data: {
+          propertyId,
+          type: "UTILITY_EXPENSE",
+          direction: "OUTGOING",
+          amount: companyAmount,
+          method,
+          unitId: bill.unitId,
+          utilityBillId: billId,
+          date: paidDate,
         },
       });
     }

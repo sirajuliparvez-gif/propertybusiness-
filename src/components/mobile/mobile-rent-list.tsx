@@ -141,6 +141,7 @@ export function MobileRentList({
                   currentDownpaymentBalance={p.currentDownpaymentBalance}
                   serviceChargeType={p.serviceChargeType}
                   serviceChargeValue={p.serviceChargeValue}
+                  overdueMonths={p.overdueMonths}
                   returnTo="/rent"
                   variant="row"
                   rowContent={
@@ -157,6 +158,11 @@ export function MobileRentList({
                           {formatTaka(p.monthlyRentAmount)}
                         </p>
                         <StatusPill status={p.rentStatus} labels={rentStatusLabels} />
+                        {p.overdueMonths.length > 1 ? (
+                          <p className="text-xs font-medium text-destructive">
+                            {t("monthsOverdueCount", { count: p.overdueMonths.length })}
+                          </p>
+                        ) : null}
                       </div>
                     </>
                   }

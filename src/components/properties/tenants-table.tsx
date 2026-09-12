@@ -264,7 +264,14 @@ export function TenantsTable({
                         ) : null}
                       </div>
                     ) : (
-                      <StatusPill status={tn.rentStatus} labels={rentStatusLabels} />
+                      <div className="flex flex-col gap-0.5">
+                        <StatusPill status={tn.rentStatus} labels={rentStatusLabels} />
+                        {tn.overdueMonths.length > 1 ? (
+                          <span className="text-xs font-medium text-destructive">
+                            {t("monthsOverdueCount", { count: tn.overdueMonths.length })}
+                          </span>
+                        ) : null}
+                      </div>
                     )}
                   </TableCell>
                   <TableCell
@@ -297,6 +304,7 @@ export function TenantsTable({
                             currentDownpaymentBalance={tn.currentDownpaymentBalance}
                             serviceChargeType={tn.serviceChargeType}
                             serviceChargeValue={tn.serviceChargeValue}
+                            overdueMonths={tn.overdueMonths}
                             returnTo={showPropertyColumn ? "/tenants" : undefined}
                             iconOnly
                           />

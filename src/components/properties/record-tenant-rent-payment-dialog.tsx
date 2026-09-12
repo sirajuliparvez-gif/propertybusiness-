@@ -23,14 +23,25 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 import { FormField } from "@/components/properties/form-field";
-import { formatTaka } from "@/lib/format";
-import { recordTenantRentPayment, recordAdvanceRentPayment } from "@/lib/actions/tenant-rent";
+import { formatTaka, formatDate } from "@/lib/format";
+import {
+  recordTenantRentPayment,
+  recordAdvanceRentPayment,
+  recordOverdueRentPayment,
+} from "@/lib/actions/tenant-rent";
 import { computeServiceChargeAmount } from "@/lib/service-charge";
 
-type Mode = "cash" | "downpaymentAdjustment" | "advance";
+type Mode = "cash" | "downpaymentAdjustment" | "advance" | "overdue";
 const ADVANCE_MONTH_PRESETS = [3, 6, 12];
 const ADVANCE_MONTHS_MIN = 1;
 const ADVANCE_MONTHS_MAX = 36;
+
+export type OverdueMonth = {
+  month: string;
+  dueAmount: number;
+  paidAmount: number;
+  gap: number;
+};
 
 export function RecordTenantRentPaymentDialog({
   propertyId,
@@ -39,6 +50,7 @@ export function RecordTenantRentPaymentDialog({
   currentDownpaymentBalance,
   serviceChargeType = null,
   serviceChargeValue = null,
+  overdueMonths = [],
   returnTo,
   iconOnly = false,
   variant = "button",
@@ -50,6 +62,10 @@ export function RecordTenantRentPaymentDialog({
   currentDownpaymentBalance: number;
   serviceChargeType?: "FLAT" | "PERCENTAGE" | null;
   serviceChargeValue?: number | null;
+  // Every month this lease still owes something for, oldest first — real
+  // RentPayment rows AND months nobody ever recorded (see rent-ledger.ts).
+  // Powers the "Settle Overdue" tab's breakdown and its oldest-first payoff.
+  overdueMonths?: OverdueMonth[];
   returnTo?: string;
   // Table rows need the button to just be an icon (hover reveals the label
   // via the native `title` tooltip) so the actions column doesn't force the
@@ -70,6 +86,8 @@ export function RecordTenantRentPaymentDialog({
   const [amount, setAmount] = useState(String(monthlyRentAmount || ""));
   const [startMonth, setStartMonth] = useState(new Date().toISOString().slice(0, 7));
   const [monthsCount, setMonthsCount] = useState("3");
+  const totalOverdueAmount = overdueMonths.reduce((sum, m) => sum + m.gap, 0);
+  const [overdueAmount, setOverdueAmount] = useState(String(totalOverdueAmount || ""));
   const todayValue = new Date().toISOString().slice(0, 10);
   const serviceChargeAmount = computeServiceChargeAmount(monthlyRentAmount, serviceChargeType, serviceChargeValue);
   const advanceTotal = (monthlyRentAmount + serviceChargeAmount) * (Number(monthsCount) || 0);
@@ -118,7 +136,11 @@ export function RecordTenantRentPaymentDialog({
         <form
           action={(formData: FormData) =>
             startTransition(() =>
-              mode === "advance" ? recordAdvanceRentPayment(formData) : recordTenantRentPayment(formData)
+              mode === "advance"
+                ? recordAdvanceRentPayment(formData)
+                : mode === "overdue"
+                  ? recordOverdueRentPayment(formData)
+                  : recordTenantRentPayment(formData)
             )
           }
           className="flex flex-col gap-3"
@@ -131,10 +153,15 @@ export function RecordTenantRentPaymentDialog({
 
           <FormField label={t("paymentMode")} htmlFor="rentPaymentModeTabs">
             <Tabs value={mode} onValueChange={(v) => handleModeChange(v as Mode)}>
-              <TabsList className="h-8 w-full">
+              <TabsList className="h-8 w-full flex-wrap">
                 <TabsTrigger value="cash" className="flex-1 text-xs">
                   {t("cashPayment")}
                 </TabsTrigger>
+                {overdueMonths.length > 0 ? (
+                  <TabsTrigger value="overdue" className="flex-1 text-xs">
+                    {t("settleOverdue")}
+                  </TabsTrigger>
+                ) : null}
                 <TabsTrigger value="advance" className="flex-1 text-xs">
                   {t("advanceRentPayment")}
                 </TabsTrigger>
@@ -149,6 +176,25 @@ export function RecordTenantRentPaymentDialog({
             <p className="text-xs text-muted-foreground">
               {t("availableDownpaymentBalance")}: {formatTaka(currentDownpaymentBalance)}
             </p>
+          ) : null}
+
+          {mode === "overdue" ? (
+            <div className="flex flex-col gap-2">
+              <p className="text-xs text-muted-foreground">
+                {t("overdueMonthsHint", { count: overdueMonths.length, total: formatTaka(totalOverdueAmount) })}
+              </p>
+              <ul className="flex max-h-32 flex-col gap-1 overflow-y-auto rounded-lg border p-2">
+                {overdueMonths.map((m) => (
+                  <li key={m.month} className="flex items-center justify-between text-xs">
+                    <span className="font-mono text-muted-foreground">{formatDate(new Date(`${m.month}-01`))}</span>
+                    <span className="font-mono font-medium tabular-nums text-destructive">
+                      {formatTaka(m.gap)}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+              <p className="text-xs text-muted-foreground">{t("overdueOldestFirstHint")}</p>
+            </div>
           ) : null}
 
           {mode === "advance" ? (
@@ -197,6 +243,20 @@ export function RecordTenantRentPaymentDialog({
                 {t("advanceTotalHint", { total: formatTaka(advanceTotal) })}
               </p>
             </>
+          ) : mode === "overdue" ? (
+            <FormField label={t("amount")} htmlFor="rentOverdueAmount" required>
+              <Input
+                id="rentOverdueAmount"
+                name="amount"
+                type="number"
+                step="any"
+                min={0}
+                max={totalOverdueAmount}
+                required
+                value={overdueAmount}
+                onChange={(e) => setOverdueAmount(e.target.value)}
+              />
+            </FormField>
           ) : (
             <FormField label={t("amount")} htmlFor="rentPaymentAmount" required>
               <Input

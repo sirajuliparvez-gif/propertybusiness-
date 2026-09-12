@@ -6,13 +6,15 @@ function monthKey(d: Date) {
 
 // Same classification as transactions-data.ts, split one level further here —
 // owner rent and payroll each get their own waterfall line (mirroring how
-// prominently this app already treats them elsewhere), while utility/
-// maintenance/other stay merged into one "other expense" bucket, matching
+// prominently this app already treats them elsewhere), and utility now gets
+// its own line too — a company-absorbed utility bill (see payUtilityBill's
+// company-covers-the-shortfall branch) is a real, visible cost, not a
+// generic "other" one, so a manager can actually see how much unpaid/skipped
+// utility bills have cost them instead of it hiding inside "অন্যান্য".
+// Maintenance/other stay merged into that leftover bucket, matching
 // properties-data.ts's own NON_CORE_EXPENSE_TYPES grouping. Guest-stay
 // revenue and service charge both count as income alongside tenant rent —
-// all real operating revenue. UTILITY_EXPENSE only ever gets created for a
-// company-paid bill (see payUtilityBill's paidByCompany branch), so it's a
-// real cost here too.
+// all real operating revenue.
 const INCOME_TYPES = [
   "RENT_RECEIVED_FROM_TENANT",
   "GUEST_STAY_PAYMENT_RECEIVED",
@@ -20,6 +22,7 @@ const INCOME_TYPES = [
 ] as const;
 const OWNER_RENT_TYPE = "RENT_PAID_TO_OWNER";
 const PAYROLL_TYPE = "PAYROLL_EXPENSE";
+const UTILITY_EXPENSE_TYPE = "UTILITY_EXPENSE";
 const OTHER_EXPENSE_TYPES = ["UTILITY_EXPENSE", "MAINTENANCE_EXPENSE", "OTHER"] as const;
 
 const MONTHS_BACK = 6;
@@ -35,16 +38,17 @@ type Bucket = {
   income: number;
   ownerRent: number;
   payroll: number;
+  utility: number;
   maintenance: number;
   other: number;
 };
 
 function emptyBucket(): Bucket {
-  return { income: 0, ownerRent: 0, payroll: 0, maintenance: 0, other: 0 };
+  return { income: 0, ownerRent: 0, payroll: 0, utility: 0, maintenance: 0, other: 0 };
 }
 
 function deriveMonth(b: Bucket) {
-  const otherExpense = b.maintenance + b.other;
+  const otherExpense = b.utility + b.maintenance + b.other;
   const grossProfit = b.income - b.ownerRent;
   const netProfit = grossProfit - b.payroll - otherExpense;
   const margin = b.income > 0 ? Math.round((netProfit / b.income) * 1000) / 10 : 0;
@@ -95,7 +99,8 @@ export async function getReportsData() {
     else if (t.type === OWNER_RENT_TYPE) bucket.ownerRent += amount;
     else if (t.type === PAYROLL_TYPE) bucket.payroll += amount;
     else if ((OTHER_EXPENSE_TYPES as readonly string[]).includes(t.type)) {
-      if (t.type === "MAINTENANCE_EXPENSE") bucket.maintenance += amount;
+      if (t.type === UTILITY_EXPENSE_TYPE) bucket.utility += amount;
+      else if (t.type === "MAINTENANCE_EXPENSE") bucket.maintenance += amount;
       else bucket.other += amount;
     } else {
       continue; // pass-through types (downpayment/utility reimbursement) never enter the P&L
@@ -109,6 +114,7 @@ export async function getReportsData() {
     if ((INCOME_TYPES as readonly string[]).includes(t.type)) pBucket.income += amount;
     else if (t.type === OWNER_RENT_TYPE) pBucket.ownerRent += amount;
     else if (t.type === PAYROLL_TYPE) pBucket.payroll += amount;
+    else if (t.type === UTILITY_EXPENSE_TYPE) pBucket.utility += amount;
     else if (t.type === "MAINTENANCE_EXPENSE") pBucket.maintenance += amount;
     else if ((OTHER_EXPENSE_TYPES as readonly string[]).includes(t.type)) pBucket.other += amount;
   }

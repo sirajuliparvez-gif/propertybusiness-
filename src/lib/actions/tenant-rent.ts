@@ -5,6 +5,7 @@ import { getLocale } from "next-intl/server";
 import { prisma } from "@/lib/prisma";
 import { redirect } from "@/i18n/navigation";
 import { computeServiceChargeAmount } from "@/lib/service-charge";
+import { buildRentLedger, overdueEntries, totalOverdue } from "@/lib/rent-ledger";
 
 function str(formData: FormData, key: string) {
   const v = formData.get(key);
@@ -131,6 +132,111 @@ export async function recordTenantRentPayment(formData: FormData) {
 
   // Reachable from both the per-property page and the cross-property global
   // Tenants page — each redirects back to wherever it was submitted from.
+  const returnTo = str(formData, "returnTo") ?? `/properties/${propertyId}`;
+  revalidatePath(returnTo);
+  redirect({ href: returnTo, locale });
+}
+
+// Settles a tenant's back rent in one go — a lump sum applied oldest-month
+// first across however many months are actually overdue (real RentPayment
+// rows AND months nobody ever recorded, per rent-ledger.ts), same
+// "one Transaction per covered month" pattern recordAdvanceRentPayment
+// already uses for the opposite (future) direction. A tenant catching up on
+// 3 months doesn't have to be paid off in 3 separate manual entries anymore
+// — one amount here fills the oldest debt first, then the next, etc.,
+// including a genuine partial on whichever month the money runs out on.
+export async function recordOverdueRentPayment(formData: FormData) {
+  const locale = await getLocale();
+  const propertyId = formData.get("propertyId") as string;
+  const tenantLeaseId = formData.get("tenantLeaseId") as string;
+  if (!propertyId || !tenantLeaseId) throw new Error("Missing property or lease id");
+
+  const dateStr = str(formData, "date");
+  const amountStr = str(formData, "amount");
+  if (!dateStr || !amountStr) throw new Error("Missing required payment fields");
+  let remaining = Number(amountStr);
+  if (!(remaining > 0)) throw new Error("Amount must be greater than zero");
+  const paidDate = new Date(dateStr);
+
+  const methodRaw = formData.get("method");
+  const method =
+    methodRaw === "CASH" ||
+    methodRaw === "BKASH" ||
+    methodRaw === "NAGAD" ||
+    methodRaw === "BANK" ||
+    methodRaw === "OTHER"
+      ? methodRaw
+      : null;
+
+  const lease = await prisma.tenantLease.findUnique({ where: { id: tenantLeaseId } });
+  if (!lease) throw new Error("Tenant lease not found");
+
+  const existingPayments = await prisma.rentPayment.findMany({
+    where: { tenantLeaseId },
+    select: { id: true, month: true, dueDate: true, dueAmount: true, paidAmount: true, status: true, paidAt: true },
+  });
+  const asOf = lease.status === "ACTIVE" ? new Date() : (lease.movedOutAt ?? lease.endDate ?? new Date());
+  const ledger = buildRentLedger(
+    lease.startDate,
+    Number(lease.monthlyRentAmount),
+    existingPayments.map((rp) => ({
+      id: rp.id,
+      month: rp.month,
+      dueDate: rp.dueDate,
+      dueAmount: Number(rp.dueAmount),
+      paidAmount: Number(rp.paidAmount),
+      status: rp.status,
+      paidAt: rp.paidAt,
+    })),
+    asOf
+  );
+  const overdue = overdueEntries(ledger); // oldest month first
+  if (overdue.length === 0) throw new Error("No overdue rent for this tenant");
+  if (remaining > totalOverdue(ledger)) {
+    throw new Error("Amount exceeds total overdue rent");
+  }
+
+  await prisma.$transaction(async (tx) => {
+    for (const entry of overdue) {
+      if (remaining <= 0) break;
+      const payThisMonth = Math.min(remaining, entry.gap);
+      const newPaidAmount = entry.paidAmount + payThisMonth;
+      const newStatus = newPaidAmount >= entry.dueAmount ? "PAID" : "PARTIAL";
+
+      const rentPayment = entry.rentPaymentId
+        ? await tx.rentPayment.update({
+            where: { id: entry.rentPaymentId },
+            data: { paidAmount: newPaidAmount, status: newStatus, paidAt: paidDate },
+          })
+        : await tx.rentPayment.create({
+            data: {
+              tenantLeaseId,
+              month: entry.month,
+              dueDate: entry.dueDate,
+              dueAmount: entry.dueAmount,
+              paidAmount: newPaidAmount,
+              status: newStatus,
+              paidAt: paidDate,
+            },
+          });
+
+      await tx.transaction.create({
+        data: {
+          propertyId,
+          type: "RENT_RECEIVED_FROM_TENANT",
+          direction: "INCOMING",
+          amount: payThisMonth,
+          method,
+          tenantLeaseId,
+          rentPaymentId: rentPayment.id,
+          date: paidDate,
+        },
+      });
+
+      remaining -= payThisMonth;
+    }
+  });
+
   const returnTo = str(formData, "returnTo") ?? `/properties/${propertyId}`;
   revalidatePath(returnTo);
   redirect({ href: returnTo, locale });

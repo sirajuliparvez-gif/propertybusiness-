@@ -244,7 +244,14 @@ export function RentCollectionTable({ payments }: { payments: RentCollectionData
                     )}
                   </TableCell>
                   <TableCell>
-                    <StatusPill status={p.rentStatus} labels={rentStatusLabels} />
+                    <div className="flex flex-col gap-0.5">
+                      <StatusPill status={p.rentStatus} labels={rentStatusLabels} />
+                      {p.overdueMonths.length > 1 ? (
+                        <span className="text-xs font-medium text-destructive">
+                          {t("monthsOverdueCount", { count: p.overdueMonths.length })}
+                        </span>
+                      ) : null}
+                    </div>
                   </TableCell>
                   <TableCell className="text-right">
                     <div className="flex justify-end">
@@ -255,6 +262,7 @@ export function RentCollectionTable({ payments }: { payments: RentCollectionData
                         currentDownpaymentBalance={p.currentDownpaymentBalance}
                         serviceChargeType={p.serviceChargeType}
                         serviceChargeValue={p.serviceChargeValue}
+                        overdueMonths={p.overdueMonths}
                         returnTo="/rent"
                         iconOnly
                       />

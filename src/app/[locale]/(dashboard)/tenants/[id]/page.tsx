@@ -123,6 +123,7 @@ export default async function TenantProfilePage({
                 currentDownpaymentBalance={tenant.currentDownpaymentBalance}
                 serviceChargeType={tenant.serviceChargeType}
                 serviceChargeValue={tenant.serviceChargeValue}
+                overdueMonths={tenant.overdueMonths}
                 returnTo={`/tenants/${tenant.id}`}
               />
               <VacateTenantDialog
@@ -406,13 +407,18 @@ export default async function TenantProfilePage({
             <Card className="overflow-hidden p-0 md:hidden">
               <ul className="divide-y">
                 {tenant.payments.map((p) => (
-                  <li key={p.id} className="flex items-center gap-3 px-4 py-3">
+                  <li
+                    key={p.id}
+                    className={`flex items-center gap-3 px-4 py-3 ${p.isVirtual ? "bg-destructive/5" : ""}`}
+                  >
                     <div className="min-w-0 flex-1">
                       <p className="font-mono text-sm font-medium">{p.month}</p>
                       <p className="truncate text-xs text-muted-foreground">
-                        {p.status === "ADJUSTED_FROM_DOWNPAYMENT"
-                          ? t("adjustFromDownpayment")
-                          : paymentMethodLabel(t, p.method)}
+                        {p.isVirtual
+                          ? t("noRecordYet")
+                          : p.status === "ADJUSTED_FROM_DOWNPAYMENT"
+                            ? t("adjustFromDownpayment")
+                            : paymentMethodLabel(t, p.method)}
                         {p.paidAt ? ` · ${formatDate(p.paidAt)}` : ""}
                       </p>
                     </div>
@@ -439,13 +445,15 @@ export default async function TenantProfilePage({
               </TableHeader>
               <TableBody>
                 {tenant.payments.map((p) => (
-                  <TableRow key={p.id}>
+                  <TableRow key={p.id} className={p.isVirtual ? "bg-destructive/5" : undefined}>
                     <TableCell className="font-mono">{p.month}</TableCell>
                     <TableCell className="text-right font-mono tabular-nums">
                       {formatTaka(p.paidAmount)}
                     </TableCell>
                     <TableCell className="text-muted-foreground">
-                      {p.status === "ADJUSTED_FROM_DOWNPAYMENT" ? (
+                      {p.isVirtual ? (
+                        <span className="text-xs italic">{t("noRecordYet")}</span>
+                      ) : p.status === "ADJUSTED_FROM_DOWNPAYMENT" ? (
                         <span className="text-xs font-medium text-primary">{t("adjustFromDownpayment")}</span>
                       ) : (
                         paymentMethodLabel(t, p.method)

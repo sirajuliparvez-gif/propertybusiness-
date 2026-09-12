@@ -1,4 +1,20 @@
 import { prisma } from "@/lib/prisma";
+import { buildRentLedger, overdueEntries, totalOverdue } from "@/lib/rent-ledger";
+
+// PayrollStatus has PENDING where RentPaymentStatus has UNPAID (same
+// meaning) — normalize so buildRentLedger (written against the rent
+// vocabulary) can be reused for salary as-is, and back again for anything
+// read out of the ledger and shown/stored as a genuine PayrollStatus.
+function toLedgerStatus(status: "PAID" | "PENDING" | "PARTIAL") {
+  return status === "PENDING" ? "UNPAID" : status;
+}
+export function fromLedgerStatus(
+  status: "PAID" | "UNPAID" | "PARTIAL" | "ADJUSTED_FROM_DOWNPAYMENT"
+): "PAID" | "PENDING" | "PARTIAL" {
+  if (status === "UNPAID") return "PENDING";
+  if (status === "ADJUSTED_FROM_DOWNPAYMENT") return "PAID";
+  return status;
+}
 
 function monthRange(now: Date) {
   return {
@@ -26,12 +42,19 @@ export async function getAllStaffData() {
       orderBy: { joinedAt: "desc" },
       include: {
         property: { select: { id: true, name: true } },
+        // Full history, not just the latest month — overdueAmount below
+        // needs every row to sum multi-month arrears correctly (a salary
+        // nobody ever recorded is still owed, see rent-ledger.ts).
         payrollRecords: {
           orderBy: { dueDate: "desc" },
-          take: 1,
           select: {
+            id: true,
+            month: true,
+            dueDate: true,
+            dueAmount: true,
             status: true,
             amountPaid: true,
+            paidAt: true,
             transactions: { orderBy: { date: "desc" }, take: 1, select: { method: true } },
           },
         },
@@ -49,9 +72,25 @@ export async function getAllStaffData() {
   ]);
 
   const staff = employees.map((e) => {
-    const latestPayroll = e.payrollRecords[0];
-    const isOverdue = e.status === "ACTIVE" && latestPayroll?.status === "PENDING";
-    const overdueAmount = isOverdue ? Number(latestPayroll.amountPaid) : 0;
+    const asOf = e.status === "ACTIVE" ? new Date() : (e.terminatedAt ?? new Date());
+    const ledger = buildRentLedger(
+      e.joinedAt,
+      Number(e.salaryAmount),
+      e.payrollRecords.map((pr) => ({
+        id: pr.id,
+        month: pr.month,
+        dueDate: pr.dueDate,
+        dueAmount: pr.dueAmount != null ? Number(pr.dueAmount) : Number(pr.amountPaid),
+        paidAmount: Number(pr.amountPaid),
+        status: toLedgerStatus(pr.status),
+        paidAt: pr.paidAt,
+        method: pr.transactions[0]?.method ?? null,
+      })),
+      asOf
+    );
+    const overdue = overdueEntries(ledger);
+    const overdueAmount = e.status === "ACTIVE" ? totalOverdue(ledger) : 0;
+    const currentEntry = ledger[ledger.length - 1] ?? null;
     return {
       id: e.id,
       name: e.name,
@@ -63,9 +102,10 @@ export async function getAllStaffData() {
       terminatedAt: e.terminatedAt,
       salaryAmount: Number(e.salaryAmount),
       status: e.status,
-      payrollStatus: e.status === "ACTIVE" ? (latestPayroll?.status ?? null) : null,
-      paymentMethod: latestPayroll?.transactions[0]?.method ?? null,
+      payrollStatus: e.status === "ACTIVE" ? (currentEntry ? fromLedgerStatus(currentEntry.status) : null) : null,
+      paymentMethod: currentEntry?.method ?? null,
       overdueAmount,
+      overdueMonths: e.status === "ACTIVE" ? overdue : [],
     };
   });
 
@@ -90,11 +130,10 @@ export async function getAllStaffData() {
 
 export type AllStaffData = Awaited<ReturnType<typeof getAllStaffData>>;
 
-// Full profile for a single employee — mirrors getTenantProfile's shape, minus
-// the concepts that don't apply here: payroll has no per-month "due" record
-// generated proactively (unlike RentPayment), so there's no honest totalDue/
-// remaining to show — only what's actually been paid, same limitation the
-// existing per-property staff table already lives with.
+// Full profile for a single employee — mirrors getTenantProfile's shape,
+// including the same ledger-based totalDue/remaining (every month from
+// joinedAt through now, synthesizing an unpaid one for any month nobody
+// ever recorded — see rent-ledger.ts).
 export async function getEmployeeProfile(employeeId: string) {
   const [employee, idOrder] = await Promise.all([
     prisma.employee.findUnique({
@@ -117,17 +156,42 @@ export async function getEmployeeProfile(employeeId: string) {
 
   const displayId = `S-${1000 + idOrder.findIndex((e) => e.id === employee.id) + 1}`;
 
-  const payments = employee.payrollRecords.map((pr) => ({
-    id: pr.id,
-    month: pr.month,
-    dueDate: pr.dueDate,
-    amountPaid: Number(pr.amountPaid),
-    status: pr.status,
-    paidAt: pr.paidAt,
-    method: pr.transactions[0]?.method ?? null,
+  // Terminated staff stop owing salary the day they left — build the ledger
+  // only through then, not all the way to today.
+  const ledgerAsOf =
+    employee.status === "ACTIVE" ? new Date() : (employee.terminatedAt ?? new Date());
+  const ledger = buildRentLedger(
+    employee.joinedAt,
+    Number(employee.salaryAmount),
+    employee.payrollRecords.map((pr) => ({
+      id: pr.id,
+      month: pr.month,
+      dueDate: pr.dueDate,
+      dueAmount: pr.dueAmount != null ? Number(pr.dueAmount) : Number(pr.amountPaid),
+      paidAmount: Number(pr.amountPaid),
+      status: toLedgerStatus(pr.status),
+      paidAt: pr.paidAt,
+      method: pr.transactions[0]?.method ?? null,
+    })),
+    ledgerAsOf
+  );
+  // Newest first, matching the payment-history table's existing convention.
+  const payments = [...ledger].reverse().map((entry) => ({
+    id: entry.rentPaymentId ?? `virtual-${entry.month}`,
+    month: entry.month,
+    dueDate: entry.dueDate,
+    amountPaid: entry.paidAmount,
+    dueAmount: entry.dueAmount,
+    status: fromLedgerStatus(entry.status),
+    paidAt: entry.paidAt,
+    method: entry.method ?? null,
+    isVirtual: entry.rentPaymentId === null,
   }));
+  const overdueMonths = overdueEntries(ledger);
 
-  const totalPaid = payments.reduce((sum, p) => sum + p.amountPaid, 0);
+  const totalDue = ledger.reduce((sum, e) => sum + e.dueAmount, 0);
+  const totalPaid = ledger.reduce((sum, e) => sum + e.paidAmount, 0);
+  const remaining = totalOverdue(ledger);
 
   // Recent-6-months window, same rationale as the tenant profile: recent
   // payment habits matter more than the full history for these stats.
@@ -177,12 +241,20 @@ export async function getEmployeeProfile(employeeId: string) {
     terminatedAt: employee.terminatedAt,
     durationMonths,
     payments,
+    overdueMonths,
     trackedMonths: tracked.length,
+    totalDue,
     totalPaid,
+    remaining,
     onTimeRate,
     avgPaymentDay,
     preferredMethod,
-    payrollStatus: employee.status === "ACTIVE" ? (payments[0]?.status ?? null) : null,
+    payrollStatus:
+      employee.status === "ACTIVE"
+        ? ledger.length > 0
+          ? fromLedgerStatus(ledger[ledger.length - 1].status)
+          : null
+        : null,
   };
 }
 

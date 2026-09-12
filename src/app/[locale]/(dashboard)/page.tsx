@@ -45,6 +45,7 @@ async function getDashboardData() {
     activeTenantLeases,
     incomeAgg,
     expenseAgg,
+    utilityExpenseAgg,
     recentTransactions,
     actionRequired,
     monthlyFinancials,
@@ -64,6 +65,13 @@ async function getDashboardData() {
     prisma.transaction.aggregate({
       _sum: { amount: true },
       where: { direction: "OUTGOING", date: { gte: monthStart, lt: monthEnd } },
+    }),
+    // Broken out separately so the expense stat tile can show how much of
+    // this month's outgoing money was a company-absorbed utility bill
+    // (penalty/loss) instead of that being invisible inside one lump sum.
+    prisma.transaction.aggregate({
+      _sum: { amount: true },
+      where: { type: "UTILITY_EXPENSE", date: { gte: monthStart, lt: monthEnd } },
     }),
     prisma.transaction.findMany({
       take: 6,
@@ -85,6 +93,7 @@ async function getDashboardData() {
 
   const income = incomeAgg._sum.amount ? Number(incomeAgg._sum.amount) : 0;
   const expense = expenseAgg._sum.amount ? Number(expenseAgg._sum.amount) : 0;
+  const utilityExpense = utilityExpenseAgg._sum.amount ? Number(utilityExpenseAgg._sum.amount) : 0;
 
   return {
     activeProperties,
@@ -94,6 +103,7 @@ async function getDashboardData() {
     occupancyRate: occupancy.occupancyRate,
     income,
     expense,
+    utilityExpense,
     net: income - expense,
     recentTransactions,
     actionRequired,
@@ -159,6 +169,7 @@ export default async function DashboardPage() {
           value={formatTaka(data.expense)}
           icon={TrendingDown}
           tone="destructive"
+          hint={data.utilityExpense > 0 ? `${t("utilityExpenseHint")}: ${formatTaka(data.utilityExpense)}` : undefined}
         />
         <StatTile
           label={t("totalOutstanding")}

@@ -52,6 +52,7 @@ enum EmployeeStatus {
 enum PayrollStatus {
   PAID
   PENDING
+  PARTIAL
 }
 
 enum UtilityType {
@@ -62,6 +63,7 @@ enum UtilityType {
 }
 
 enum BillStatus {
+  PARTIAL
   PAID
   UNPAID
 }
@@ -221,6 +223,9 @@ model Property {
   employees            Employee[]
   utilityBills         UtilityBill[]
   transactions         Transaction[]
+
+  @@index([ownerId])
+  @@index([deletedAt])
 }
 
 // Contract between the company and the PropertyOwner for one Property.
@@ -251,6 +256,8 @@ model OwnerLeaseAgreement {
 
   documents         Document[]
   ownerRentPayments OwnerRentPayment[]
+
+  @@index([propertyId, status])
 }
 
 // Monthly rent-to-owner ledger — mirrors RentPayment (tenant) / PayrollRecord
@@ -287,6 +294,7 @@ model OwnerRentPayment {
   // whole-property (null-unit) case is de-duplicated in application code via
   // an explicit findFirst-then-update, not via this index.
   @@unique([ownerLeaseAgreementId, month, unitId])
+  @@index([unitId])
 }
 
 // A category of unit within a Property — e.g. "2000 sqft flats" vs "800 sqft flats".
@@ -325,6 +333,8 @@ model UnitType {
   importBatch   ImportBatch? @relation(fields: [importBatchId], references: [id])
 
   units Unit[]
+
+  @@index([propertyId])
 }
 
 // A physical unit/room. Can be used for a long-term TenantLease (monthly),
@@ -363,6 +373,8 @@ model Unit {
   utilityBills      UtilityBill[]
   transactions      Transaction[]
   ownerRentPayments OwnerRentPayment[]
+
+  @@index([unitTypeId])
 }
 
 model Tenant {
@@ -416,6 +428,10 @@ model TenantLease {
   downpaymentAdjustments DownpaymentAdjustment[]
   transactions           Transaction[]
   utilityBills           UtilityBill[]
+
+  @@index([unitId])
+  @@index([tenantId])
+  @@index([status])
 }
 
 // Company policy: rent (and utility bills) are officially due on the 10th of
@@ -440,6 +456,7 @@ model RentPayment {
   transactions           Transaction[]
 
   @@unique([tenantLeaseId, month])
+  @@index([status, dueDate])
 }
 
 // A short (nightly) stay booking — the hotel-mode counterpart to TenantLease.
@@ -471,6 +488,10 @@ model GuestStay {
 
   documents    Document[]
   transactions Transaction[]
+
+  @@index([unitId])
+  @@index([checkInDate])
+  @@index([status])
 }
 
 // Ledger of downpayment used to cover unpaid/partial rent — never mutate
@@ -484,6 +505,9 @@ model DownpaymentAdjustment {
   amountAdjusted Decimal
   reason         String?
   createdAt      DateTime    @default(now())
+
+  @@index([tenantLeaseId])
+  @@index([rentPaymentId])
 }
 
 // Property maintenance staff (watchman, cleaner, etc) OR company-level staff
@@ -508,6 +532,9 @@ model Employee {
   importBatch   ImportBatch?   @relation(fields: [importBatchId], references: [id])
 
   payrollRecords PayrollRecord[]
+
+  @@index([propertyId])
+  @@index([status])
 }
 
 // Company policy: payroll is officially due on the 15th of each month.
@@ -517,6 +544,12 @@ model PayrollRecord {
   employee      Employee      @relation(fields: [employeeId], references: [id])
   month         String // YYYY-MM
   dueDate       DateTime
+  // Snapshot of the employee's salaryAmount at the time this month's record
+  // was created — same reasoning as RentPayment.dueAmount, so a later raise
+  // doesn't retroactively change what an old month owed. Nullable only for
+  // rows that predate this field (backfilled to amountPaid on migration, the
+  // best available guess for pre-existing "always PAID" rows).
+  dueAmount     Decimal?
   amountPaid    Decimal
   status        PayrollStatus @default(PENDING)
   paidAt        DateTime?
@@ -527,6 +560,7 @@ model PayrollRecord {
   transactions Transaction[]
 
   @@unique([employeeId, month])
+  @@index([status, dueDate])
 }
 
 // Company policy: same due date as rent — the 10th of each month.
@@ -549,6 +583,13 @@ model UtilityBill {
   month         String // YYYY-MM
   dueDate       DateTime
   amount        Decimal
+  // How much of `amount` has actually been settled so far — split across
+  // however many payUtilityBill calls it took, and further split at each
+  // call between the tenant's own reimbursement and whatever the company
+  // absorbed as its own cost (e.g. a tenant paying 990 of a 1000 bill, the
+  // company eating the remaining 10 as a penalty/write-off). Mirrors
+  // RentPayment.paidAmount — see rent-ledger.ts, reused here too.
+  paidAmount    Decimal      @default(0)
   status        BillStatus   @default(UNPAID)
   // Who actually settles this bill, decided per bill at add-time (defaults
   // true when type is WATER, per company policy, but editable either way —
@@ -570,6 +611,11 @@ model UtilityBill {
 
   documents    Document[]
   transactions Transaction[]
+
+  @@index([propertyId])
+  @@index([unitId])
+  @@index([tenantLeaseId])
+  @@index([status, dueDate])
 }
 
 // Central cash-flow ledger — every money movement in the business gets a row here.
@@ -619,6 +665,17 @@ model Transaction {
   // importBatchId instead, not its own.
   importBatchId      String?
   importBatch        ImportBatch?         @relation(fields: [importBatchId], references: [id])
+
+  // This is the busiest table in the app — every dashboard/reports/property
+  // page filters and sorts it by date range, often combined with propertyId,
+  // type, or direction, with no index beyond the primary key before this.
+  // That meant a full sequential scan on every one of those queries, getting
+  // slower as the table grows — the main cause behind pages loading slowly.
+  @@index([date])
+  @@index([propertyId, date])
+  @@index([type, date])
+  @@index([direction, date])
+  @@index([tenantLeaseId])
 }
 
 // Polymorphic file reference (agreement copies, utility bill images, tenant ID docs).
@@ -651,6 +708,12 @@ model Document {
 
   guestStayId String?
   guestStay   GuestStay? @relation(fields: [guestStayId], references: [id])
+
+  @@index([tenantLeaseId])
+  @@index([tenantId])
+  @@index([ownerLeaseAgreementId])
+  @@index([utilityBillId])
+  @@index([guestStayId])
 }
 
 // Telegram chat IDs that should receive financial/due-date notifications.

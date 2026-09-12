@@ -28,7 +28,8 @@ export default async function EmployeeProfilePage({
 
   const isTerminated = employee.status === "TERMINATED";
   const isInactive = employee.status === "INACTIVE";
-  const payrollStatusLabels = { PAID: t("paid"), PENDING: t("pending") };
+  const payrollStatusLabels = { PAID: t("paid"), PENDING: t("overdueStatus"), PARTIAL: t("pending") };
+  const progressPct = employee.totalDue > 0 ? Math.min(100, Math.round((employee.totalPaid / employee.totalDue) * 100)) : 0;
 
   return (
     <div className="flex min-w-0 flex-1 flex-col gap-4">
@@ -103,6 +104,7 @@ export default async function EmployeeProfilePage({
                 propertyId={employee.propertyId}
                 employeeId={employee.id}
                 defaultAmount={employee.salaryAmount}
+                overdueMonths={employee.overdueMonths}
                 returnTo={`/employees/${employee.id}`}
               />
               <EmployeeActions
@@ -198,16 +200,27 @@ export default async function EmployeeProfilePage({
             <CardTitle className="text-base">{t("payrollSummary")}</CardTitle>
           </CardHeader>
           <CardContent className="flex flex-col gap-4">
-            <div className="grid grid-cols-2 gap-3 text-sm">
+            <div className="h-2 w-full overflow-hidden rounded-full bg-muted">
+              <div className="h-full rounded-full bg-success" style={{ width: `${progressPct}%` }} />
+            </div>
+            <div className="grid grid-cols-3 gap-3 text-sm">
               <div>
-                <p className="text-xs text-muted-foreground">{t("totalPaid")}</p>
+                <p className="text-xs text-muted-foreground">{t("totalDueLabel")}</p>
+                <p className="font-mono font-semibold tabular-nums">{formatTaka(employee.totalDue)}</p>
+              </div>
+              <div>
+                <p className="text-xs text-muted-foreground">{t("paid")}</p>
                 <p className="font-mono font-semibold tabular-nums text-success">
                   {formatTaka(employee.totalPaid)}
                 </p>
               </div>
               <div>
-                <p className="text-xs text-muted-foreground">{t("entries")}</p>
-                <p className="font-mono font-semibold tabular-nums">{employee.payments.length}</p>
+                <p className="text-xs text-muted-foreground">{t("remaining")}</p>
+                <p
+                  className={`font-mono font-semibold tabular-nums ${employee.remaining > 0 ? "text-destructive" : ""}`}
+                >
+                  {formatTaka(employee.remaining)}
+                </p>
               </div>
             </div>
             <div className="flex items-center justify-between border-t pt-3 text-sm">
@@ -238,11 +251,14 @@ export default async function EmployeeProfilePage({
             <Card className="overflow-hidden p-0 md:hidden">
               <ul className="divide-y">
                 {employee.payments.map((p) => (
-                  <li key={p.id} className="flex items-center gap-3 px-4 py-3">
+                  <li
+                    key={p.id}
+                    className={`flex items-center gap-3 px-4 py-3 ${p.isVirtual ? "bg-destructive/5" : ""}`}
+                  >
                     <div className="min-w-0 flex-1">
                       <p className="font-mono text-sm font-medium">{p.month}</p>
                       <p className="truncate text-xs text-muted-foreground">
-                        {paymentMethodLabel(t, p.method)}
+                        {p.isVirtual ? t("noRecordYet") : paymentMethodLabel(t, p.method)}
                         {p.paidAt ? ` · ${formatDate(p.paidAt)}` : ""}
                       </p>
                     </div>
@@ -269,13 +285,13 @@ export default async function EmployeeProfilePage({
               </TableHeader>
               <TableBody>
                 {employee.payments.map((p) => (
-                  <TableRow key={p.id}>
+                  <TableRow key={p.id} className={p.isVirtual ? "bg-destructive/5" : undefined}>
                     <TableCell className="font-mono">{p.month}</TableCell>
                     <TableCell className="text-right font-mono tabular-nums">
                       {formatTaka(p.amountPaid)}
                     </TableCell>
                     <TableCell className="text-muted-foreground">
-                      {paymentMethodLabel(t, p.method)}
+                      {p.isVirtual ? <span className="text-xs italic">{t("noRecordYet")}</span> : paymentMethodLabel(t, p.method)}
                     </TableCell>
                     <TableCell className="font-mono text-muted-foreground">
                       {p.paidAt ? formatDate(p.paidAt) : "—"}

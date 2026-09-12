@@ -15,6 +15,7 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   Select,
   SelectContent,
@@ -45,9 +46,15 @@ export type UtilityBillRow = {
   type: "GAS" | "ELECTRICITY" | "WATER" | "OTHER";
   dueDate: Date;
   amount: number;
-  status: "PAID" | "UNPAID";
+  paidAmount: number;
+  status: "PAID" | "UNPAID" | "PARTIAL";
   paidByCompany: boolean;
   paymentMethod: "CASH" | "BKASH" | "NAGAD" | "BANK" | "OTHER" | null;
+  // How this bill's paidAmount actually broke down once settled — 0/0 while
+  // still UNPAID. Lets the table show "tenant paid X, company covered Y"
+  // instead of a single ambiguous total.
+  collectedFromTenant: number;
+  companyAbsorbedAmount: number;
   unitLabel: string | null;
   propertyId: string;
   propertyName?: string;
@@ -67,6 +74,7 @@ export function PayUtilityBillButton({
   billId,
   propertyId,
   amount,
+  paidAmount = 0,
   paidByCompany,
   returnTo,
   iconOnly = false,
@@ -76,6 +84,7 @@ export function PayUtilityBillButton({
   billId: string;
   propertyId: string;
   amount: number;
+  paidAmount?: number;
   paidByCompany: boolean;
   returnTo: string;
   iconOnly?: boolean;
@@ -87,6 +96,11 @@ export function PayUtilityBillButton({
   const t = useTranslations("Properties");
   const [isPending, startTransition] = useTransition();
   const [method, setMethod] = useState("NONE");
+  const remaining = Math.max(0, amount - paidAmount);
+  const [companyCoversRest, setCompanyCoversRest] = useState(paidByCompany);
+  const [tenantAmount, setTenantAmount] = useState(String(paidByCompany ? 0 : remaining));
+  const tenantAmountNum = Math.min(Math.max(0, Number(tenantAmount) || 0), remaining);
+  const companyAmount = companyCoversRest ? remaining - tenantAmountNum : 0;
 
   return (
     <Dialog>
@@ -128,11 +142,43 @@ export function PayUtilityBillButton({
           <input type="hidden" name="propertyId" value={propertyId} />
           <input type="hidden" name="returnTo" value={returnTo} />
           <input type="hidden" name="method" value={method} />
+          <input type="hidden" name="tenantAmount" value={tenantAmountNum} />
+          <input type="hidden" name="companyCoversRest" value={companyCoversRest ? "true" : "false"} />
           <p className="text-sm text-muted-foreground">
-            {paidByCompany
-              ? t("confirmPayCompanyDesc", { amount: formatTaka(amount) })
-              : t("confirmPayDesc", { amount: formatTaka(amount) })}
+            {t("utilityRemainingDue", { amount: formatTaka(remaining) })}
           </p>
+          <FormField label={t("utilityCollectedFromTenant")} htmlFor="utilityTenantAmount">
+            <Input
+              id="utilityTenantAmount"
+              type="number"
+              step="any"
+              min={0}
+              max={remaining}
+              value={tenantAmount}
+              onChange={(e) => setTenantAmount(e.target.value)}
+            />
+          </FormField>
+          <label
+            htmlFor="utilityCompanyCoversRest"
+            className="flex items-center gap-2 rounded-lg border px-3 py-2 text-sm"
+          >
+            <Checkbox
+              id="utilityCompanyCoversRest"
+              checked={companyCoversRest}
+              onCheckedChange={(checked) => setCompanyCoversRest(checked === true)}
+            />
+            {t("companyCoversRestLabel")}
+          </label>
+          {companyAmount > 0 ? (
+            <p className="text-xs text-warning">
+              {t("companyAbsorbsHint", { amount: formatTaka(companyAmount) })}
+            </p>
+          ) : null}
+          {!companyCoversRest && tenantAmountNum < remaining ? (
+            <p className="text-xs text-muted-foreground">
+              {t("utilityStaysPartialHint", { amount: formatTaka(remaining - tenantAmountNum) })}
+            </p>
+          ) : null}
           <FormField label={t("paymentMethod")} htmlFor="payMethod">
             <Select
               value={method}
@@ -163,7 +209,7 @@ export function PayUtilityBillButton({
             <DialogClose render={<Button type="button" variant="outline" />}>
               {t("cancel")}
             </DialogClose>
-            <Button type="submit" disabled={isPending}>
+            <Button type="submit" disabled={isPending || (tenantAmountNum <= 0 && companyAmount <= 0)}>
               {isPending ? <Loader2 className="size-4 animate-spin" /> : null}
               {t("payBill")}
             </Button>
@@ -224,7 +270,7 @@ export function UtilityBillsTable({
   }, [byProperty, dateFrom, dateTo]);
 
   const filtered = useMemo(() => {
-    if (filter === "unpaid") return byPropertyAndDate.filter((b) => b.status === "UNPAID");
+    if (filter === "unpaid") return byPropertyAndDate.filter((b) => b.status !== "PAID");
     if (filter === "paid") return byPropertyAndDate.filter((b) => b.status === "PAID");
     return byPropertyAndDate;
   }, [byPropertyAndDate, filter]);
@@ -240,8 +286,8 @@ export function UtilityBillsTable({
   ];
 
   const totalUnpaid = byPropertyAndDate
-    .filter((b) => b.status === "UNPAID")
-    .reduce((sum, b) => sum + b.amount, 0);
+    .filter((b) => b.status !== "PAID")
+    .reduce((sum, b) => sum + Math.max(0, b.amount - b.paidAmount), 0);
   const leadingColSpan = showPropertyColumn ? 5 : 4;
 
   return (
@@ -366,23 +412,38 @@ export function UtilityBillsTable({
                 </TableCell>
                 <TableCell className="text-right font-mono tabular-nums">
                   {formatTaka(b.amount)}
+                  {b.status === "PARTIAL" ? (
+                    <p className="text-xs font-normal text-warning">
+                      {t("utilityPaidOfTotal", { paid: formatTaka(b.paidAmount) })}
+                    </p>
+                  ) : null}
+                  {b.companyAbsorbedAmount > 0 ? (
+                    <p className="text-xs font-normal text-muted-foreground">
+                      {t("companyAbsorbedNote", { amount: formatTaka(b.companyAbsorbedAmount) })}
+                    </p>
+                  ) : null}
                 </TableCell>
                 <TableCell>
                   <Badge
                     className={cn(
                       "border-transparent",
-                      b.status === "PAID" ? "bg-success/15 text-success" : "bg-warning/15 text-warning"
+                      b.status === "PAID"
+                        ? "bg-success/15 text-success"
+                        : b.status === "PARTIAL"
+                          ? "bg-warning/15 text-warning"
+                          : "bg-destructive/15 text-destructive"
                     )}
                   >
-                    {b.status === "PAID" ? t("paid") : t("billStatusUnpaid")}
+                    {b.status === "PAID" ? t("paid") : b.status === "PARTIAL" ? t("pending") : t("billStatusUnpaid")}
                   </Badge>
                 </TableCell>
                 <TableCell className="text-right">
-                  {b.status === "UNPAID" ? (
+                  {b.status !== "PAID" ? (
                     <PayUtilityBillButton
                       billId={b.id}
                       propertyId={b.propertyId}
                       amount={b.amount}
+                      paidAmount={b.paidAmount}
                       paidByCompany={b.paidByCompany}
                       returnTo={returnTo ?? (showPropertyColumn ? "/utility-bills" : `/properties/${b.propertyId}`)}
                       iconOnly={showPropertyColumn}

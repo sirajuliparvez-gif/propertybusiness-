@@ -40,6 +40,7 @@ function DeltaBadge({ pct, invert = false }: { pct: number; invert?: boolean }) 
 const CATEGORY_COLORS = {
   ownerRent: "oklch(0.55 0.18 240)",
   payroll: "oklch(0.5 0.18 285)",
+  utility: "oklch(0.7 0.18 25)",
   maintenance: "oklch(0.65 0.18 55)",
   other: "oklch(0.6 0.03 260)",
 } as const;
@@ -81,6 +82,7 @@ export function ReportsView({ months, propertyPLByMonth, defaultMonth }: Reports
     [
       { key: "ownerRent", label: t("transactionTypeRentPaidToOwner"), value: data.ownerRent },
       { key: "payroll", label: t("transactionTypePayrollExpense"), value: data.payroll },
+      { key: "utility", label: t("expenseTypeUtility"), value: data.utility },
       { key: "maintenance", label: t("expenseTypeMaintenance"), value: data.maintenance },
       { key: "other", label: t("expenseTypeOther"), value: data.other },
     ] as const
@@ -185,7 +187,8 @@ export function ReportsView({ months, propertyPLByMonth, defaultMonth }: Reports
             { label: t("transactionTypeRentPaidToOwner"), value: -data.ownerRent, tone: "bg-destructive/70", pct: (data.ownerRent / Math.max(1, data.income)) * 100 },
             { label: `= ${t("grossProfit")}`, value: data.grossProfit, tone: "bg-blue-500", pct: (data.grossProfit / Math.max(1, data.income)) * 100, muted: true },
             { label: t("transactionTypePayrollExpense"), value: -data.payroll, tone: "bg-destructive/70", pct: (data.payroll / Math.max(1, data.income)) * 100 },
-            { label: t("otherOperatingExpense"), value: -data.otherExpense, tone: "bg-destructive/70", pct: (data.otherExpense / Math.max(1, data.income)) * 100 },
+            { label: t("expenseTypeUtility"), value: -data.utility, tone: "bg-destructive/70", pct: (data.utility / Math.max(1, data.income)) * 100 },
+            { label: t("otherOperatingExpense"), value: -(data.maintenance + data.other), tone: "bg-destructive/70", pct: ((data.maintenance + data.other) / Math.max(1, data.income)) * 100 },
           ].map((row, i) => (
             <div key={i} className="grid grid-cols-[1fr_auto] items-center gap-3 sm:grid-cols-[180px_1fr_auto]">
               <span className={cn("text-sm", row.muted ? "text-muted-foreground" : "font-medium")}>{row.label}</span>

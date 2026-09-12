@@ -188,6 +188,20 @@ export function UnitDetailDialog({
                   </span>
                 </div>
                 <div className="flex items-center justify-between">
+                  <span className="text-muted-foreground">{t("overdueRent")}</span>
+                  <span
+                    className={cn(
+                      "font-mono font-medium tabular-nums",
+                      unit.currentTenant.overdueAmount > 0 ? "text-destructive" : undefined
+                    )}
+                  >
+                    {formatTaka(unit.currentTenant.overdueAmount)}
+                    {unit.currentTenant.overdueMonthsCount > 1
+                      ? ` · ${t("monthsOverdueCount", { count: unit.currentTenant.overdueMonthsCount })}`
+                      : ""}
+                  </span>
+                </div>
+                <div className="flex items-center justify-between">
                   <span className="text-muted-foreground">{t("leaseStarted")}</span>
                   <span className="font-mono font-medium tabular-nums">
                     {formatDate(unit.currentTenant.startDate)}

@@ -62,13 +62,14 @@ export default async function PropertyDetailPage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = await params;
-  const t = await getTranslations("Properties");
-  const format = await getFormatter();
-  const property = await getPropertyDetail(id);
+  const [t, format, property, allTenants] = await Promise.all([
+    getTranslations("Properties"),
+    getFormatter(),
+    getPropertyDetail(id),
+    getAllTenants(),
+  ]);
 
   if (!property) notFound();
-
-  const allTenants = await getAllTenants();
 
   const vacantUnits = property.totalUnits - property.occupiedUnits;
   const isFixedRent = property.activeAgreement?.fixedMonthlyRentAmount != null;
