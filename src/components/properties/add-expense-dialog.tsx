@@ -136,8 +136,16 @@ export function AddExpenseDialog({
             </Select>
           </FormField>
 
-          <FormField label={t("note")} htmlFor="expenseNotes" className="sm:col-span-2">
-            <Textarea id="expenseNotes" name="notes" rows={2} />
+          <FormField label={t("note")} htmlFor="expenseNotes" required className="sm:col-span-2">
+            <Textarea
+              id="expenseNotes"
+              name="notes"
+              rows={2}
+              required
+              placeholder={t(
+                type === "OTHER" ? "expenseNotePlaceholderOther" : "expenseNotePlaceholderMaintenance"
+              )}
+            />
           </FormField>
 
           <DialogFooter className="sm:col-span-2">

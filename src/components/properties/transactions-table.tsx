@@ -203,6 +203,7 @@ export function TransactionsTable({ transactions }: { transactions: AllTransacti
               <TableHead>{t("relatedTo")}</TableHead>
               <TableHead className="text-right">{t("amount")}</TableHead>
               <TableHead>{t("paymentMethod")}</TableHead>
+              <TableHead>{t("note")}</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -246,6 +247,9 @@ export function TransactionsTable({ transactions }: { transactions: AllTransacti
                   {formatTaka(tx.amount)}
                 </TableCell>
                 <TableCell className="text-muted-foreground">{paymentMethodLabel(t, tx.method)}</TableCell>
+                <TableCell className="max-w-72 truncate text-muted-foreground" title={tx.notes ?? undefined}>
+                  {tx.notes ?? "—"}
+                </TableCell>
               </TableRow>
             ))}
           </TableBody>

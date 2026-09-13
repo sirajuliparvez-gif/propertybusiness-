@@ -34,7 +34,11 @@ export async function addExpense(formData: FormData) {
       ? methodRaw
       : null;
 
-  if (!amount || !date) throw new Error("Missing required expense fields");
+  // notes is required here (enforced client-side too) — with only two broad
+  // categories (repair/other), it's the one place a specific reason for the
+  // expense actually gets recorded, so an expense with no reason at all
+  // isn't useful to anyone reviewing the ledger later.
+  if (!amount || !date || !notes) throw new Error("Missing required expense fields");
 
   await prisma.transaction.create({
     data: {

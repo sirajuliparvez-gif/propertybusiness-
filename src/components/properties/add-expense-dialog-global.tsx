@@ -173,8 +173,16 @@ export function AddExpenseDialogGlobal({ properties }: { properties: PropertyUni
             </Select>
           </FormField>
 
-          <FormField label={t("note")} htmlFor="globalExpenseNotes" className="sm:col-span-2">
-            <Textarea id="globalExpenseNotes" name="notes" rows={2} />
+          <FormField label={t("note")} htmlFor="globalExpenseNotes" required className="sm:col-span-2">
+            <Textarea
+              id="globalExpenseNotes"
+              name="notes"
+              rows={2}
+              required
+              placeholder={t(
+                type === "OTHER" ? "expenseNotePlaceholderOther" : "expenseNotePlaceholderMaintenance"
+              )}
+            />
           </FormField>
 
           <DialogFooter className="sm:col-span-2">

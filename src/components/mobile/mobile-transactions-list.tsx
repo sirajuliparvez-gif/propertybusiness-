@@ -105,6 +105,7 @@ export function MobileTransactionsList({
                     )}
                     {" · "}
                     {formatDate(tx.date)}
+                    {tx.notes ? ` · ${tx.notes}` : ""}
                   </p>
                 </div>
                 <span

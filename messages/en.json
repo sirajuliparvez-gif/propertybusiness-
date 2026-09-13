@@ -194,6 +194,8 @@
     "filterPaid": "Paid",
     "filterOverdue": "Overdue",
     "expenseTypeOther": "Other",
+    "expenseNotePlaceholderMaintenance": "What was repaired?",
+    "expenseNotePlaceholderOther": "What was this expense for?",
 
     "back": "Back",
     "backToProperties": "Back to properties",

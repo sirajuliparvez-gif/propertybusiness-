@@ -194,6 +194,8 @@
     "filterPaid": "পরিশোধিত",
     "filterOverdue": "বকেয়া",
     "expenseTypeOther": "অন্যান্য",
+    "expenseNotePlaceholderMaintenance": "কী মেরামত করা হয়েছে?",
+    "expenseNotePlaceholderOther": "কী কারণে এই খরচ হয়েছে?",
 
     "back": "ফিরে যান",
     "backToProperties": "প্রপার্টি লিস্টে ফিরে যান",
