@@ -43,3 +43,21 @@ yarn-error.log*
 next-env.d.ts
 
 /src/generated/prisma
+
+# sensitive source data + one-off scratch scripts used to decrypt/inspect it
+# (real tenant names, phone numbers, rent/advance figures — never commit)
+_resource_file.xlsx
+_resource_file_decrypted.xlsx
+_build_import_data.py
+_build_import_data2.py
+_check_fonts.cjs
+_convert_dump.py
+_converted_dump.txt
+_extract_xlsx.cjs
+_extracted_raw.json
+_import_plan.json
+_import_plan2.json
+_read_xlsx.cjs
+_summary2.txt
+_summary_out.txt
+_test_convert.py
