@@ -66,6 +66,19 @@ export function buildRentLedger<M = string | null>(
   existingPayments: ExistingRentPaymentRow<M>[],
   asOf: Date = new Date()
 ): RentLedgerEntry<M>[] {
+  // Never *invent* an owed month before the current calendar month, no
+  // matter how far in the past leaseStartDate/joinedAt actually is. A lease
+  // keeps its real historical start date for reference (contract length,
+  // renewal timing, etc.), and any month that genuinely has a recorded
+  // RentPayment row — however old — still shows up below exactly as before
+  // (real payment history is never hidden). What changes is the synthesized
+  // "nobody ever recorded this month, so treat it as UNPAID" fallback: that
+  // only kicks in from the current month onward. A decades-old or
+  // bulk-imported lease with zero payment rows must never surface years of
+  // retroactive "overdue" that nobody ever intended to bill or collect.
+  // `cutoverKey` is real "now", deliberately not `asOf` (which for an
+  // already-ended lease can itself be in the past).
+  const cutoverKey = monthKeyOf(new Date());
   const startKey = monthKeyOf(leaseStartDate);
   const endKey = monthKeyOf(asOf);
   const byMonth = new Map(existingPayments.map((p) => [p.month, p]));
@@ -92,7 +105,9 @@ export function buildRentLedger<M = string | null>(
         paidAt: existing.paidAt,
         method: existing.method ?? null,
       });
-    } else {
+    } else if (compareMonthKeys(cursor, cutoverKey) >= 0) {
+      // No real row for this month, and it's the current month or later —
+      // synthesize the usual UNPAID placeholder.
       const [y, m] = cursor.split("-").map(Number);
       entries.push({
         month: cursor,
@@ -106,6 +121,9 @@ export function buildRentLedger<M = string | null>(
         method: null,
       });
     }
+    // Else: a month before the current-month cutover with no recorded
+    // payment — skip it entirely. Not shown, not counted as overdue, not
+    // retroactively billed.
     if (cursor === endKey) break;
     cursor = addMonthsToKey(cursor, 1);
   }
