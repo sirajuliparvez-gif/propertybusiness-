@@ -296,6 +296,7 @@ export async function getTenantProfile(leaseId: string) {
       type: true,
       month: true,
       dueDate: true,
+      createdAt: true,
       amount: true,
       paidAmount: true,
       status: true,
@@ -310,6 +311,7 @@ export async function getTenantProfile(leaseId: string) {
       type: b.type,
       unitId: lease.unitId,
       dueDate: b.dueDate,
+      createdAt: b.createdAt,
       meterReading: b.meterReading != null ? Number(b.meterReading) : null,
     }))
   );
@@ -321,6 +323,7 @@ export async function getTenantProfile(leaseId: string) {
         unitId: lease.unitId,
         month: b.month,
         dueDate: b.dueDate,
+        createdAt: b.createdAt,
         meterReading: b.meterReading != null ? Number(b.meterReading) : null,
       }))
     )

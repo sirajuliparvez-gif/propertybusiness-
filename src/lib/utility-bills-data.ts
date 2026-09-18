@@ -30,6 +30,7 @@ function getPropertiesWithBills() {
           type: true,
           month: true,
           dueDate: true,
+          createdAt: true,
           amount: true,
           paidAmount: true,
           status: true,
@@ -78,6 +79,7 @@ export async function getAllUtilityBillsData() {
           unitId: b.unitId,
           month: b.month,
           dueDate: b.dueDate,
+          createdAt: b.createdAt,
           meterReading: b.meterReading != null ? Number(b.meterReading) : null,
         }))
       )
@@ -95,6 +97,7 @@ export async function getAllUtilityBillsData() {
           type: b.type,
           unitId: b.unitId,
           dueDate: b.dueDate,
+          createdAt: b.createdAt,
           meterReading: b.meterReading != null ? Number(b.meterReading) : null,
         }))
       );

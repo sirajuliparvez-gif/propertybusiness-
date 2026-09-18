@@ -132,7 +132,7 @@ export async function generateMonthlyWorkbook(
       // not just what happens to exist within this one month.
       prisma.utilityBill.findMany({
         where: { propertyId, type: "ELECTRICITY" },
-        select: { id: true, unitId: true, month: true, dueDate: true, meterReading: true },
+        select: { id: true, unitId: true, month: true, dueDate: true, createdAt: true, meterReading: true },
       }),
     ]);
   if (!property) throw new Error("প্রপার্টি পাওয়া যায়নি");
@@ -149,6 +149,7 @@ export async function generateMonthlyWorkbook(
     type: "ELECTRICITY",
     unitId: b.unitId,
     dueDate: b.dueDate,
+    createdAt: b.createdAt,
     meterReading: b.meterReading != null ? Number(b.meterReading) : null,
   }));
   const electricityConsumptionByBillId = attachElectricityConsumption(electricityBillsForConsumption);
@@ -162,6 +163,7 @@ export async function generateMonthlyWorkbook(
       unitId: b.unitId,
       month: b.month,
       dueDate: b.dueDate,
+      createdAt: b.createdAt,
       meterReading: b.meterReading != null ? Number(b.meterReading) : null,
     })),
     monthKey

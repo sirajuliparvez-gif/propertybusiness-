@@ -11,11 +11,21 @@ type ReadingBill = {
   type: string;
   unitId: string | null;
   dueDate: Date;
+  // Tiebreaker for two bills sharing the exact same dueDate (e.g. a whole
+  // month's bills entered in one sitting) — without it, ordering falls back
+  // to whatever order the DB happens to return equal rows in, which isn't
+  // stable across queries and can pair a bill with the wrong "previous"
+  // reading (even producing negative consumption).
+  createdAt: Date;
   meterReading: number | null;
 };
 
 function unitKey(unitId: string | null) {
   return unitId ?? "__property__";
+}
+
+function chronological(a: ReadingBill, b: ReadingBill) {
+  return a.dueDate.getTime() - b.dueDate.getTime() || a.createdAt.getTime() - b.createdAt.getTime();
 }
 
 // Walks a property's full electricity-bill history (any order) and returns,
@@ -25,9 +35,7 @@ function unitKey(unitId: string | null) {
 export function attachElectricityConsumption<T extends ReadingBill>(
   bills: T[]
 ): Map<string, { previousReading: number | null; consumption: number | null }> {
-  const sorted = [...bills]
-    .filter((b) => b.type === "ELECTRICITY")
-    .sort((a, b) => a.dueDate.getTime() - b.dueDate.getTime());
+  const sorted = [...bills].filter((b) => b.type === "ELECTRICITY").sort(chronological);
 
   const lastReadingByUnit = new Map<string, number>();
   const result = new Map<string, { previousReading: number | null; consumption: number | null }>();
@@ -56,7 +64,7 @@ export function latestElectricityReadingByUnit(
   const sorted = [...bills]
     .filter((b) => b.type === "ELECTRICITY" && b.meterReading != null)
     .filter((b) => !beforeMonth || b.month < beforeMonth)
-    .sort((a, b) => b.dueDate.getTime() - a.dueDate.getTime());
+    .sort((a, b) => -chronological(a, b));
 
   const result = new Map<string, number>();
   for (const b of sorted) {

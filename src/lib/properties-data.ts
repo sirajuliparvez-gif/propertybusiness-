@@ -320,6 +320,7 @@ export async function getPropertyDetail(id: string) {
           type: true,
           month: true,
           dueDate: true,
+          createdAt: true,
           amount: true,
           paidAmount: true,
           status: true,
@@ -702,6 +703,7 @@ export async function getPropertyDetail(id: string) {
     type: b.type,
     unitId: b.unitId,
     dueDate: b.dueDate,
+    createdAt: b.createdAt,
     meterReading: b.meterReading != null ? Number(b.meterReading) : null,
   }));
   const consumptionByBillId = attachElectricityConsumption(electricityBillsForConsumption);
@@ -715,6 +717,7 @@ export async function getPropertyDetail(id: string) {
       unitId: b.unitId,
       month: b.month,
       dueDate: b.dueDate,
+      createdAt: b.createdAt,
       meterReading: b.meterReading != null ? Number(b.meterReading) : null,
     }))
   );
