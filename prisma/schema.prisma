@@ -81,6 +81,10 @@ enum TransactionType {
   DOWNPAYMENT_REFUND_TO_TENANT
   DOWNPAYMENT_REFUND_FROM_OWNER
   UTILITY_REIMBURSEMENT_FROM_TENANT
+  // The tenant's utility payment exceeded the actual bill (company charges a
+  // flat/rounded rate rather than the exact meter share) — the excess is real
+  // income, unlike UTILITY_REIMBURSEMENT_FROM_TENANT which is a pass-through.
+  UTILITY_PROFIT_FROM_TENANT
   SERVICE_CHARGE_RECEIVED_FROM_TENANT
   GUEST_STAY_PAYMENT_RECEIVED
   GUEST_DEPOSIT_REFUND

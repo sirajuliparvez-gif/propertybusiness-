@@ -63,6 +63,7 @@ export function AddUtilityBillDialogGlobal({
     setPaidByCompany(next === "WATER");
     setMeterReading("");
   }
+  const isWater = type === "WATER";
 
   const unitsForProperty = useMemo(
     () => properties.find((p) => p.id === propertyId)?.units ?? [],
@@ -91,7 +92,7 @@ export function AddUtilityBillDialogGlobal({
         >
           <input type="hidden" name="propertyId" value={propertyId} />
           <input type="hidden" name="type" value={type} />
-          <input type="hidden" name="paidByCompany" value={paidByCompany ? "true" : "false"} />
+          <input type="hidden" name="paidByCompany" value={isWater || paidByCompany ? "true" : "false"} />
           <input type="hidden" name="unitId" value={unitId === NONE_VALUE ? "" : unitId} />
           <input type="hidden" name="returnTo" value="/utility-bills" />
 
@@ -177,10 +178,11 @@ export function AddUtilityBillDialogGlobal({
           >
             <Checkbox
               id="utilityBillPaidByCompanyGlobal"
-              checked={paidByCompany}
+              checked={isWater || paidByCompany}
+              disabled={isWater}
               onCheckedChange={(checked) => setPaidByCompany(checked === true)}
             />
-            {t("paidByCompanyLabel")}
+            {isWater ? t("paidByCompanyWaterLocked") : t("paidByCompanyLabel")}
           </label>
 
           <FormField label={t("unitOptional")} htmlFor="utilityBillUnit" className="sm:col-span-2">

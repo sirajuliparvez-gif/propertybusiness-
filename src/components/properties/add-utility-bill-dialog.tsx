@@ -68,14 +68,15 @@ export function AddUtilityBillDialog({
     OTHER: t("utilityTypeOther"),
   };
 
-  // Water is company policy: they never collect it from the tenant. Still
-  // fully editable either way — see add-utility-bill-dialog-global.tsx and
-  // payUtilityBill for the same behavior.
+  // Water is company policy: always the company's own cost, never collected
+  // from the tenant — locked, not just defaulted, and enforced again
+  // server-side in addUtilityBill. See add-utility-bill-dialog-global.tsx.
   function handleTypeChange(next: UtilityType) {
     setType(next);
     setPaidByCompany(next === "WATER");
     setMeterReading("");
   }
+  const isWater = type === "WATER";
 
   return (
     <Dialog>
@@ -93,7 +94,7 @@ export function AddUtilityBillDialog({
         >
           <input type="hidden" name="propertyId" value={propertyId} />
           <input type="hidden" name="type" value={type} />
-          <input type="hidden" name="paidByCompany" value={paidByCompany ? "true" : "false"} />
+          <input type="hidden" name="paidByCompany" value={isWater || paidByCompany ? "true" : "false"} />
           <input
             type="hidden"
             name="unitId"
@@ -164,10 +165,11 @@ export function AddUtilityBillDialog({
           >
             <Checkbox
               id="utilityBillPaidByCompany"
-              checked={paidByCompany}
+              checked={isWater || paidByCompany}
+              disabled={isWater}
               onCheckedChange={(checked) => setPaidByCompany(checked === true)}
             />
-            {t("paidByCompanyLabel")}
+            {isWater ? t("paidByCompanyWaterLocked") : t("paidByCompanyLabel")}
           </label>
 
           {fixedUnitId ? null : (

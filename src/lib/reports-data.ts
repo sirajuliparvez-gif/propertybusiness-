@@ -14,11 +14,14 @@ function monthKey(d: Date) {
 // Maintenance/other stay merged into that leftover bucket, matching
 // properties-data.ts's own NON_CORE_EXPENSE_TYPES grouping. Guest-stay
 // revenue and service charge both count as income alongside tenant rent —
-// all real operating revenue.
+// all real operating revenue. UTILITY_PROFIT_FROM_TENANT (tenant paid more
+// than the actual bill) is real income too, unlike the plain reimbursement
+// case which stays excluded as a pass-through.
 const INCOME_TYPES = [
   "RENT_RECEIVED_FROM_TENANT",
   "GUEST_STAY_PAYMENT_RECEIVED",
   "SERVICE_CHARGE_RECEIVED_FROM_TENANT",
+  "UTILITY_PROFIT_FROM_TENANT",
 ] as const;
 const OWNER_RENT_TYPE = "RENT_PAID_TO_OWNER";
 const PAYROLL_TYPE = "PAYROLL_EXPENSE";

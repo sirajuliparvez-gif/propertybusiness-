@@ -24,7 +24,10 @@ export async function addUtilityBill(formData: FormData) {
   const amount = str(formData, "amount");
   const dueDate = str(formData, "dueDate");
   if (!amount || !dueDate) throw new Error("Missing required bill fields");
-  const paidByCompany = formData.get("paidByCompany") === "true";
+  // Water is company policy: always the company's own cost, never billed to
+  // a tenant — enforced here too (not just the disabled checkbox client-side)
+  // in case of a stale/tampered form.
+  const paidByCompany = type === "WATER" ? true : formData.get("paidByCompany") === "true";
   // Only meaningful for electricity — the field is hidden for every other
   // type client-side, but guard here too in case of a stale/tampered form.
   const meterReadingRaw = type === "ELECTRICITY" ? str(formData, "meterReading") : null;
@@ -82,6 +85,7 @@ export async function payUtilityBill(formData: FormData) {
     const bill = await tx.utilityBill.findUnique({
       where: { id: billId },
       select: {
+        type: true,
         amount: true,
         paidAmount: true,
         unitId: true,
@@ -102,12 +106,28 @@ export async function payUtilityBill(formData: FormData) {
     const alreadyPaid = Number(bill.paidAmount);
     const remaining = Math.max(0, totalAmount - alreadyPaid);
 
-    const tenantAmountRaw = tenantAmountStr != null ? Number(tenantAmountStr) : bill.paidByCompany ? 0 : remaining;
-    const tenantAmount = Math.min(Math.max(0, tenantAmountRaw), remaining);
-    const companyAmount = companyCoversRest ? remaining - tenantAmount : 0;
-    if (tenantAmount <= 0 && companyAmount <= 0) return;
+    // Water is company policy: never collected from the tenant, no matter
+    // what the form sent — enforced server-side too, not just by disabling
+    // the input client-side, in case of a stale/tampered form.
+    const tenantAmountRaw =
+      bill.type === "WATER"
+        ? 0
+        : tenantAmountStr != null
+          ? Number(tenantAmountStr)
+          : bill.paidByCompany
+            ? 0
+            : remaining;
+    const tenantAmountInput = Math.max(0, tenantAmountRaw);
+    // The portion that actually settles the bill is capped at what's left;
+    // anything the tenant pays beyond that is real company profit (e.g. a
+    // flat/rounded rate charged regardless of the exact meter share), not
+    // more reimbursement than the bill itself.
+    const billPortion = Math.min(tenantAmountInput, remaining);
+    const profitAmount = Math.max(0, tenantAmountInput - remaining);
+    const companyAmount = companyCoversRest ? remaining - billPortion : 0;
+    if (billPortion <= 0 && companyAmount <= 0 && profitAmount <= 0) return;
 
-    const newPaidAmount = alreadyPaid + tenantAmount + companyAmount;
+    const newPaidAmount = alreadyPaid + billPortion + companyAmount;
     const newStatus = newPaidAmount >= totalAmount ? "PAID" : "PARTIAL";
     const paidDate = new Date();
 
@@ -116,7 +136,7 @@ export async function payUtilityBill(formData: FormData) {
       data: { paidAmount: newPaidAmount, status: newStatus },
     });
 
-    if (tenantAmount > 0) {
+    if (billPortion > 0) {
       // The company's policy: every other bill gets assigned to whichever
       // tenant's unit it belongs to, the tenant pays the company, and the
       // company pays the utility company separately (outside this system,
@@ -130,7 +150,24 @@ export async function payUtilityBill(formData: FormData) {
           propertyId,
           type: "UTILITY_REIMBURSEMENT_FROM_TENANT",
           direction: "INCOMING",
-          amount: tenantAmount,
+          amount: billPortion,
+          method,
+          unitId: bill.unitId,
+          tenantLeaseId: bill.unit?.tenantLeases[0]?.id ?? null,
+          utilityBillId: billId,
+          date: paidDate,
+        },
+      });
+    }
+    if (profitAmount > 0) {
+      // Tenant paid more than the actual bill — a real gain for the company,
+      // unlike the reimbursement above, so it counts toward netProfit.
+      await tx.transaction.create({
+        data: {
+          propertyId,
+          type: "UTILITY_PROFIT_FROM_TENANT",
+          direction: "INCOMING",
+          amount: profitAmount,
           method,
           unitId: bill.unitId,
           tenantLeaseId: bill.unit?.tenantLeases[0]?.id ?? null,

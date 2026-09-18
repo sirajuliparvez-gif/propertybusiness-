@@ -106,6 +106,7 @@ export function MobileUtilityBillsList({
                     <PayUtilityBillButton
                       billId={b.id}
                       propertyId={b.propertyId}
+                      type={b.type}
                       amount={b.amount}
                       paidAmount={b.paidAmount}
                       paidByCompany={b.paidByCompany}

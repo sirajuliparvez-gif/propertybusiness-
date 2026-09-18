@@ -142,7 +142,13 @@ export async function getPropertiesList() {
     const otherExpense = p.transactions
       .filter((t) => t.direction === "OUTGOING" && (NON_CORE_EXPENSE_TYPES as readonly string[]).includes(t.type))
       .reduce((sum, t) => sum + Number(t.amount), 0);
-    const netProfit = expectedIncome - monthlyOwnerRent - payrollCost - otherExpense;
+    // Real, unscheduled income — a tenant paid more than the actual utility
+    // bill (see payUtilityBill) — added on top of the rent-schedule-based
+    // expectedIncome the same way guestStayIncome already is.
+    const utilityProfit = p.transactions
+      .filter((t) => t.type === "UTILITY_PROFIT_FROM_TENANT")
+      .reduce((sum, t) => sum + Number(t.amount), 0);
+    const netProfit = expectedIncome + utilityProfit - monthlyOwnerRent - payrollCost - otherExpense;
 
     return {
       id: p.id,
@@ -728,6 +734,7 @@ export async function getPropertyDetail(id: string) {
       paymentMethod: split.method,
       collectedFromTenant: split.collectedFromTenant,
       companyAbsorbedAmount: split.companyAbsorbedAmount,
+      profitAmount: split.profitAmount,
       unitLabel: b.unitId ? (unitLabelById.get(b.unitId) ?? null) : null,
       propertyId: property.id,
       propertyName: property.name,
@@ -741,7 +748,13 @@ export async function getPropertyDetail(id: string) {
     .filter((t) => t.direction === "INCOMING")
     .reduce((sum, t) => sum + Number(t.amount), 0);
 
-  const netProfit = expectedIncome - monthlyOwnerRent - payrollCost - totalExpense;
+  // Real, unscheduled income — a tenant paid more than the actual utility
+  // bill (see payUtilityBill) — added on top of the rent-schedule-based
+  // expectedIncome the same way guestStayIncome already is.
+  const utilityProfit = monthTransactions
+    .filter((t) => t.type === "UTILITY_PROFIT_FROM_TENANT")
+    .reduce((sum, t) => sum + Number(t.amount), 0);
+  const netProfit = expectedIncome + utilityProfit - monthlyOwnerRent - payrollCost - totalExpense;
   const profitMargin = expectedIncome > 0 ? Math.round((netProfit / expectedIncome) * 100) : 0;
 
   return {

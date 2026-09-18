@@ -55,6 +55,7 @@ export type UtilityBillRow = {
   // instead of a single ambiguous total.
   collectedFromTenant: number;
   companyAbsorbedAmount: number;
+  profitAmount: number;
   unitLabel: string | null;
   propertyId: string;
   propertyName?: string;
@@ -73,6 +74,7 @@ export const UTILITY_TYPE_LABEL_KEYS: Record<string, string> = {
 export function PayUtilityBillButton({
   billId,
   propertyId,
+  type,
   amount,
   paidAmount = 0,
   paidByCompany,
@@ -83,6 +85,7 @@ export function PayUtilityBillButton({
 }: {
   billId: string;
   propertyId: string;
+  type: "GAS" | "ELECTRICITY" | "WATER" | "OTHER";
   amount: number;
   paidAmount?: number;
   paidByCompany: boolean;
@@ -97,10 +100,18 @@ export function PayUtilityBillButton({
   const [isPending, startTransition] = useTransition();
   const [method, setMethod] = useState("NONE");
   const remaining = Math.max(0, amount - paidAmount);
-  const [companyCoversRest, setCompanyCoversRest] = useState(paidByCompany);
-  const [tenantAmount, setTenantAmount] = useState(String(paidByCompany ? 0 : remaining));
-  const tenantAmountNum = Math.min(Math.max(0, Number(tenantAmount) || 0), remaining);
-  const companyAmount = companyCoversRest ? remaining - tenantAmountNum : 0;
+  // Water is company policy: always the company's own cost, tenant never
+  // pays — locked here too (not just the Add Bill form), same rule enforced
+  // again server-side in payUtilityBill.
+  const isWater = type === "WATER";
+  const [companyCoversRest, setCompanyCoversRest] = useState(isWater || paidByCompany);
+  const [tenantAmount, setTenantAmount] = useState(String(isWater || paidByCompany ? 0 : remaining));
+  // No upper cap here — a tenant paying more than the remaining bill is real
+  // company profit (see profitAmount below), not an input error.
+  const tenantAmountNum = isWater ? 0 : Math.max(0, Number(tenantAmount) || 0);
+  const billPortion = Math.min(tenantAmountNum, remaining);
+  const profitAmount = Math.max(0, tenantAmountNum - remaining);
+  const companyAmount = companyCoversRest ? remaining - billPortion : 0;
 
   return (
     <Dialog>
@@ -143,42 +154,58 @@ export function PayUtilityBillButton({
           <input type="hidden" name="returnTo" value={returnTo} />
           <input type="hidden" name="method" value={method} />
           <input type="hidden" name="tenantAmount" value={tenantAmountNum} />
-          <input type="hidden" name="companyCoversRest" value={companyCoversRest ? "true" : "false"} />
+          <input
+            type="hidden"
+            name="companyCoversRest"
+            value={isWater || companyCoversRest ? "true" : "false"}
+          />
           <p className="text-sm text-muted-foreground">
             {t("utilityRemainingDue", { amount: formatTaka(remaining) })}
           </p>
-          <FormField label={t("utilityCollectedFromTenant")} htmlFor="utilityTenantAmount">
-            <Input
-              id="utilityTenantAmount"
-              type="number"
-              step="any"
-              min={0}
-              max={remaining}
-              value={tenantAmount}
-              onChange={(e) => setTenantAmount(e.target.value)}
-            />
-          </FormField>
-          <label
-            htmlFor="utilityCompanyCoversRest"
-            className="flex items-center gap-2 rounded-lg border px-3 py-2 text-sm"
-          >
-            <Checkbox
-              id="utilityCompanyCoversRest"
-              checked={companyCoversRest}
-              onCheckedChange={(checked) => setCompanyCoversRest(checked === true)}
-            />
-            {t("companyCoversRestLabel")}
-          </label>
-          {companyAmount > 0 ? (
-            <p className="text-xs text-warning">
-              {t("companyAbsorbsHint", { amount: formatTaka(companyAmount) })}
+          {isWater ? (
+            <p className="rounded-lg border px-3 py-2 text-sm text-muted-foreground">
+              {t("paidByCompanyWaterLocked")}
             </p>
-          ) : null}
-          {!companyCoversRest && tenantAmountNum < remaining ? (
-            <p className="text-xs text-muted-foreground">
-              {t("utilityStaysPartialHint", { amount: formatTaka(remaining - tenantAmountNum) })}
-            </p>
-          ) : null}
+          ) : (
+            <>
+              <FormField label={t("utilityCollectedFromTenant")} htmlFor="utilityTenantAmount">
+                <Input
+                  id="utilityTenantAmount"
+                  type="number"
+                  step="any"
+                  min={0}
+                  value={tenantAmount}
+                  onChange={(e) => setTenantAmount(e.target.value)}
+                />
+              </FormField>
+              <label
+                htmlFor="utilityCompanyCoversRest"
+                className="flex items-center gap-2 rounded-lg border px-3 py-2 text-sm"
+              >
+                <Checkbox
+                  id="utilityCompanyCoversRest"
+                  checked={companyCoversRest}
+                  onCheckedChange={(checked) => setCompanyCoversRest(checked === true)}
+                />
+                {t("companyCoversRestLabel")}
+              </label>
+              {profitAmount > 0 ? (
+                <p className="text-xs text-success">
+                  {t("utilityProfitHint", { amount: formatTaka(profitAmount) })}
+                </p>
+              ) : null}
+              {companyAmount > 0 ? (
+                <p className="text-xs text-warning">
+                  {t("companyAbsorbsHint", { amount: formatTaka(companyAmount) })}
+                </p>
+              ) : null}
+              {!companyCoversRest && billPortion < remaining ? (
+                <p className="text-xs text-muted-foreground">
+                  {t("utilityStaysPartialHint", { amount: formatTaka(remaining - billPortion) })}
+                </p>
+              ) : null}
+            </>
+          )}
           <FormField label={t("paymentMethod")} htmlFor="payMethod">
             <Select
               value={method}
@@ -422,6 +449,11 @@ export function UtilityBillsTable({
                       {t("companyAbsorbedNote", { amount: formatTaka(b.companyAbsorbedAmount) })}
                     </p>
                   ) : null}
+                  {b.profitAmount > 0 ? (
+                    <p className="text-xs font-normal text-success">
+                      {t("companyProfitNote", { amount: formatTaka(b.profitAmount) })}
+                    </p>
+                  ) : null}
                 </TableCell>
                 <TableCell>
                   <Badge
@@ -442,6 +474,7 @@ export function UtilityBillsTable({
                     <PayUtilityBillButton
                       billId={b.id}
                       propertyId={b.propertyId}
+                      type={b.type}
                       amount={b.amount}
                       paidAmount={b.paidAmount}
                       paidByCompany={b.paidByCompany}

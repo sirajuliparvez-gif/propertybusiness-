@@ -113,6 +113,7 @@ export async function getAllUtilityBillsData() {
           paymentMethod: split.method,
           collectedFromTenant: split.collectedFromTenant,
           companyAbsorbedAmount: split.companyAbsorbedAmount,
+          profitAmount: split.profitAmount,
           unitLabel: b.unitId ? (unitLabelById.get(b.unitId) ?? null) : null,
           propertyId: p.id,
           propertyName: p.name,

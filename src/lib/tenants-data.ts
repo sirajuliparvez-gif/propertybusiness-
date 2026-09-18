@@ -466,6 +466,7 @@ export async function getTenantProfile(leaseId: string) {
         paymentMethod: split.method,
         collectedFromTenant: split.collectedFromTenant,
         companyAbsorbedAmount: split.companyAbsorbedAmount,
+        profitAmount: split.profitAmount,
         unitLabel: lease.unit.label,
         propertyId: lease.unit.unitType.property.id,
         meterReading: b.meterReading != null ? Number(b.meterReading) : null,
