@@ -324,7 +324,7 @@
     "serviceChargePercentage": "Percentage of rent",
     "serviceChargeValueFlat": "Service charge amount (৳)",
     "serviceChargeValuePercent": "Service charge (% of rent)",
-    "serviceChargeBundledHint": "+ {amount} service charge will be collected together (total {total})",
+    "serviceChargeBundledHint": "Rent {rent} + service charge {service} = total due {total}",
     "leaseStartDate": "Lease Start Date",
     "leaseEndDateOptional": "Lease End Date (optional)",
     "leaseNotes": "Lease Notes",

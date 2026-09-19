@@ -107,7 +107,7 @@ export function MobileTenantsList({ tenants }: { tenants: PropertyDetail["tenant
                     </div>
                     <div className="shrink-0 text-right">
                       <p className="font-mono text-sm font-semibold tabular-nums">
-                        {formatTaka(tn.monthlyRentAmount)}
+                        {formatTaka(tn.monthlyRentAmount + tn.serviceChargeAmount)}
                       </p>
                       {isFormer ? (
                         <Badge className="border-transparent bg-muted text-muted-foreground">

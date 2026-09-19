@@ -324,7 +324,7 @@
     "serviceChargePercentage": "ভাড়ার শতাংশ",
     "serviceChargeValueFlat": "সার্ভিস চার্জের পরিমাণ (৳)",
     "serviceChargeValuePercent": "সার্ভিস চার্জ (ভাড়ার %)",
-    "serviceChargeBundledHint": "+ {amount} সার্ভিস চার্জ একসাথে যোগ হবে (মোট {total})",
+    "serviceChargeBundledHint": "ভাড়া {rent} + সার্ভিস চার্জ {service} = মোট বকেয়া {total}",
     "leaseStartDate": "চুক্তি শুরুর তারিখ",
     "leaseEndDateOptional": "চুক্তি শেষের তারিখ (ঐচ্ছিক)",
     "leaseNotes": "চুক্তির নোট",

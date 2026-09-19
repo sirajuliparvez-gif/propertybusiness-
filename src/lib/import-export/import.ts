@@ -10,7 +10,6 @@ import {
   parseYesNo,
   parseRentPaymentMode,
 } from "./enums";
-import { computeServiceChargeAmount } from "@/lib/service-charge";
 import { SHEET_NAMES } from "./sheets";
 import type { RawRow, RowError, SheetResult, ImportResult } from "./types";
 
@@ -414,9 +413,11 @@ async function importRentPayments(
       str(row, "পেমেন্ট পদ্ধতি (নগদ/মোবাইল ব্যাংকিং বা ডাউনপেমেন্ট থেকে সমন্বয়)")
     );
     try {
-      // Same rules as the manual "ভাড়া আদায় করুন" dialog (recordTenantRentPayment):
-      // downpayment-adjustment can't exceed the lease's current balance, and
-      // only real cash-ish payments bundle the optional service charge.
+      // Same rule as the manual "ভাড়া আদায় করুন" dialog (recordTenantRentPayment):
+      // downpayment-adjustment can't exceed the lease's current balance.
+      // dueAmount here already includes any service charge — the uploaded
+      // sheet's "বকেয়া পরিমাণ" column is rent + service charge bundled (see
+      // its generation in monthly.ts) — so no separate transaction is needed.
       const lease = await prisma.tenantLease.findUnique({ where: { id: leaseId } });
       if (!lease) {
         errors.push({ sheet: SHEET_NAMES.RENT_PAYMENTS, row: rowNum, message: "লিজ পাওয়া যায়নি" });
@@ -480,29 +481,6 @@ async function importRentPayments(
               date: paidAt ?? new Date(),
             },
           });
-          // Only bundle the service charge the first time this month sees
-          // any real money recorded — otherwise a later top-up delta would
-          // add it again.
-          if (previousPaidAmount === 0) {
-            const serviceChargeAmount = computeServiceChargeAmount(
-              Number(lease.monthlyRentAmount),
-              lease.serviceChargeType,
-              lease.serviceChargeValue != null ? Number(lease.serviceChargeValue) : null
-            );
-            if (serviceChargeAmount > 0) {
-              await prisma.transaction.create({
-                data: {
-                  propertyId,
-                  type: "SERVICE_CHARGE_RECEIVED_FROM_TENANT",
-                  direction: "INCOMING",
-                  amount: serviceChargeAmount,
-                  method,
-                  tenantLeaseId: leaseId,
-                  date: paidAt ?? new Date(),
-                },
-              });
-            }
-          }
         }
       }
 

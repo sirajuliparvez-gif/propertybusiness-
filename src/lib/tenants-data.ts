@@ -111,9 +111,17 @@ export async function getAllTenantsData() {
           // ledger up to "now" for a vacated tenant would invent phantom
           // overdue months for the period after they were gone.
           const asOf = tl.status === "ACTIVE" ? new Date() : (tl.movedOutAt ?? tl.endDate ?? new Date());
+          const serviceChargeAmount = computeServiceChargeAmount(
+            Number(tl.monthlyRentAmount),
+            tl.serviceChargeType,
+            tl.serviceChargeValue != null ? Number(tl.serviceChargeValue) : null
+          );
+          // "Rent due" is rent + service charge bundled as one figure — the
+          // ledger (and everything derived from it: overdue amount, PAID/
+          // UNPAID status) tracks that combined total, not rent alone.
           const ledger = buildRentLedger(
             tl.startDate,
-            Number(tl.monthlyRentAmount),
+            Number(tl.monthlyRentAmount) + serviceChargeAmount,
             tl.rentPayments.map((rp) => ({
               id: rp.id,
               month: rp.month,
@@ -132,11 +140,6 @@ export async function getAllTenantsData() {
           // what the status pill/date columns show, now guaranteed to exist
           // instead of silently falling back to a stale older row.
           const currentEntry = ledger[ledger.length - 1] ?? null;
-          const serviceChargeAmount = computeServiceChargeAmount(
-            Number(tl.monthlyRentAmount),
-            tl.serviceChargeType,
-            tl.serviceChargeValue != null ? Number(tl.serviceChargeValue) : null
-          );
           return {
             id: tl.id,
             tenantName: tl.tenant.name,
@@ -334,9 +337,16 @@ export async function getTenantProfile(leaseId: string) {
   // still renting, not all the way to today.
   const ledgerAsOf =
     lease.status === "ACTIVE" ? new Date() : (lease.movedOutAt ?? lease.endDate ?? new Date());
+  const leaseServiceChargeAmount = computeServiceChargeAmount(
+    Number(lease.monthlyRentAmount),
+    lease.serviceChargeType,
+    lease.serviceChargeValue != null ? Number(lease.serviceChargeValue) : null
+  );
+  // "Rent due" is rent + service charge bundled as one figure — see the
+  // matching note in getAllTenantsData above.
   const ledger = buildRentLedger(
     lease.startDate,
-    Number(lease.monthlyRentAmount),
+    Number(lease.monthlyRentAmount) + leaseServiceChargeAmount,
     lease.rentPayments.map((rp) => ({
       id: rp.id,
       month: rp.month,
@@ -427,6 +437,7 @@ export async function getTenantProfile(leaseId: string) {
     currentDownpaymentBalance: Number(lease.currentDownpaymentBalance),
     serviceChargeType: lease.serviceChargeType,
     serviceChargeValue: lease.serviceChargeValue != null ? Number(lease.serviceChargeValue) : null,
+    serviceChargeAmount: leaseServiceChargeAmount,
     notes: lease.notes,
     payments,
     overdueMonths,

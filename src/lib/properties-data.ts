@@ -397,10 +397,19 @@ export async function getPropertyDetail(id: string) {
           u.tenantLeases.find((tl) => tl.status !== "ACTIVE") ?? null;
         const activeGuestStay = u.guestStays.find((g) => g.status === "CHECKED_IN") ?? null;
 
+        const activeLeaseServiceChargeAmount = activeLease
+          ? computeServiceChargeAmount(
+              Number(activeLease.monthlyRentAmount),
+              activeLease.serviceChargeType,
+              activeLease.serviceChargeValue != null ? Number(activeLease.serviceChargeValue) : null
+            )
+          : 0;
+        // "Rent due" is rent + service charge bundled as one figure — see
+        // the matching note in getAllTenantsData (tenants-data.ts).
         const activeLeaseLedger = activeLease
           ? buildRentLedger(
               activeLease.startDate,
-              Number(activeLease.monthlyRentAmount),
+              Number(activeLease.monthlyRentAmount) + activeLeaseServiceChargeAmount,
               activeLease.rentPayments.map((rp) => ({
                 id: rp.id,
                 month: rp.month,
@@ -418,7 +427,7 @@ export async function getPropertyDetail(id: string) {
           ? {
               leaseId: activeLease.id,
               name: activeLease.tenant.name,
-              monthlyRentAmount: Number(activeLease.monthlyRentAmount),
+              monthlyRentAmount: Number(activeLease.monthlyRentAmount) + activeLeaseServiceChargeAmount,
               downpaymentAmount: Number(activeLease.initialDownpaymentAmount),
               currentDownpaymentBalance: Number(activeLease.currentDownpaymentBalance),
               startDate: activeLease.startDate,
@@ -434,7 +443,15 @@ export async function getPropertyDetail(id: string) {
           !activeLease && mostRecentEndedLease
             ? {
                 name: mostRecentEndedLease.tenant.name,
-                monthlyRentAmount: Number(mostRecentEndedLease.monthlyRentAmount),
+                monthlyRentAmount:
+                  Number(mostRecentEndedLease.monthlyRentAmount) +
+                  computeServiceChargeAmount(
+                    Number(mostRecentEndedLease.monthlyRentAmount),
+                    mostRecentEndedLease.serviceChargeType,
+                    mostRecentEndedLease.serviceChargeValue != null
+                      ? Number(mostRecentEndedLease.serviceChargeValue)
+                      : null
+                  ),
                 leftOn: mostRecentEndedLease.movedOutAt ?? mostRecentEndedLease.endDate,
               }
             : null;
@@ -539,9 +556,14 @@ export async function getPropertyDetail(id: string) {
     ut.units.flatMap((u) =>
       u.tenantLeases.map((tl) => {
         const asOf = tl.status === "ACTIVE" ? new Date() : (tl.movedOutAt ?? tl.endDate ?? new Date());
+        const monthlyRentAmount = Number(tl.monthlyRentAmount);
+        const serviceChargeValue = tl.serviceChargeValue != null ? Number(tl.serviceChargeValue) : null;
+        const serviceChargeAmount = computeServiceChargeAmount(monthlyRentAmount, tl.serviceChargeType, serviceChargeValue);
+        // "Rent due" is rent + service charge bundled as one figure — see
+        // the matching note in getAllTenantsData (tenants-data.ts).
         const ledger = buildRentLedger(
           tl.startDate,
-          Number(tl.monthlyRentAmount),
+          monthlyRentAmount + serviceChargeAmount,
           tl.rentPayments.map((rp) => ({
             id: rp.id,
             month: rp.month,
@@ -557,8 +579,6 @@ export async function getPropertyDetail(id: string) {
         const overdue = overdueEntries(ledger);
         const overdueAmount = tl.status === "ACTIVE" ? totalOverdue(ledger) : 0;
         const currentEntry = ledger[ledger.length - 1] ?? null;
-        const monthlyRentAmount = Number(tl.monthlyRentAmount);
-        const serviceChargeValue = tl.serviceChargeValue != null ? Number(tl.serviceChargeValue) : null;
         return {
           id: tl.id,
           tenantName: tl.tenant.name,
@@ -570,7 +590,7 @@ export async function getPropertyDetail(id: string) {
           currentDownpaymentBalance: Number(tl.currentDownpaymentBalance),
           serviceChargeType: tl.serviceChargeType,
           serviceChargeValue,
-          serviceChargeAmount: computeServiceChargeAmount(monthlyRentAmount, tl.serviceChargeType, serviceChargeValue),
+          serviceChargeAmount,
           leaseStatus: tl.status,
           rentStatus: tl.status === "ACTIVE" ? (currentEntry?.status ?? null) : null,
           overdueAmount,

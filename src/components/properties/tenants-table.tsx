@@ -222,7 +222,7 @@ export function TenantsTable({
                   ) : null}
                   <TableCell className="font-mono text-muted-foreground">{tn.unitLabel}</TableCell>
                   <TableCell className="text-right font-mono tabular-nums">
-                    {formatTaka(tn.monthlyRentAmount)}
+                    {formatTaka(tn.monthlyRentAmount + tn.serviceChargeAmount)}
                   </TableCell>
                   <TableCell>
                     {isFormer ? (

@@ -155,7 +155,7 @@ export function MobileRentList({
                       </div>
                       <div className="shrink-0 text-right">
                         <p className="font-mono text-sm font-semibold tabular-nums">
-                          {formatTaka(p.monthlyRentAmount)}
+                          {formatTaka(p.monthlyRentAmount + p.serviceChargeAmount)}
                         </p>
                         <StatusPill status={p.rentStatus} labels={rentStatusLabels} />
                         {p.overdueMonths.length > 1 ? (

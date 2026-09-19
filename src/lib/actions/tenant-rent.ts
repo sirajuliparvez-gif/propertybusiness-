@@ -51,7 +51,15 @@ export async function recordTenantRentPayment(formData: FormData) {
     throw new Error("Adjustment amount exceeds available downpayment balance");
   }
 
-  const dueAmount = Number(lease.monthlyRentAmount);
+  // "Rent due" is rent + service charge bundled as one figure — one
+  // RentPayment row, one collection action, one Transaction, regardless of
+  // how it's settled (cash or downpayment adjustment).
+  const serviceChargeAmount = computeServiceChargeAmount(
+    Number(lease.monthlyRentAmount),
+    lease.serviceChargeType,
+    lease.serviceChargeValue != null ? Number(lease.serviceChargeValue) : null
+  );
+  const dueAmount = Number(lease.monthlyRentAmount) + serviceChargeAmount;
   const status =
     mode === "downpaymentAdjustment"
       ? amount >= dueAmount
@@ -102,31 +110,6 @@ export async function recordTenantRentPayment(formData: FormData) {
           date: paidDate,
         },
       });
-
-      // Optional add-on collected alongside rent (not everyone has one) —
-      // recomputed fresh from the current monthlyRentAmount rather than
-      // trusting a client-supplied figure, same "never trust the client for
-      // money" rule this codebase applies everywhere else. Only bundled for
-      // a real cash-ish payment; a downpayment adjustment above only ever
-      // covers rent itself.
-      const serviceChargeAmount = computeServiceChargeAmount(
-        Number(lease.monthlyRentAmount),
-        lease.serviceChargeType,
-        lease.serviceChargeValue != null ? Number(lease.serviceChargeValue) : null
-      );
-      if (serviceChargeAmount > 0) {
-        await tx.transaction.create({
-          data: {
-            propertyId,
-            type: "SERVICE_CHARGE_RECEIVED_FROM_TENANT",
-            direction: "INCOMING",
-            amount: serviceChargeAmount,
-            method,
-            tenantLeaseId,
-            date: paidDate,
-          },
-        });
-      }
     }
   });
 
@@ -176,9 +159,16 @@ export async function recordOverdueRentPayment(formData: FormData) {
     select: { id: true, month: true, dueDate: true, dueAmount: true, paidAmount: true, status: true, paidAt: true },
   });
   const asOf = lease.status === "ACTIVE" ? new Date() : (lease.movedOutAt ?? lease.endDate ?? new Date());
+  const overdueServiceChargeAmount = computeServiceChargeAmount(
+    Number(lease.monthlyRentAmount),
+    lease.serviceChargeType,
+    lease.serviceChargeValue != null ? Number(lease.serviceChargeValue) : null
+  );
+  // "Rent due" is rent + service charge bundled as one figure — see the
+  // matching note in recordTenantRentPayment above.
   const ledger = buildRentLedger(
     lease.startDate,
-    Number(lease.monthlyRentAmount),
+    Number(lease.monthlyRentAmount) + overdueServiceChargeAmount,
     existingPayments.map((rp) => ({
       id: rp.id,
       month: rp.month,
@@ -294,12 +284,15 @@ export async function recordAdvanceRentPayment(formData: FormData) {
   const lease = await prisma.tenantLease.findUnique({ where: { id: tenantLeaseId } });
   if (!lease) throw new Error("Tenant lease not found");
 
-  const dueAmount = Number(lease.monthlyRentAmount);
+  const rentAmount = Number(lease.monthlyRentAmount);
   const serviceChargeAmount = computeServiceChargeAmount(
-    dueAmount,
+    rentAmount,
     lease.serviceChargeType,
     lease.serviceChargeValue != null ? Number(lease.serviceChargeValue) : null
   );
+  // "Rent due" is rent + service charge bundled as one figure — see the
+  // matching note in recordTenantRentPayment above.
+  const dueAmount = rentAmount + serviceChargeAmount;
   const months = Array.from({ length: monthsCount }, (_, i) => addMonthsToMonthStr(startMonth, i));
 
   await prisma.$transaction(async (tx) => {
@@ -334,20 +327,6 @@ export async function recordAdvanceRentPayment(formData: FormData) {
           notes: str(formData, "notes"),
         },
       });
-
-      if (serviceChargeAmount > 0) {
-        await tx.transaction.create({
-          data: {
-            propertyId,
-            type: "SERVICE_CHARGE_RECEIVED_FROM_TENANT",
-            direction: "INCOMING",
-            amount: serviceChargeAmount,
-            method,
-            tenantLeaseId,
-            date: paidDate,
-          },
-        });
-      }
     }
   });
 

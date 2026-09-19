@@ -228,7 +228,7 @@ export function RentCollectionTable({ payments }: { payments: RentCollectionData
                   </TableCell>
                   <TableCell className="font-mono text-muted-foreground">{p.unitLabel}</TableCell>
                   <TableCell className="text-right font-mono tabular-nums">
-                    {formatTaka(p.monthlyRentAmount)}
+                    {formatTaka(p.monthlyRentAmount + p.serviceChargeAmount)}
                   </TableCell>
                   <TableCell className="font-mono text-muted-foreground">
                     {p.currentDueDate ? formatDate(p.currentDueDate) : "—"}

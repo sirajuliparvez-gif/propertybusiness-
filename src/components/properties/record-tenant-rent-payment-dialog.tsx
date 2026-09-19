@@ -83,21 +83,24 @@ export function RecordTenantRentPaymentDialog({
   const [isPending, startTransition] = useTransition();
   const [mode, setMode] = useState<Mode>("cash");
   const [method, setMethod] = useState("NONE");
-  const [amount, setAmount] = useState(String(monthlyRentAmount || ""));
+  const serviceChargeAmount = computeServiceChargeAmount(monthlyRentAmount, serviceChargeType, serviceChargeValue);
+  // "Rent due" is rent + service charge bundled as one figure — see the
+  // matching note in actions/tenant-rent.ts.
+  const dueAmount = monthlyRentAmount + serviceChargeAmount;
+  const [amount, setAmount] = useState(String(dueAmount || ""));
   const [startMonth, setStartMonth] = useState(new Date().toISOString().slice(0, 7));
   const [monthsCount, setMonthsCount] = useState("3");
   const totalOverdueAmount = overdueMonths.reduce((sum, m) => sum + m.gap, 0);
   const [overdueAmount, setOverdueAmount] = useState(String(totalOverdueAmount || ""));
   const todayValue = new Date().toISOString().slice(0, 10);
-  const serviceChargeAmount = computeServiceChargeAmount(monthlyRentAmount, serviceChargeType, serviceChargeValue);
-  const advanceTotal = (monthlyRentAmount + serviceChargeAmount) * (Number(monthsCount) || 0);
+  const advanceTotal = dueAmount * (Number(monthsCount) || 0);
 
   function handleModeChange(next: Mode) {
     setMode(next);
     setAmount(
       next === "downpaymentAdjustment"
-        ? String(Math.min(monthlyRentAmount, currentDownpaymentBalance))
-        : String(monthlyRentAmount || "")
+        ? String(Math.min(dueAmount, currentDownpaymentBalance))
+        : String(dueAmount || "")
     );
   }
 
@@ -270,11 +273,12 @@ export function RecordTenantRentPaymentDialog({
                 value={amount}
                 onChange={(e) => setAmount(e.target.value)}
               />
-              {mode === "cash" && serviceChargeAmount > 0 ? (
+              {serviceChargeAmount > 0 ? (
                 <p className="mt-1 text-xs text-muted-foreground">
                   {t("serviceChargeBundledHint", {
-                    amount: formatTaka(serviceChargeAmount),
-                    total: formatTaka(Number(amount || 0) + serviceChargeAmount),
+                    rent: formatTaka(monthlyRentAmount),
+                    service: formatTaka(serviceChargeAmount),
+                    total: formatTaka(dueAmount),
                   })}
                 </p>
               ) : null}
