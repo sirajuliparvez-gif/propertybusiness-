@@ -82,8 +82,11 @@ export async function getPropertiesList() {
   const displayIdByPropertyId = new Map(idOrder.map((p, i) => [p.id, `P-${String(i + 1).padStart(3, "0")}`]));
 
   return properties.map((p) => {
-    const totalUnits = p.unitTypes.reduce((sum, ut) => sum + ut.unitCount, 0);
+    // Real Unit rows, not UnitType.unitCount — that field is a manually-set
+    // "how many to add" target for the Unit Type form, not a live count, so
+    // it drifts the moment units are merged/split/deleted directly.
     const allUnits = p.unitTypes.flatMap((ut) => ut.units);
+    const totalUnits = allUnits.length;
     const occupiedUnits = allUnits.filter(
       (u) => u.tenantLeases.length > 0 || u.guestStays.some((g) => g.status === "CHECKED_IN")
     ).length;
@@ -493,7 +496,9 @@ export async function getPropertyDetail(id: string) {
     };
   });
 
-  const totalUnits = unitTypes.reduce((sum, ut) => sum + ut.unitCount, 0);
+  // Real Unit rows, not UnitType.unitCount — see the matching note in
+  // getPropertiesList above for why that field can drift from reality.
+  const totalUnits = unitTypes.reduce((sum, ut) => sum + ut.units.length, 0);
   const occupiedUnits = unitTypes.reduce(
     (sum, ut) => sum + ut.units.filter((u) => u.occupied).length,
     0
