@@ -1,6 +1,7 @@
 "use client";
 
 import { useTranslations } from "next-intl";
+import Image from "next/image";
 import { Link, usePathname } from "@/i18n/navigation";
 import {
   Building2,
@@ -14,7 +15,6 @@ import {
   ArrowLeftRight,
   BarChart3,
   Settings,
-  Building,
   FileSpreadsheet,
 } from "lucide-react";
 import {
@@ -53,8 +53,8 @@ export function AppSidebar() {
         <SidebarMenu>
           <SidebarMenuItem>
             <SidebarMenuButton size="lg" render={<Link href="/" />}>
-              <div className="flex aspect-square size-8 items-center justify-center rounded-lg bg-linear-to-br from-sidebar-primary to-sidebar-primary/70 text-sidebar-primary-foreground shadow-(--shadow-sm)">
-                <Building className="size-4" />
+              <div className="flex aspect-square size-8 shrink-0 items-center justify-center overflow-hidden rounded-lg bg-white shadow-(--shadow-sm)">
+                <Image src="/logo.jpg" alt="" width={32} height={32} className="size-full object-contain" />
               </div>
               <span className="truncate font-semibold">{t("brand")}</span>
             </SidebarMenuButton>
