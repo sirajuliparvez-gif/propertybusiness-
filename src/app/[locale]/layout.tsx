@@ -25,7 +25,7 @@ const notoSansBengali = Noto_Sans_Bengali({
 });
 
 export const metadata: Metadata = {
-  title: "Property Management Dashboard",
+  title: "Reshmi Enterprise",
   description: "Internal management & finance dashboard",
 };
 
