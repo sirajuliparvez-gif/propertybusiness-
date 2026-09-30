@@ -6,7 +6,7 @@ import { Search } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { InputGroup, InputGroupAddon, InputGroupInput } from "@/components/ui/input-group";
 import { InitialAvatar } from "@/components/properties/initial-avatar";
-import { StatusPill, rentPillStatus } from "@/components/properties/status-pill";
+import { StatusPill, isRentSettled, rentPillStatus } from "@/components/properties/status-pill";
 import { RecordTenantRentPaymentDialog } from "@/components/properties/record-tenant-rent-payment-dialog";
 import { formatTaka } from "@/lib/format";
 import { cn } from "@/lib/utils";
@@ -36,7 +36,7 @@ export function MobileRentList({
   const counts = useMemo(
     () => ({
       all: payments.length,
-      paid: payments.filter((p) => p.overdueAmount <= 0).length,
+      paid: payments.filter((p) => isRentSettled(p.rentStatus, p.overdueAmount)).length,
       overdue: payments.filter((p) => p.pastDueAmount > 0).length,
     }),
     [payments]
@@ -45,7 +45,7 @@ export function MobileRentList({
   const filtered = useMemo(() => {
     const byStatus =
       filter === "paid"
-        ? payments.filter((p) => p.overdueAmount <= 0)
+        ? payments.filter((p) => isRentSettled(p.rentStatus, p.overdueAmount))
         : filter === "overdue"
           ? payments.filter((p) => p.pastDueAmount > 0)
           : payments;

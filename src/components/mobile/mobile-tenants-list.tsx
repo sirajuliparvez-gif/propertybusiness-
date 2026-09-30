@@ -8,7 +8,7 @@ import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { InputGroup, InputGroupAddon, InputGroupInput } from "@/components/ui/input-group";
 import { InitialAvatar } from "@/components/properties/initial-avatar";
-import { StatusPill, rentPillStatus } from "@/components/properties/status-pill";
+import { StatusPill, isRentSettled, rentPillStatus } from "@/components/properties/status-pill";
 import { formatTaka } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import type { PropertyDetail } from "@/lib/properties-data";
@@ -31,7 +31,7 @@ export function MobileTenantsList({ tenants }: { tenants: PropertyDetail["tenant
   const filtered = useMemo(() => {
     const byStatus =
       filter === "paid"
-        ? tenants.filter((tn) => tn.leaseStatus === "ACTIVE" && tn.overdueAmount <= 0)
+        ? tenants.filter((tn) => tn.leaseStatus === "ACTIVE" && isRentSettled(tn.rentStatus, tn.overdueAmount))
         : filter === "overdue"
           ? tenants.filter((tn) => tn.leaseStatus === "ACTIVE" && tn.pastDueAmount > 0)
           : filter === "former"

@@ -16,7 +16,7 @@ import { InputGroup, InputGroupAddon, InputGroupInput } from "@/components/ui/in
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { InitialAvatar } from "@/components/properties/initial-avatar";
-import { StatusPill, rentPillStatus } from "@/components/properties/status-pill";
+import { StatusPill, isRentSettled, rentPillStatus } from "@/components/properties/status-pill";
 import { RecordTenantRentPaymentDialog } from "@/components/properties/record-tenant-rent-payment-dialog";
 import { formatTaka, formatDate } from "@/lib/format";
 import { paymentMethodLabel } from "@/lib/payment-method";
@@ -53,7 +53,7 @@ export function RentCollectionTable({ payments }: { payments: RentCollectionData
   const counts = useMemo(
     () => ({
       all: payments.length,
-      paid: payments.filter((p) => p.overdueAmount <= 0).length,
+      paid: payments.filter((p) => isRentSettled(p.rentStatus, p.overdueAmount)).length,
       overdue: payments.filter((p) => p.pastDueAmount > 0).length,
     }),
     [payments]
@@ -64,7 +64,7 @@ export function RentCollectionTable({ payments }: { payments: RentCollectionData
       propertyFilter === ALL_PROPERTIES ? payments : payments.filter((p) => p.propertyId === propertyFilter);
     const byStatus =
       filter === "paid"
-        ? byProperty.filter((p) => p.overdueAmount <= 0)
+        ? byProperty.filter((p) => isRentSettled(p.rentStatus, p.overdueAmount))
         : filter === "overdue"
           ? byProperty.filter((p) => p.pastDueAmount > 0)
           : byProperty;

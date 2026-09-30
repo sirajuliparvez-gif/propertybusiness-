@@ -13,7 +13,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { InitialAvatar } from "@/components/properties/initial-avatar";
-import { StatusPill, rentPillStatus } from "@/components/properties/status-pill";
+import { StatusPill, isRentSettled, rentPillStatus } from "@/components/properties/status-pill";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -68,7 +68,7 @@ export function TenantsTable({
 
     const byStatus =
       filter === "paid"
-        ? byProperty.filter((tn) => tn.leaseStatus === "ACTIVE" && tn.overdueAmount <= 0)
+        ? byProperty.filter((tn) => tn.leaseStatus === "ACTIVE" && isRentSettled(tn.rentStatus, tn.overdueAmount))
         : filter === "overdue"
           ? byProperty.filter((tn) => tn.leaseStatus === "ACTIVE" && tn.pastDueAmount > 0)
           : filter === "former"

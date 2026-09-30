@@ -9,6 +9,13 @@ export function rentPillStatus(status: Status, pastDue: boolean): Status {
   return status === "UNPAID" && !pastDue ? "PENDING" : status;
 }
 
+// "Paid" means this month is actually settled. A lease with nothing owing
+// because its rent is ৳0 has no recorded payment, so it stays unpaid until
+// one is recorded instead of landing in the paid list automatically.
+export function isRentSettled(status: Status, overdueAmount: number) {
+  return overdueAmount <= 0 && (status === "PAID" || status === "ADJUSTED_FROM_DOWNPAYMENT");
+}
+
 export function StatusPill({ status, labels }: { status: Status; labels: Record<string, string> }) {
   if (!status) return null;
   const isPaid = status === "PAID" || status === "ADJUSTED_FROM_DOWNPAYMENT";
