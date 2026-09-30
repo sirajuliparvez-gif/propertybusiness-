@@ -17,7 +17,7 @@ import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { InitialAvatar } from "@/components/properties/initial-avatar";
-import { StatusPill } from "@/components/properties/status-pill";
+import { StatusPill, rentPillStatus } from "@/components/properties/status-pill";
 import { StatTile } from "@/components/stat-tile";
 import { RecordTenantRentPaymentDialog } from "@/components/properties/record-tenant-rent-payment-dialog";
 import { VacateTenantDialog } from "@/components/properties/vacate-tenant-dialog";
@@ -44,6 +44,7 @@ export default async function TenantProfilePage({
     PAID: t("paid"),
     PARTIAL: t("pending"),
     UNPAID: t("overdueStatus"),
+    PENDING: t("dueInPeriod"),
     ADJUSTED_FROM_DOWNPAYMENT: t("paid"),
   };
   const progressPct = tenant.totalDue > 0 ? Math.min(100, Math.round((tenant.totalPaid / tenant.totalDue) * 100)) : 0;
@@ -87,7 +88,7 @@ export default async function TenantProfilePage({
                   {t("vacatedLabel")}
                 </Badge>
               ) : (
-                <StatusPill status={tenant.rentStatus} labels={rentStatusLabels} />
+                <StatusPill status={rentPillStatus(tenant.rentStatus, tenant.rentPastDue)} labels={rentStatusLabels} />
               )}
             </div>
           </div>
@@ -409,7 +410,7 @@ export default async function TenantProfilePage({
                 {tenant.payments.map((p) => (
                   <li
                     key={p.id}
-                    className={`flex items-center gap-3 px-4 py-3 ${p.isVirtual ? "bg-destructive/5" : ""}`}
+                    className={`flex items-center gap-3 px-4 py-3 ${p.pastDue ? "bg-destructive/5" : ""}`}
                   >
                     <div className="min-w-0 flex-1">
                       <p className="font-mono text-sm font-medium">{p.month}</p>
@@ -426,7 +427,7 @@ export default async function TenantProfilePage({
                       <p className="font-mono text-sm font-semibold tabular-nums">
                         {formatTaka(p.paidAmount)}
                       </p>
-                      <StatusPill status={p.status} labels={rentStatusLabels} />
+                      <StatusPill status={rentPillStatus(p.status, p.pastDue)} labels={rentStatusLabels} />
                     </div>
                   </li>
                 ))}
@@ -463,7 +464,7 @@ export default async function TenantProfilePage({
                       {p.paidAt ? formatDate(p.paidAt) : "—"}
                     </TableCell>
                     <TableCell>
-                      <StatusPill status={p.status} labels={rentStatusLabels} />
+                      <StatusPill status={rentPillStatus(p.status, p.pastDue)} labels={rentStatusLabels} />
                     </TableCell>
                   </TableRow>
                 ))}

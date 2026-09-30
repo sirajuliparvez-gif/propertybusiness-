@@ -13,7 +13,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { InitialAvatar } from "@/components/properties/initial-avatar";
-import { StatusPill } from "@/components/properties/status-pill";
+import { StatusPill, rentPillStatus } from "@/components/properties/status-pill";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -44,6 +44,7 @@ export function TenantsTable({
     PAID: t("paid"),
     PARTIAL: t("pending"),
     UNPAID: t("overdueStatus"),
+    PENDING: t("dueInPeriod"),
     ADJUSTED_FROM_DOWNPAYMENT: t("paid"),
   };
 
@@ -69,7 +70,7 @@ export function TenantsTable({
       filter === "paid"
         ? byProperty.filter((tn) => tn.leaseStatus === "ACTIVE" && tn.overdueAmount <= 0)
         : filter === "overdue"
-          ? byProperty.filter((tn) => tn.leaseStatus === "ACTIVE" && tn.overdueAmount > 0)
+          ? byProperty.filter((tn) => tn.leaseStatus === "ACTIVE" && tn.pastDueAmount > 0)
           : filter === "former"
             ? byProperty.filter((tn) => tn.leaseStatus !== "ACTIVE")
             : byProperty;
@@ -265,10 +266,10 @@ export function TenantsTable({
                       </div>
                     ) : (
                       <div className="flex flex-col gap-0.5">
-                        <StatusPill status={tn.rentStatus} labels={rentStatusLabels} />
-                        {tn.overdueMonths.length > 1 ? (
+                        <StatusPill status={rentPillStatus(tn.rentStatus, tn.rentPastDue)} labels={rentStatusLabels} />
+                        {tn.pastDueMonthsCount > 1 ? (
                           <span className="text-xs font-medium text-destructive">
-                            {t("monthsOverdueCount", { count: tn.overdueMonths.length })}
+                            {t("monthsOverdueCount", { count: tn.pastDueMonthsCount })}
                           </span>
                         ) : null}
                       </div>

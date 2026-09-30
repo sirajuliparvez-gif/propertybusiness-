@@ -1,6 +1,8 @@
 import { dhakaNow } from "@/lib/dhaka-time";
 import { cache } from "react";
 import { prisma } from "@/lib/prisma";
+import { getAllTenantsData } from "@/lib/tenants-data";
+import { isMonthPastDue, RENT_DUE_DAY } from "@/lib/rent-ledger";
 
 const DAYS_AHEAD = 7; // "expiring/due soon" window
 
@@ -175,7 +177,7 @@ export const getActionRequiredData = cache(async function getActionRequiredData(
       unitLabel: r.tenantLease.unit.label,
       amount: Number(r.dueAmount) - Number(r.paidAmount),
       dueDate: r.dueDate,
-      overdue: r.dueDate < now,
+      overdue: isMonthPastDue(r.month, RENT_DUE_DAY, now),
     })),
     utilityDue: utilityDue.map((u) => ({
       id: u.id,
@@ -380,11 +382,10 @@ export async function getPropertyPerformance() {
 export async function getTotalOutstanding() {
   const now = dhakaNow();
 
-  const [rentAgg, utilityAgg, payrollAgg] = await Promise.all([
-    prisma.rentPayment.aggregate({
-      _sum: { dueAmount: true, paidAmount: true },
-      where: { status: { in: ["UNPAID", "PARTIAL"] }, dueDate: { lt: now } },
-    }),
+  const [tenantsData, utilityAgg, payrollAgg] = await Promise.all([
+    // Rent comes from the ledger (not just recorded RentPayment rows) so months
+    // nobody has touched yet count too, and only once past the 10th.
+    getAllTenantsData(),
     prisma.utilityBill.aggregate({
       _sum: { amount: true },
       where: { status: "UNPAID", dueDate: { lt: now } },
@@ -395,7 +396,7 @@ export async function getTotalOutstanding() {
     }),
   ]);
 
-  const rent = Number(rentAgg._sum.dueAmount ?? 0) - Number(rentAgg._sum.paidAmount ?? 0);
+  const rent = tenantsData.totalPastDueRent;
   const utility = Number(utilityAgg._sum.amount ?? 0);
   const payroll = Number(payrollAgg._sum.amountPaid ?? 0);
 

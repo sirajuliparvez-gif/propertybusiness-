@@ -2,7 +2,7 @@ import { dhakaNow } from "@/lib/dhaka-time";
 import { prisma } from "@/lib/prisma";
 import { computeServiceChargeAmount } from "@/lib/service-charge";
 import { attachElectricityConsumption, latestElectricityReadingByUnit } from "@/lib/electricity-consumption";
-import { buildRentLedger, overdueEntries, totalOverdue } from "@/lib/rent-ledger";
+import { buildRentLedger, overdueEntries, pastDueEntries, totalOverdue, totalPastDue, RENT_DUE_DAY } from "@/lib/rent-ledger";
 import { splitUtilityBillTransactions } from "@/lib/utility-bill-split";
 import { fromLedgerStatus } from "@/lib/employees-data";
 
@@ -420,7 +420,9 @@ export async function getPropertyDetail(id: string) {
                 status: rp.status,
                 paidAt: rp.paidAt,
                 method: rp.transactions[0]?.method ?? null,
-              }))
+              })),
+              dhakaNow(),
+              RENT_DUE_DAY
             )
           : null;
 
@@ -437,6 +439,8 @@ export async function getPropertyDetail(id: string) {
               // months nobody ever recorded) — not just the latest month.
               overdueAmount: totalOverdue(activeLeaseLedger!),
               overdueMonthsCount: overdueEntries(activeLeaseLedger!).length,
+              pastDueAmount: totalPastDue(activeLeaseLedger!),
+              pastDueMonthsCount: pastDueEntries(activeLeaseLedger!).length,
             }
           : null;
 
@@ -575,10 +579,12 @@ export async function getPropertyDetail(id: string) {
             paidAt: rp.paidAt,
             method: rp.transactions[0]?.method ?? null,
           })),
-          asOf
+          asOf,
+          RENT_DUE_DAY
         );
         const overdue = overdueEntries(ledger);
         const overdueAmount = tl.status === "ACTIVE" ? totalOverdue(ledger) : 0;
+        const pastDueAmount = tl.status === "ACTIVE" ? totalPastDue(ledger) : 0;
         const currentEntry = ledger[ledger.length - 1] ?? null;
         return {
           id: tl.id,
@@ -596,6 +602,9 @@ export async function getPropertyDetail(id: string) {
           rentStatus: tl.status === "ACTIVE" ? (currentEntry?.status ?? null) : null,
           overdueAmount,
           overdueMonths: tl.status === "ACTIVE" ? overdue : [],
+          pastDueAmount,
+          pastDueMonthsCount: tl.status === "ACTIVE" ? pastDueEntries(ledger).length : 0,
+          rentPastDue: tl.status === "ACTIVE" && (currentEntry?.pastDue ?? false),
           paymentMethod: currentEntry?.method ?? null,
           startDate: tl.startDate,
           leftOn: tl.status !== "ACTIVE" ? (tl.movedOutAt ?? tl.endDate) : null,
@@ -606,6 +615,7 @@ export async function getPropertyDetail(id: string) {
   );
   const activeTenants = tenants.filter((t) => t.leaseStatus === "ACTIVE");
   const totalOverdueRent = activeTenants.reduce((sum, t) => sum + t.overdueAmount, 0);
+  const totalPastDueRent = activeTenants.reduce((sum, t) => sum + t.pastDueAmount, 0);
 
   // Flat guest-stays list, same "full history" shape as `tenants` above.
   const guestStays = property.unitTypes.flatMap((ut) =>
@@ -853,6 +863,7 @@ export async function getPropertyDetail(id: string) {
     payrollCost,
     totalExpense,
     totalOverdueRent,
+    totalPastDueRent,
     totalOverduePayroll,
     netProfit,
     profitMargin,

@@ -38,6 +38,9 @@ export type RentLedgerEntry<M = string | null> = {
   paidAmount: number;
   status: "PAID" | "UNPAID" | "PARTIAL" | "ADJUSTED_FROM_DOWNPAYMENT";
   gap: number; // max(0, dueAmount - paidAmount)
+  // Still owing AND past the grace window (see isMonthPastDue) — what the UI
+  // calls "বকেয়া". `gap` alone also covers rent that's simply not paid yet.
+  pastDue: boolean;
   rentPaymentId: string | null; // null means this month has no real row yet
   paidAt: Date | null;
   method: M | null;
@@ -57,6 +60,18 @@ function compareMonthKeys(a: string, b: string) {
   return a < b ? -1 : a > b ? 1 : 0;
 }
 
+// First month the app tracks dues for — accounts were reset on 2026-10-01.
+export const LEDGER_START_MONTH = "2026-10";
+
+// Rent is payable from the 1st through the 10th; only after the 10th does an
+// unpaid month turn into বকেয়া.
+export const RENT_DUE_DAY = 10;
+
+export function isMonthPastDue(month: string, dueDay: number, today: Date = dhakaNow()) {
+  const todayKey = monthKeyOf(today);
+  return compareMonthKeys(month, todayKey) < 0 || (month === todayKey && today.getDate() > dueDay);
+}
+
 // Safety cap so a bad/garbage startDate (or a lease decades old) can never
 // spin the loop below into something unreasonable — 50 years of months is
 // already far beyond any real lease this app will ever see.
@@ -66,21 +81,22 @@ export function buildRentLedger<M = string | null>(
   leaseStartDate: Date,
   monthlyRentAmount: number,
   existingPayments: ExistingRentPaymentRow<M>[],
-  asOf: Date = dhakaNow()
+  asOf: Date = dhakaNow(),
+  dueDay = 1
 ): RentLedgerEntry<M>[] {
-  // Never *invent* an owed month before the current calendar month, no
-  // matter how far in the past leaseStartDate/joinedAt actually is. A lease
-  // keeps its real historical start date for reference (contract length,
-  // renewal timing, etc.), and any month that genuinely has a recorded
-  // RentPayment row — however old — still shows up below exactly as before
-  // (real payment history is never hidden). What changes is the synthesized
-  // "nobody ever recorded this month, so treat it as UNPAID" fallback: that
-  // only kicks in from the current month onward. A decades-old or
-  // bulk-imported lease with zero payment rows must never surface years of
-  // retroactive "overdue" that nobody ever intended to bill or collect.
-  // `cutoverKey` is real "now", deliberately not `asOf` (which for an
-  // already-ended lease can itself be in the past).
-  const cutoverKey = monthKeyOf(dhakaNow());
+  // Never *invent* an owed month before LEDGER_START_MONTH, no matter how far
+  // in the past leaseStartDate/joinedAt actually is. A lease keeps its real
+  // historical start date for reference (contract length, renewal timing,
+  // etc.), and any month that genuinely has a recorded RentPayment row —
+  // however old — still shows up below exactly as before (real payment
+  // history is never hidden). What changes is the synthesized "nobody ever
+  // recorded this month, so treat it as UNPAID" fallback: that only kicks in
+  // from LEDGER_START_MONTH onward, so a decades-old or bulk-imported lease
+  // with zero payment rows never surfaces years of retroactive "overdue" —
+  // but rent left unpaid from that month on keeps accumulating as বকেয়া
+  // instead of vanishing when the calendar rolls over.
+  const today = dhakaNow();
+  const cutoverKey = LEDGER_START_MONTH;
   const startKey = monthKeyOf(leaseStartDate);
   const endKey = monthKeyOf(asOf);
   const byMonth = new Map(existingPayments.map((p) => [p.month, p]));
@@ -103,6 +119,8 @@ export function buildRentLedger<M = string | null>(
         paidAmount: existing.paidAmount,
         status: existing.status,
         gap: Math.max(0, existing.dueAmount - existing.paidAmount),
+        pastDue:
+          existing.dueAmount - existing.paidAmount > 0 && isMonthPastDue(cursor, dueDay, today),
         rentPaymentId: existing.id,
         paidAt: existing.paidAt,
         method: existing.method ?? null,
@@ -113,11 +131,12 @@ export function buildRentLedger<M = string | null>(
       const [y, m] = cursor.split("-").map(Number);
       entries.push({
         month: cursor,
-        dueDate: new Date(y, m - 1, 1),
+        dueDate: new Date(y, m - 1, dueDay),
         dueAmount: monthlyRentAmount,
         paidAmount: 0,
         status: "UNPAID",
         gap: Math.max(0, monthlyRentAmount),
+        pastDue: monthlyRentAmount > 0 && isMonthPastDue(cursor, dueDay, today),
         rentPaymentId: null,
         paidAt: null,
         method: null,
@@ -144,4 +163,15 @@ export function totalOverdue<M>(entries: RentLedgerEntry<M>[]) {
 // something, oldest first (the order you'd want to settle them in).
 export function overdueEntries<M>(entries: RentLedgerEntry<M>[]) {
   return entries.filter((e) => e.gap > 0);
+}
+
+// Only the months that are owing AND past the grace window — the "বকেয়া"
+// figure, as opposed to overdueEntries/totalOverdue which also include rent
+// that's simply still inside its payment window.
+export function pastDueEntries<M>(entries: RentLedgerEntry<M>[]) {
+  return entries.filter((e) => e.pastDue);
+}
+
+export function totalPastDue<M>(entries: RentLedgerEntry<M>[]) {
+  return pastDueEntries(entries).reduce((sum, e) => sum + e.gap, 0);
 }

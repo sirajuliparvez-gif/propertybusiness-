@@ -8,7 +8,7 @@ import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { InputGroup, InputGroupAddon, InputGroupInput } from "@/components/ui/input-group";
 import { InitialAvatar } from "@/components/properties/initial-avatar";
-import { StatusPill } from "@/components/properties/status-pill";
+import { StatusPill, rentPillStatus } from "@/components/properties/status-pill";
 import { formatTaka } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import type { PropertyDetail } from "@/lib/properties-data";
@@ -24,6 +24,7 @@ export function MobileTenantsList({ tenants }: { tenants: PropertyDetail["tenant
     PAID: t("paid"),
     PARTIAL: t("pending"),
     UNPAID: t("overdueStatus"),
+    PENDING: t("dueInPeriod"),
     ADJUSTED_FROM_DOWNPAYMENT: t("paid"),
   };
 
@@ -32,7 +33,7 @@ export function MobileTenantsList({ tenants }: { tenants: PropertyDetail["tenant
       filter === "paid"
         ? tenants.filter((tn) => tn.leaseStatus === "ACTIVE" && tn.overdueAmount <= 0)
         : filter === "overdue"
-          ? tenants.filter((tn) => tn.leaseStatus === "ACTIVE" && tn.overdueAmount > 0)
+          ? tenants.filter((tn) => tn.leaseStatus === "ACTIVE" && tn.pastDueAmount > 0)
           : filter === "former"
             ? tenants.filter((tn) => tn.leaseStatus !== "ACTIVE")
             : tenants;
@@ -114,7 +115,7 @@ export function MobileTenantsList({ tenants }: { tenants: PropertyDetail["tenant
                           {t("vacatedLabel")}
                         </Badge>
                       ) : (
-                        <StatusPill status={tn.rentStatus} labels={rentStatusLabels} />
+                        <StatusPill status={rentPillStatus(tn.rentStatus, tn.rentPastDue)} labels={rentStatusLabels} />
                       )}
                     </div>
                   </Link>

@@ -6,7 +6,7 @@ import { getLocale } from "next-intl/server";
 import { prisma } from "@/lib/prisma";
 import { redirect } from "@/i18n/navigation";
 import { computeServiceChargeAmount } from "@/lib/service-charge";
-import { buildRentLedger, overdueEntries, totalOverdue } from "@/lib/rent-ledger";
+import { buildRentLedger, overdueEntries, totalOverdue, RENT_DUE_DAY } from "@/lib/rent-ledger";
 
 function str(formData: FormData, key: string) {
   const v = formData.get(key);
@@ -179,7 +179,8 @@ export async function recordOverdueRentPayment(formData: FormData) {
       status: rp.status,
       paidAt: rp.paidAt,
     })),
-    asOf
+    asOf,
+    RENT_DUE_DAY
   );
   const overdue = overdueEntries(ledger); // oldest month first
   if (overdue.length === 0) throw new Error("No overdue rent for this tenant");

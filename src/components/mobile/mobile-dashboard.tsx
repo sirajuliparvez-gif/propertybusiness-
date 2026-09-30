@@ -3,7 +3,7 @@ import { Building2 } from "lucide-react";
 import { Link } from "@/i18n/navigation";
 import { Card, CardContent } from "@/components/ui/card";
 import { InitialAvatar } from "@/components/properties/initial-avatar";
-import { StatusPill } from "@/components/properties/status-pill";
+import { StatusPill, rentPillStatus } from "@/components/properties/status-pill";
 import { formatTaka } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import type { DashboardData } from "@/app/[locale]/(dashboard)/page";
@@ -16,12 +16,13 @@ export async function MobileDashboard({ data }: { data: DashboardData }) {
     PAID: tp("paid"),
     PARTIAL: tp("pending"),
     UNPAID: tp("overdueStatus"),
+    PENDING: tp("dueInPeriod"),
     ADJUSTED_FROM_DOWNPAYMENT: tp("paid"),
   };
 
   const unpaidTenants = data.rentCollection.payments
-    .filter((p) => p.overdueAmount > 0)
-    .sort((a, b) => b.overdueAmount - a.overdueAmount)
+    .filter((p) => p.pastDueAmount > 0)
+    .sort((a, b) => b.pastDueAmount - a.pastDueAmount)
     .slice(0, 5);
 
   const topProperties = [...data.propertyPerformance]
@@ -112,9 +113,9 @@ export async function MobileDashboard({ data }: { data: DashboardData }) {
                     </div>
                     <div className="shrink-0 text-right">
                       <p className="font-mono text-sm font-semibold tabular-nums">
-                        {formatTaka(p.overdueAmount)}
+                        {formatTaka(p.pastDueAmount)}
                       </p>
-                      <StatusPill status={p.rentStatus} labels={rentStatusLabels} />
+                      <StatusPill status={rentPillStatus(p.rentStatus, p.rentPastDue)} labels={rentStatusLabels} />
                     </div>
                   </Link>
                 </li>

@@ -183,6 +183,7 @@
     "paid": "Paid",
     "pending": "Pending",
     "overdueStatus": "Overdue",
+    "dueInPeriod": "Payment period",
     "viewAllTenants": "View all",
     "expenseTypeUtility": "Utility Bill",
     "expenseTypeMaintenance": "Repair",

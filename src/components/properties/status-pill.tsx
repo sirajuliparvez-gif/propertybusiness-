@@ -3,6 +3,12 @@ import { cn } from "@/lib/utils";
 
 type Status = "PAID" | "PENDING" | "UNPAID" | "PARTIAL" | "ADJUSTED_FROM_DOWNPAYMENT" | null;
 
+// Unpaid rent inside its payment window (1st–10th) isn't overdue yet: show it
+// with the amber "pending" styling and the dueInPeriod label instead of red.
+export function rentPillStatus(status: Status, pastDue: boolean): Status {
+  return status === "UNPAID" && !pastDue ? "PENDING" : status;
+}
+
 export function StatusPill({ status, labels }: { status: Status; labels: Record<string, string> }) {
   if (!status) return null;
   const isPaid = status === "PAID" || status === "ADJUSTED_FROM_DOWNPAYMENT";

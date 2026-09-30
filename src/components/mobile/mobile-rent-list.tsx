@@ -6,7 +6,7 @@ import { Search } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { InputGroup, InputGroupAddon, InputGroupInput } from "@/components/ui/input-group";
 import { InitialAvatar } from "@/components/properties/initial-avatar";
-import { StatusPill } from "@/components/properties/status-pill";
+import { StatusPill, rentPillStatus } from "@/components/properties/status-pill";
 import { RecordTenantRentPaymentDialog } from "@/components/properties/record-tenant-rent-payment-dialog";
 import { formatTaka } from "@/lib/format";
 import { cn } from "@/lib/utils";
@@ -29,6 +29,7 @@ export function MobileRentList({
     PAID: t("paid"),
     PARTIAL: t("pending"),
     UNPAID: t("overdueStatus"),
+    PENDING: t("dueInPeriod"),
     ADJUSTED_FROM_DOWNPAYMENT: t("paid"),
   };
 
@@ -36,7 +37,7 @@ export function MobileRentList({
     () => ({
       all: payments.length,
       paid: payments.filter((p) => p.overdueAmount <= 0).length,
-      overdue: payments.filter((p) => p.overdueAmount > 0).length,
+      overdue: payments.filter((p) => p.pastDueAmount > 0).length,
     }),
     [payments]
   );
@@ -46,7 +47,7 @@ export function MobileRentList({
       filter === "paid"
         ? payments.filter((p) => p.overdueAmount <= 0)
         : filter === "overdue"
-          ? payments.filter((p) => p.overdueAmount > 0)
+          ? payments.filter((p) => p.pastDueAmount > 0)
           : payments;
     const q = query.trim().toLowerCase();
     if (!q) return byStatus;
@@ -133,7 +134,7 @@ export function MobileRentList({
         <Card className="overflow-hidden p-0">
           <ul className="divide-y">
             {filtered.map((p) => (
-              <li key={p.id} className={p.overdueAmount > 0 ? "bg-destructive/5" : undefined}>
+              <li key={p.id} className={p.pastDueAmount > 0 ? "bg-destructive/5" : undefined}>
                 <RecordTenantRentPaymentDialog
                   propertyId={p.propertyId}
                   tenantLeaseId={p.id}
@@ -157,10 +158,10 @@ export function MobileRentList({
                         <p className="font-mono text-sm font-semibold tabular-nums">
                           {formatTaka(p.monthlyRentAmount + p.serviceChargeAmount)}
                         </p>
-                        <StatusPill status={p.rentStatus} labels={rentStatusLabels} />
-                        {p.overdueMonths.length > 1 ? (
+                        <StatusPill status={rentPillStatus(p.rentStatus, p.rentPastDue)} labels={rentStatusLabels} />
+                        {p.pastDueMonthsCount > 1 ? (
                           <p className="text-xs font-medium text-destructive">
-                            {t("monthsOverdueCount", { count: p.overdueMonths.length })}
+                            {t("monthsOverdueCount", { count: p.pastDueMonthsCount })}
                           </p>
                         ) : null}
                       </div>

@@ -16,7 +16,7 @@ import { InputGroup, InputGroupAddon, InputGroupInput } from "@/components/ui/in
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { InitialAvatar } from "@/components/properties/initial-avatar";
-import { StatusPill } from "@/components/properties/status-pill";
+import { StatusPill, rentPillStatus } from "@/components/properties/status-pill";
 import { RecordTenantRentPaymentDialog } from "@/components/properties/record-tenant-rent-payment-dialog";
 import { formatTaka, formatDate } from "@/lib/format";
 import { paymentMethodLabel } from "@/lib/payment-method";
@@ -38,6 +38,7 @@ export function RentCollectionTable({ payments }: { payments: RentCollectionData
     PAID: t("paid"),
     PARTIAL: t("pending"),
     UNPAID: t("overdueStatus"),
+    PENDING: t("dueInPeriod"),
     ADJUSTED_FROM_DOWNPAYMENT: t("paid"),
   };
 
@@ -53,7 +54,7 @@ export function RentCollectionTable({ payments }: { payments: RentCollectionData
     () => ({
       all: payments.length,
       paid: payments.filter((p) => p.overdueAmount <= 0).length,
-      overdue: payments.filter((p) => p.overdueAmount > 0).length,
+      overdue: payments.filter((p) => p.pastDueAmount > 0).length,
     }),
     [payments]
   );
@@ -65,7 +66,7 @@ export function RentCollectionTable({ payments }: { payments: RentCollectionData
       filter === "paid"
         ? byProperty.filter((p) => p.overdueAmount <= 0)
         : filter === "overdue"
-          ? byProperty.filter((p) => p.overdueAmount > 0)
+          ? byProperty.filter((p) => p.pastDueAmount > 0)
           : byProperty;
 
     const q = query.trim().toLowerCase();
@@ -206,7 +207,7 @@ export function RentCollectionTable({ payments }: { payments: RentCollectionData
           <TableBody>
             {filtered.map((p) => {
               return (
-                <TableRow key={p.id} className={p.overdueAmount > 0 ? "bg-destructive/5" : undefined}>
+                <TableRow key={p.id} className={p.pastDueAmount > 0 ? "bg-destructive/5" : undefined}>
                   <TableCell>
                     <Link href={`/tenants/${p.id}`} className="flex items-center gap-2 hover:underline">
                       <InitialAvatar name={p.tenantName} />
@@ -245,10 +246,10 @@ export function RentCollectionTable({ payments }: { payments: RentCollectionData
                   </TableCell>
                   <TableCell>
                     <div className="flex flex-col gap-0.5">
-                      <StatusPill status={p.rentStatus} labels={rentStatusLabels} />
-                      {p.overdueMonths.length > 1 ? (
+                      <StatusPill status={rentPillStatus(p.rentStatus, p.rentPastDue)} labels={rentStatusLabels} />
+                      {p.pastDueMonthsCount > 1 ? (
                         <span className="text-xs font-medium text-destructive">
-                          {t("monthsOverdueCount", { count: p.overdueMonths.length })}
+                          {t("monthsOverdueCount", { count: p.pastDueMonthsCount })}
                         </span>
                       ) : null}
                     </div>

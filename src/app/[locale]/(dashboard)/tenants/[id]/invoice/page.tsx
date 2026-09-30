@@ -9,6 +9,7 @@ import { getTenantProfile } from "@/lib/tenants-data";
 import { computeServiceChargeAmount } from "@/lib/service-charge";
 import { formatTaka, formatDate, monthLabel } from "@/lib/format";
 import { paymentMethodLabel } from "@/lib/payment-method";
+import { isMonthPastDue, RENT_DUE_DAY } from "@/lib/rent-ledger";
 import { InvoiceMonthSelect } from "@/components/properties/invoice-month-select";
 import { InvoicePrintButton } from "@/components/properties/invoice-print-button";
 
@@ -61,7 +62,7 @@ export default async function TenantInvoicePage({
   const rentStatusLabels: Record<string, string> = {
     PAID: t("paid"),
     PARTIAL: t("pending"),
-    UNPAID: t("overdueStatus"),
+    UNPAID: isMonthPastDue(selectedMonth, RENT_DUE_DAY) ? t("overdueStatus") : t("dueInPeriod"),
     ADJUSTED_FROM_DOWNPAYMENT: t("paid"),
   };
 

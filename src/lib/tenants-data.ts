@@ -2,7 +2,7 @@ import { dhakaNow } from "@/lib/dhaka-time";
 import { prisma } from "@/lib/prisma";
 import { computeServiceChargeAmount } from "@/lib/service-charge";
 import { attachElectricityConsumption, latestElectricityReadingByUnit } from "@/lib/electricity-consumption";
-import { buildRentLedger, overdueEntries, totalOverdue } from "@/lib/rent-ledger";
+import { buildRentLedger, overdueEntries, pastDueEntries, totalOverdue, totalPastDue, RENT_DUE_DAY } from "@/lib/rent-ledger";
 import { splitUtilityBillTransactions } from "@/lib/utility-bill-split";
 
 function monthRange(now: Date) {
@@ -133,10 +133,12 @@ export async function getAllTenantsData() {
               paidAt: rp.paidAt,
               method: rp.transactions[0]?.method ?? null,
             })),
-            asOf
+            asOf,
+            RENT_DUE_DAY
           );
           const overdue = overdueEntries(ledger);
           const overdueAmount = tl.status === "ACTIVE" ? totalOverdue(ledger) : 0;
+          const pastDueAmount = tl.status === "ACTIVE" ? totalPastDue(ledger) : 0;
           // The current month's own entry (real row or synthesized) — still
           // what the status pill/date columns show, now guaranteed to exist
           // instead of silently falling back to a stale older row.
@@ -157,6 +159,9 @@ export async function getAllTenantsData() {
             rentStatus: tl.status === "ACTIVE" ? (currentEntry?.status ?? null) : null,
             overdueAmount,
             overdueMonths: tl.status === "ACTIVE" ? overdue : [],
+            pastDueAmount,
+            pastDueMonthsCount: tl.status === "ACTIVE" ? pastDueEntries(ledger).length : 0,
+            rentPastDue: tl.status === "ACTIVE" && (currentEntry?.pastDue ?? false),
             utilityBillStatus: latestUtilityBillStatusByUnitId.get(u.id) ?? null,
             paymentMethod: currentEntry?.method ?? null,
             currentDueDate: currentEntry?.dueDate ?? null,
@@ -206,6 +211,7 @@ export async function getAllTenantsData() {
     0
   );
   const totalOverdueRent = activeTenants.reduce((sum, t) => sum + t.overdueAmount, 0);
+  const totalPastDueRent = activeTenants.reduce((sum, t) => sum + t.pastDueAmount, 0);
   const collectedThisMonth = Number(collected._sum.amount ?? 0);
   const settledThisMonthCount = activeTenants.filter(
     (t) => t.rentStatus === "PAID" || t.rentStatus === "ADJUSTED_FROM_DOWNPAYMENT"
@@ -219,6 +225,7 @@ export async function getAllTenantsData() {
     expectedIncome,
     collectedThisMonth,
     totalOverdueRent,
+    totalPastDueRent,
     collectionRate,
     propertiesWithVacantUnits,
   };
@@ -358,7 +365,8 @@ export async function getTenantProfile(leaseId: string) {
       paidAt: rp.paidAt,
       method: rp.transactions[0]?.method ?? null,
     })),
-    ledgerAsOf
+    ledgerAsOf,
+    RENT_DUE_DAY
   );
   // Newest first, matching the payment-history table's existing convention —
   // the ledger itself builds chronologically ascending.
@@ -371,6 +379,7 @@ export async function getTenantProfile(leaseId: string) {
     status: e.status,
     paidAt: e.paidAt,
     method: e.method ?? null,
+    pastDue: e.pastDue,
     // No RentPayment row exists yet for this month — nobody has recorded
     // anything, it's shown purely so the arrears aren't invisible.
     isVirtual: e.rentPaymentId === null,
@@ -442,6 +451,7 @@ export async function getTenantProfile(leaseId: string) {
     notes: lease.notes,
     payments,
     overdueMonths,
+    rentPastDue: lease.status === "ACTIVE" && (ledger[ledger.length - 1]?.pastDue ?? false),
     trackedMonths: tracked.length,
     totalDue,
     totalPaid,
