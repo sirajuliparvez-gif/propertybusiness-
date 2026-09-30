@@ -1,3 +1,4 @@
+import { dhakaNow } from "@/lib/dhaka-time";
 import { prisma } from "@/lib/prisma";
 
 function monthKey(d: Date) {
@@ -59,7 +60,7 @@ function deriveMonth(b: Bucket) {
 }
 
 export async function getReportsData() {
-  const now = new Date();
+  const now = dhakaNow();
   const rangeStart = new Date(now.getFullYear(), now.getMonth() - (MONTHS_BACK - 1), 1);
   const rangeEnd = new Date(now.getFullYear(), now.getMonth() + 1, 1);
 

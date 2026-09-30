@@ -1,3 +1,4 @@
+import { dhakaNow } from "@/lib/dhaka-time";
 import { getTranslations } from "next-intl/server";
 import {
   Building2,
@@ -36,7 +37,7 @@ import { MobileDashboard } from "@/components/mobile/mobile-dashboard";
 export type DashboardData = Awaited<ReturnType<typeof getDashboardData>>;
 
 async function getDashboardData() {
-  const now = new Date();
+  const now = dhakaNow();
   const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
   const monthEnd = new Date(now.getFullYear(), now.getMonth() + 1, 1);
 

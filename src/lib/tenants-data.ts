@@ -1,3 +1,4 @@
+import { dhakaNow } from "@/lib/dhaka-time";
 import { prisma } from "@/lib/prisma";
 import { computeServiceChargeAmount } from "@/lib/service-charge";
 import { attachElectricityConsumption, latestElectricityReadingByUnit } from "@/lib/electricity-consumption";
@@ -12,7 +13,7 @@ function monthRange(now: Date) {
 }
 
 export async function getAllTenantsData() {
-  const now = new Date();
+  const now = dhakaNow();
   const { monthStart, monthEnd } = monthRange(now);
 
   const [properties, collected] = await Promise.all([
@@ -110,7 +111,7 @@ export async function getAllTenantsData() {
           // Ended leases stop owing rent the day they left — building the
           // ledger up to "now" for a vacated tenant would invent phantom
           // overdue months for the period after they were gone.
-          const asOf = tl.status === "ACTIVE" ? new Date() : (tl.movedOutAt ?? tl.endDate ?? new Date());
+          const asOf = tl.status === "ACTIVE" ? dhakaNow() : (tl.movedOutAt ?? tl.endDate ?? dhakaNow());
           const serviceChargeAmount = computeServiceChargeAmount(
             Number(tl.monthlyRentAmount),
             tl.serviceChargeType,
@@ -336,7 +337,7 @@ export async function getTenantProfile(leaseId: string) {
   // getAllTenantsData: build the ledger only through when they were actually
   // still renting, not all the way to today.
   const ledgerAsOf =
-    lease.status === "ACTIVE" ? new Date() : (lease.movedOutAt ?? lease.endDate ?? new Date());
+    lease.status === "ACTIVE" ? dhakaNow() : (lease.movedOutAt ?? lease.endDate ?? dhakaNow());
   const leaseServiceChargeAmount = computeServiceChargeAmount(
     Number(lease.monthlyRentAmount),
     lease.serviceChargeType,
@@ -406,7 +407,7 @@ export async function getTenantProfile(leaseId: string) {
     }
   });
 
-  const now = new Date();
+  const now = dhakaNow();
   const durationMonths = Math.max(
     0,
     (now.getFullYear() - lease.startDate.getFullYear()) * 12 + (now.getMonth() - lease.startDate.getMonth())

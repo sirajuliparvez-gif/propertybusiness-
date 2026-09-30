@@ -1,3 +1,4 @@
+import { dhakaNow } from "@/lib/dhaka-time";
 import { prisma } from "@/lib/prisma";
 import { computeServiceChargeAmount } from "@/lib/service-charge";
 import { attachElectricityConsumption, latestElectricityReadingByUnit } from "@/lib/electricity-consumption";
@@ -22,7 +23,7 @@ function monthRange(now: Date) {
 }
 
 export async function getPropertiesList() {
-  const now = new Date();
+  const now = dhakaNow();
   const { monthStart, monthEnd } = monthRange(now);
 
   // Ordered ascending once to assign stable "P-001"-style display IDs by
@@ -187,7 +188,7 @@ export async function getAllTenants() {
 }
 
 export async function getPropertyDetail(id: string) {
-  const now = new Date();
+  const now = dhakaNow();
   const { monthStart, monthEnd } = monthRange(now);
 
   const [property, idOrder, monthTransactions] = await Promise.all([
@@ -555,7 +556,7 @@ export async function getPropertyDetail(id: string) {
   const tenants = property.unitTypes.flatMap((ut) =>
     ut.units.flatMap((u) =>
       u.tenantLeases.map((tl) => {
-        const asOf = tl.status === "ACTIVE" ? new Date() : (tl.movedOutAt ?? tl.endDate ?? new Date());
+        const asOf = tl.status === "ACTIVE" ? dhakaNow() : (tl.movedOutAt ?? tl.endDate ?? dhakaNow());
         const monthlyRentAmount = Number(tl.monthlyRentAmount);
         const serviceChargeValue = tl.serviceChargeValue != null ? Number(tl.serviceChargeValue) : null;
         const serviceChargeAmount = computeServiceChargeAmount(monthlyRentAmount, tl.serviceChargeType, serviceChargeValue);
@@ -636,7 +637,7 @@ export async function getPropertyDetail(id: string) {
     )
   );
 
-  const monthRangeNow = monthRange(new Date());
+  const monthRangeNow = monthRange(dhakaNow());
   const guestStayIncome = guestStays
     .filter(
       (g) =>
@@ -650,7 +651,7 @@ export async function getPropertyDetail(id: string) {
     activeTenants.reduce((sum, t) => sum + t.monthlyRentAmount + t.serviceChargeAmount, 0) + guestStayIncome;
 
   const staff = property.employees.map((e) => {
-    const asOf = e.status === "ACTIVE" ? new Date() : (e.terminatedAt ?? new Date());
+    const asOf = e.status === "ACTIVE" ? dhakaNow() : (e.terminatedAt ?? dhakaNow());
     const ledger = buildRentLedger(
       e.joinedAt,
       Number(e.salaryAmount),

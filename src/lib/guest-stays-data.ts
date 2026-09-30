@@ -1,3 +1,4 @@
+import { dhakaNow } from "@/lib/dhaka-time";
 import { prisma } from "@/lib/prisma";
 
 function monthRange(now: Date) {
@@ -20,8 +21,8 @@ function endOfDay(date: Date) {
 }
 
 export async function getAllGuestStaysData() {
-  const now = new Date();
-  const today = new Date();
+  const now = dhakaNow();
+  const today = dhakaNow();
   const { monthStart, monthEnd } = monthRange(now);
 
   const [stays, properties, revenueAgg] = await Promise.all([

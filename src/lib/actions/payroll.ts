@@ -1,5 +1,6 @@
 "use server";
 
+import { dhakaNow } from "@/lib/dhaka-time";
 import { revalidatePath } from "next/cache";
 import { getLocale } from "next-intl/server";
 import { prisma } from "@/lib/prisma";
@@ -114,7 +115,7 @@ export async function recordOverduePayrollPayment(formData: FormData) {
     where: { employeeId },
     select: { id: true, month: true, dueDate: true, dueAmount: true, amountPaid: true, status: true, paidAt: true },
   });
-  const asOf = employee.status === "ACTIVE" ? new Date() : (employee.terminatedAt ?? new Date());
+  const asOf = employee.status === "ACTIVE" ? dhakaNow() : (employee.terminatedAt ?? dhakaNow());
   const ledger = buildRentLedger(
     employee.joinedAt,
     Number(employee.salaryAmount),

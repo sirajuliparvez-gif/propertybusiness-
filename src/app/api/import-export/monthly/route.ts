@@ -1,3 +1,4 @@
+import { dhakaNow } from "@/lib/dhaka-time";
 import { NextResponse, type NextRequest } from "next/server";
 import { generateMonthlyWorkbook } from "@/lib/import-export/monthly";
 import { getCurrentUser } from "@/lib/auth/session";
@@ -19,7 +20,7 @@ export async function GET(req: NextRequest) {
   }
 
   const { buffer, propertyName } = await generateMonthlyWorkbook(propertyId);
-  const now = new Date();
+  const now = dhakaNow();
   const monthKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
   // Bengali property names aren't valid in the plain filename= parameter
   // (ASCII-only per RFC 6266) — ship both: an ASCII fallback and the real

@@ -1,3 +1,4 @@
+import { dhakaNow } from "@/lib/dhaka-time";
 import ExcelJS from "exceljs";
 import { prisma } from "@/lib/prisma";
 import { addHeaderedSheet, addDropdown } from "./excel-utils";
@@ -19,7 +20,7 @@ import {
 } from "./sheets";
 
 function currentMonthKey() {
-  const now = new Date();
+  const now = dhakaNow();
   return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
 }
 

@@ -1,3 +1,4 @@
+import { dhakaNow } from "@/lib/dhaka-time";
 import { prisma } from "@/lib/prisma";
 
 function monthRange(now: Date) {
@@ -35,7 +36,7 @@ const EXPENSE_TYPES = [
 ] as const;
 
 export async function getAllTransactionsData() {
-  const now = new Date();
+  const now = dhakaNow();
   const { monthStart, monthEnd } = monthRange(now);
 
   const transactions = await prisma.transaction.findMany({

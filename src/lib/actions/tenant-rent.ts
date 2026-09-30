@@ -1,5 +1,6 @@
 "use server";
 
+import { dhakaNow } from "@/lib/dhaka-time";
 import { revalidatePath } from "next/cache";
 import { getLocale } from "next-intl/server";
 import { prisma } from "@/lib/prisma";
@@ -158,7 +159,7 @@ export async function recordOverdueRentPayment(formData: FormData) {
     where: { tenantLeaseId },
     select: { id: true, month: true, dueDate: true, dueAmount: true, paidAmount: true, status: true, paidAt: true },
   });
-  const asOf = lease.status === "ACTIVE" ? new Date() : (lease.movedOutAt ?? lease.endDate ?? new Date());
+  const asOf = lease.status === "ACTIVE" ? dhakaNow() : (lease.movedOutAt ?? lease.endDate ?? dhakaNow());
   const overdueServiceChargeAmount = computeServiceChargeAmount(
     Number(lease.monthlyRentAmount),
     lease.serviceChargeType,

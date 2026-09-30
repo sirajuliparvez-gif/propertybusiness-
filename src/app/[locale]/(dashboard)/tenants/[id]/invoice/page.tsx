@@ -1,3 +1,4 @@
+import { dhakaNow } from "@/lib/dhaka-time";
 import { notFound } from "next/navigation";
 import { getTranslations } from "next-intl/server";
 import { ArrowLeft, Building2 } from "lucide-react";
@@ -12,7 +13,7 @@ import { InvoiceMonthSelect } from "@/components/properties/invoice-month-select
 import { InvoicePrintButton } from "@/components/properties/invoice-print-button";
 
 function currentMonthKey() {
-  const now = new Date();
+  const now = dhakaNow();
   return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
 }
 
@@ -120,7 +121,7 @@ export default async function TenantInvoicePage({
           </div>
           <div className="sm:text-right">
             <p className="text-xs font-semibold text-muted-foreground">{t("invoiceGeneratedOn")}</p>
-            <p className="font-mono font-medium tabular-nums">{formatDate(new Date())}</p>
+            <p className="font-mono font-medium tabular-nums">{formatDate(dhakaNow())}</p>
           </div>
         </div>
 

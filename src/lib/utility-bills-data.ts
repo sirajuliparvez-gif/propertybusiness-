@@ -1,3 +1,4 @@
+import { dhakaNow } from "@/lib/dhaka-time";
 import { prisma } from "@/lib/prisma";
 import { attachElectricityConsumption, latestElectricityReadingByUnit } from "@/lib/electricity-consumption";
 import { splitUtilityBillTransactions } from "@/lib/utility-bill-split";
@@ -49,7 +50,7 @@ function getPropertiesWithBills() {
 }
 
 export async function getAllUtilityBillsData() {
-  const now = new Date();
+  const now = dhakaNow();
   const { monthStart, monthEnd } = monthRange(now);
 
   const [properties, paidThisMonthAgg] = await Promise.all([

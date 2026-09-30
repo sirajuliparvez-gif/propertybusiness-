@@ -1,3 +1,5 @@
+import { dhakaNow } from "@/lib/dhaka-time";
+
 // Fills the gap between "a RentPayment row exists" and "rent is actually
 // due" — see round-with-the-user notes: this app only ever creates a
 // RentPayment row when someone actively records a payment (recordTenantRentPayment)
@@ -64,7 +66,7 @@ export function buildRentLedger<M = string | null>(
   leaseStartDate: Date,
   monthlyRentAmount: number,
   existingPayments: ExistingRentPaymentRow<M>[],
-  asOf: Date = new Date()
+  asOf: Date = dhakaNow()
 ): RentLedgerEntry<M>[] {
   // Never *invent* an owed month before the current calendar month, no
   // matter how far in the past leaseStartDate/joinedAt actually is. A lease
@@ -78,7 +80,7 @@ export function buildRentLedger<M = string | null>(
   // retroactive "overdue" that nobody ever intended to bill or collect.
   // `cutoverKey` is real "now", deliberately not `asOf` (which for an
   // already-ended lease can itself be in the past).
-  const cutoverKey = monthKeyOf(new Date());
+  const cutoverKey = monthKeyOf(dhakaNow());
   const startKey = monthKeyOf(leaseStartDate);
   const endKey = monthKeyOf(asOf);
   const byMonth = new Map(existingPayments.map((p) => [p.month, p]));

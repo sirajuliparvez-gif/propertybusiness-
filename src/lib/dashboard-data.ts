@@ -1,10 +1,11 @@
+import { dhakaNow } from "@/lib/dhaka-time";
 import { cache } from "react";
 import { prisma } from "@/lib/prisma";
 
 const DAYS_AHEAD = 7; // "expiring/due soon" window
 
 function daysFromNow(days: number) {
-  const d = new Date();
+  const d = dhakaNow();
   d.setDate(d.getDate() + days);
   return d;
 }
@@ -25,8 +26,8 @@ function endOfDay(date: Date) {
 // notification bell) and the dashboard page independently need this data —
 // cache() dedupes identical calls within the same request into one DB round trip.
 export const getActionRequiredData = cache(async function getActionRequiredData() {
-  const now = new Date();
-  const today = new Date();
+  const now = dhakaNow();
+  const today = dhakaNow();
 
   const [
     rentDue,
@@ -268,7 +269,7 @@ const TRANSACTION_TYPE_TO_CATEGORY: Record<string, string> = {
 };
 
 export async function getMonthlyFinancials(monthsBack = 12) {
-  const now = new Date();
+  const now = dhakaNow();
   const start = new Date(now.getFullYear(), now.getMonth() - (monthsBack - 1), 1);
 
   const transactions = await prisma.transaction.findMany({
@@ -300,7 +301,7 @@ export async function getMonthlyFinancials(monthsBack = 12) {
 }
 
 export async function getYearlyFinancials(yearsBack = 3) {
-  const now = new Date();
+  const now = dhakaNow();
   const start = new Date(now.getFullYear() - (yearsBack - 1), 0, 1);
 
   const transactions = await prisma.transaction.findMany({
@@ -377,7 +378,7 @@ export async function getPropertyPerformance() {
 // ---- Total outstanding (arrears already past due, across categories) ----
 
 export async function getTotalOutstanding() {
-  const now = new Date();
+  const now = dhakaNow();
 
   const [rentAgg, utilityAgg, payrollAgg] = await Promise.all([
     prisma.rentPayment.aggregate({
@@ -421,7 +422,7 @@ export async function getOccupancyStats() {
 // ---- Cash flow forecast (next 30 days) ----
 
 export async function getCashFlowForecast() {
-  const now = new Date();
+  const now = dhakaNow();
   const horizon = daysFromNow(30);
 
   const [rentDue, utilityDue, payrollDue, ownerRentDue] = await Promise.all([

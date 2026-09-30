@@ -1,3 +1,4 @@
+import { dhakaNow } from "@/lib/dhaka-time";
 import { prisma } from "@/lib/prisma";
 import { buildRentLedger, overdueEntries, totalOverdue } from "@/lib/rent-ledger";
 
@@ -34,7 +35,7 @@ export async function getActiveProperties() {
 }
 
 export async function getAllStaffData() {
-  const now = new Date();
+  const now = dhakaNow();
   const { monthStart, monthEnd } = monthRange(now);
 
   const [employees, properties, paidThisMonthAgg] = await Promise.all([
@@ -72,7 +73,7 @@ export async function getAllStaffData() {
   ]);
 
   const staff = employees.map((e) => {
-    const asOf = e.status === "ACTIVE" ? new Date() : (e.terminatedAt ?? new Date());
+    const asOf = e.status === "ACTIVE" ? dhakaNow() : (e.terminatedAt ?? dhakaNow());
     const ledger = buildRentLedger(
       e.joinedAt,
       Number(e.salaryAmount),
@@ -159,7 +160,7 @@ export async function getEmployeeProfile(employeeId: string) {
   // Terminated staff stop owing salary the day they left — build the ledger
   // only through then, not all the way to today.
   const ledgerAsOf =
-    employee.status === "ACTIVE" ? new Date() : (employee.terminatedAt ?? new Date());
+    employee.status === "ACTIVE" ? dhakaNow() : (employee.terminatedAt ?? dhakaNow());
   const ledger = buildRentLedger(
     employee.joinedAt,
     Number(employee.salaryAmount),
@@ -217,7 +218,7 @@ export async function getEmployeeProfile(employeeId: string) {
     }
   });
 
-  const now = new Date();
+  const now = dhakaNow();
   const tenureEnd = employee.terminatedAt ?? now;
   const durationMonths = Math.max(
     0,
