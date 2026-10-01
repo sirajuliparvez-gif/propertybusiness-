@@ -1,5 +1,6 @@
 "use client";
 
+import { dhakaTodayISO } from "@/lib/dhaka-time";
 import { useState, useTransition } from "react";
 import { useTranslations } from "next-intl";
 import { Loader2, Plus } from "lucide-react";
@@ -54,7 +55,7 @@ export function AddUtilityBillDialog({
   const [unitId, setUnitId] = useState(NONE_VALUE);
   const [paidByCompany, setPaidByCompany] = useState(false);
   const [meterReading, setMeterReading] = useState("");
-  const todayValue = new Date().toISOString().slice(0, 10);
+  const todayValue = dhakaTodayISO();
 
   const effectiveUnitId = fixedUnitId ?? (unitId === NONE_VALUE ? "" : unitId);
   const previousReading = previousElectricityReadingByUnit[effectiveUnitId || "__property__"] ?? null;

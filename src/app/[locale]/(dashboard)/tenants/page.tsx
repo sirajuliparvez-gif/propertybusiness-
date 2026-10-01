@@ -16,7 +16,7 @@ export default async function TenantsPage() {
       totalActiveTenants,
       expectedIncome,
       collectedThisMonth,
-      totalOverdueRent,
+      totalPastDueRent,
       collectionRate,
       propertiesWithVacantUnits,
     },
@@ -56,9 +56,9 @@ export default async function TenantsPage() {
         />
         <StatTile
           label={t("overdueRent")}
-          value={formatTaka(totalOverdueRent)}
+          value={formatTaka(totalPastDueRent)}
           icon={AlertTriangle}
-          tone={totalOverdueRent > 0 ? "destructive" : "default"}
+          tone={totalPastDueRent > 0 ? "destructive" : "default"}
         />
         <StatTile
           label={t("collectionRate")}

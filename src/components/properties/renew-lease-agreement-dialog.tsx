@@ -1,5 +1,6 @@
 "use client";
 
+import { dhakaTodayISO } from "@/lib/dhaka-time";
 import { useState, useTransition } from "react";
 import { useTranslations } from "next-intl";
 import { Loader2, RefreshCw } from "lucide-react";
@@ -41,7 +42,7 @@ export function RenewLeaseAgreementDialog({
     currentFixedMonthlyRentAmount != null ? "fixed" : "perUnit"
   );
   const [downpaymentMethod, setDownpaymentMethod] = useState("NONE");
-  const todayValue = new Date().toISOString().slice(0, 10);
+  const todayValue = dhakaTodayISO();
 
   return (
     <Dialog>

@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { useTranslations } from "next-intl";
+import { Printer } from "lucide-react";
 import {
   Table,
   TableBody,
@@ -292,12 +293,24 @@ export function StaffTable({
                   </TableCell>
                   <TableCell className="text-right">
                     <div className="flex items-center justify-end gap-1.5">
+                      <Button
+                        variant="outline"
+                        size="icon-sm"
+                        title={t("salarySlipTitle")}
+                        render={<Link href={`/employees/${s.id}/invoice`} />}
+                        nativeButton={false}
+                        className="border-primary/40 text-primary hover:bg-primary/10"
+                      >
+                        <Printer className="size-3.5" />
+                        <span className="sr-only">{t("salarySlipTitle")}</span>
+                      </Button>
                       {s.status === "ACTIVE" ? (
                         <RecordPayrollPaymentDialog
                           propertyId={rowPropertyId}
                           employeeId={s.id}
                           defaultAmount={s.salaryAmount}
                           overdueMonths={s.overdueMonths}
+                          settled={s.payrollStatus === "PAID" && s.overdueAmount <= 0}
                           returnTo={showPropertyColumn ? "/employees" : undefined}
                           iconOnly={showPropertyColumn}
                         />

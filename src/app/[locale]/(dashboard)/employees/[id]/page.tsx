@@ -1,6 +1,6 @@
 import { notFound } from "next/navigation";
 import { getTranslations } from "next-intl/server";
-import { ArrowLeft, Phone, Building2, Wallet, CheckCircle2, Clock } from "lucide-react";
+import { ArrowLeft, Phone, Building2, Wallet, CheckCircle2, Clock, Printer } from "lucide-react";
 import { Link } from "@/i18n/navigation";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -86,6 +86,10 @@ export default async function EmployeeProfilePage({
           </div>
         </div>
         <div className="flex flex-wrap items-center gap-2">
+          <Button variant="outline" render={<Link href={`/employees/${employee.id}/invoice`} />} nativeButton={false}>
+            <Printer className="size-3.5" />
+            {t("salarySlipTitle")}
+          </Button>
           <EditEmployeeDialog
             employeeId={employee.id}
             propertyId={employee.propertyId}
@@ -105,6 +109,7 @@ export default async function EmployeeProfilePage({
                 employeeId={employee.id}
                 defaultAmount={employee.salaryAmount}
                 overdueMonths={employee.overdueMonths}
+                settled={employee.payrollStatus === "PAID" && employee.remaining <= 0}
                 returnTo={`/employees/${employee.id}`}
               />
               <EmployeeActions

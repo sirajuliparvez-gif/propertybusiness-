@@ -2,12 +2,15 @@
 
 import { useMemo, useState } from "react";
 import { useTranslations } from "next-intl";
-import { Zap } from "lucide-react";
+import { Printer, Search, Zap } from "lucide-react";
+import { Link } from "@/i18n/navigation";
+import { InputGroup, InputGroupAddon, InputGroupInput } from "@/components/ui/input-group";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import {
   PayUtilityBillButton,
   UTILITY_TYPE_LABEL_KEYS,
+  utilityInvoiceHref,
   type UtilityBillRow,
 } from "@/components/properties/utility-bills-table";
 import { formatTaka, formatDate } from "@/lib/format";
@@ -25,12 +28,17 @@ export function MobileUtilityBillsList({
 }) {
   const t = useTranslations("Properties");
   const [filter, setFilter] = useState<Filter>("all");
+  const [query, setQuery] = useState("");
 
   const filtered = useMemo(() => {
-    if (filter === "unpaid") return bills.filter((b) => b.status !== "PAID");
-    if (filter === "paid") return bills.filter((b) => b.status === "PAID");
-    return bills;
-  }, [bills, filter]);
+    const q = query.trim().toLowerCase();
+    const searched = q
+      ? bills.filter((b) => `${b.propertyName ?? ""} ${b.unitLabel ?? ""} ${b.tenantName ?? ""}`.toLowerCase().includes(q))
+      : bills;
+    if (filter === "unpaid") return searched.filter((b) => b.status !== "PAID");
+    if (filter === "paid") return searched.filter((b) => b.status === "PAID");
+    return searched;
+  }, [bills, filter, query]);
 
   if (bills.length === 0) {
     return <p className="py-8 text-center text-sm text-muted-foreground md:hidden">{t("noUtilityBills")}</p>;
@@ -44,6 +52,16 @@ export function MobileUtilityBillsList({
 
   return (
     <div className="flex flex-col gap-3 md:hidden">
+      <InputGroup className="h-9">
+        <InputGroupAddon>
+          <Search className="size-3.5 opacity-50" />
+        </InputGroupAddon>
+        <InputGroupInput
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          placeholder={t("utilitySearchPlaceholder")}
+        />
+      </InputGroup>
       <div className="flex flex-wrap gap-1.5">
         {filters.map((f) => (
           <button
@@ -79,7 +97,8 @@ export function MobileUtilityBillsList({
                       {t(UTILITY_TYPE_LABEL_KEYS[b.type] ?? "utilityTypeOther")}
                     </p>
                     <p className="truncate text-xs text-muted-foreground">
-                      {b.unitLabel ?? "—"} · {formatDate(b.dueDate)}
+                      {b.unitLabel ?? "—"}
+                      {b.tenantName ? ` · ${b.tenantName}` : ""} · {formatDate(b.dueDate)}
                       {b.status === "PAID" ? ` · ${paymentMethodLabel(t, b.paymentMethod)}` : ""}
                     </p>
                   </div>
@@ -101,22 +120,32 @@ export function MobileUtilityBillsList({
                 </>
               );
               return (
-                <li key={b.id}>
-                  {b.status !== "PAID" ? (
-                    <PayUtilityBillButton
-                      billId={b.id}
-                      propertyId={b.propertyId}
-                      type={b.type}
-                      amount={b.amount}
-                      paidAmount={b.paidAmount}
-                      paidByCompany={b.paidByCompany}
-                      returnTo={returnTo}
-                      variant="row"
-                      rowContent={row}
-                    />
-                  ) : (
-                    <div className="flex w-full items-center gap-3 px-4 py-3">{row}</div>
-                  )}
+                <li key={b.id} className="flex items-stretch">
+                  <div className="min-w-0 flex-1">
+                    {b.status !== "PAID" ? (
+                      <PayUtilityBillButton
+                        billId={b.id}
+                        propertyId={b.propertyId}
+                        type={b.type}
+                        amount={b.amount}
+                        paidAmount={b.paidAmount}
+                        paidByCompany={b.paidByCompany}
+                        returnTo={returnTo}
+                        variant="row"
+                        rowContent={row}
+                      />
+                    ) : (
+                      <div className="flex w-full items-center gap-3 px-4 py-3">{row}</div>
+                    )}
+                  </div>
+                  <Link
+                    href={utilityInvoiceHref(b)}
+                    title={t("invoicePrint")}
+                    className="flex w-12 shrink-0 items-center justify-center border-l text-primary transition-colors active:bg-muted/60"
+                  >
+                    <Printer className="size-4" />
+                    <span className="sr-only">{t("invoicePrint")}</span>
+                  </Link>
                 </li>
               );
             })}

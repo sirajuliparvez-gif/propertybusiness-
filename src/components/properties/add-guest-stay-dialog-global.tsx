@@ -1,5 +1,6 @@
 "use client";
 
+import { dhakaTodayISO } from "@/lib/dhaka-time";
 import { useMemo, useState, useTransition } from "react";
 import { useTranslations } from "next-intl";
 import { Loader2, Plus } from "lucide-react";
@@ -47,7 +48,7 @@ export function AddGuestStayDialogGlobal({
   const [propertyId, setPropertyId] = useState(initialProperty?.id ?? "");
   const [unitId, setUnitId] = useState(initialUnit?.id ?? "");
   const [guestIdType, setGuestIdType] = useState("NID");
-  const [checkInDate, setCheckInDate] = useState(new Date().toISOString().slice(0, 10));
+  const [checkInDate, setCheckInDate] = useState(dhakaTodayISO());
   const [checkOutDate, setCheckOutDate] = useState("");
   const [ratePerNight, setRatePerNight] = useState(
     initialUnit?.tenantDefaultNightlyRateAmount != null ? String(initialUnit.tenantDefaultNightlyRateAmount) : ""

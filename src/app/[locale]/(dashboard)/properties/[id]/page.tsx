@@ -159,9 +159,9 @@ export default async function PropertyDetailPage({
         />
         <StatTile
           label={t("overdueRent")}
-          value={formatTaka(property.totalOverdueRent)}
+          value={formatTaka(property.totalPastDueRent)}
           icon={AlertTriangle}
-          tone={property.totalOverdueRent > 0 ? "destructive" : "default"}
+          tone={property.totalPastDueRent > 0 ? "destructive" : "default"}
         />
         <StatTile
           label={t("vacantUnitsCount")}

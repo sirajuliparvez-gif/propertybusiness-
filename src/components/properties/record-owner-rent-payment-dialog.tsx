@@ -1,5 +1,6 @@
 "use client";
 
+import { dhakaTodayISO } from "@/lib/dhaka-time";
 import { useState, useTransition } from "react";
 import { useTranslations } from "next-intl";
 import { Loader2, Wallet } from "lucide-react";
@@ -42,7 +43,7 @@ export function RecordOwnerRentPaymentDialog({
   const [method, setMethod] = useState("NONE");
   const [unitId, setUnitId] = useState(WHOLE_PROPERTY);
   const [amount, setAmount] = useState(defaultAmount ? String(defaultAmount) : "");
-  const todayValue = new Date().toISOString().slice(0, 10);
+  const todayValue = dhakaTodayISO();
 
   function handleUnitChange(v: string | null) {
     const next = v ?? WHOLE_PROPERTY;

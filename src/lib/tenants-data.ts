@@ -1,3 +1,4 @@
+import { cache } from "react";
 import { dhakaNow } from "@/lib/dhaka-time";
 import { prisma } from "@/lib/prisma";
 import { computeServiceChargeAmount } from "@/lib/service-charge";
@@ -12,7 +13,7 @@ function monthRange(now: Date) {
   };
 }
 
-export async function getAllTenantsData() {
+export const getAllTenantsData = cache(async function getAllTenantsData() {
   const now = dhakaNow();
   const { monthStart, monthEnd } = monthRange(now);
 
@@ -25,7 +26,7 @@ export async function getAllTenantsData() {
         name: true,
         utilityBills: {
           orderBy: { dueDate: "desc" },
-          select: { unitId: true, status: true },
+          select: { unitId: true, status: true, paidByCompany: true },
         },
         unitTypes: {
           select: {
@@ -100,7 +101,9 @@ export async function getAllTenantsData() {
     // per-property version — utilityBills is already ordered dueDate desc.
     const latestUtilityBillStatusByUnitId = new Map<string, "PAID" | "UNPAID" | "PARTIAL">();
     for (const b of p.utilityBills) {
-      if (b.unitId && !latestUtilityBillStatusByUnitId.has(b.unitId)) {
+      // Company-paid bills (water) are never the tenant's to settle, so they
+      // must not stand in for the bill the tenant actually owes.
+      if (b.unitId && !b.paidByCompany && !latestUtilityBillStatusByUnitId.has(b.unitId)) {
         latestUtilityBillStatusByUnitId.set(b.unitId, b.status);
       }
     }
@@ -229,7 +232,7 @@ export async function getAllTenantsData() {
     collectionRate,
     propertiesWithVacantUnits,
   };
-}
+});
 
 export type AllTenantsData = Awaited<ReturnType<typeof getAllTenantsData>>;
 
@@ -313,7 +316,7 @@ export async function getTenantProfile(leaseId: string) {
       status: true,
       paidByCompany: true,
       meterReading: true,
-      transactions: { orderBy: { date: "desc" }, select: { type: true, amount: true, method: true } },
+      transactions: { orderBy: { date: "desc" }, select: { type: true, amount: true, method: true, date: true } },
     },
   });
   const unitConsumptionByBillId = attachElectricityConsumption(
@@ -489,10 +492,14 @@ export async function getTenantProfile(leaseId: string) {
         status: b.status,
         paidByCompany: b.paidByCompany,
         paymentMethod: split.method,
+        // Latest settlement date (transactions come back newest first).
+        paidAt: b.transactions[0]?.date ?? null,
         collectedFromTenant: split.collectedFromTenant,
         companyAbsorbedAmount: split.companyAbsorbedAmount,
         profitAmount: split.profitAmount,
         unitLabel: lease.unit.label,
+        month: b.month,
+        tenantLeaseId: lease.status === "ACTIVE" ? lease.id : null,
         propertyId: lease.unit.unitType.property.id,
         meterReading: b.meterReading != null ? Number(b.meterReading) : null,
         previousMeterReading: unitConsumptionByBillId.get(b.id)?.previousReading ?? null,

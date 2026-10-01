@@ -61,25 +61,40 @@ export async function recordTenantRentPayment(formData: FormData) {
     lease.serviceChargeValue != null ? Number(lease.serviceChargeValue) : null
   );
   const dueAmount = Number(lease.monthlyRentAmount) + serviceChargeAmount;
-  const status =
-    mode === "downpaymentAdjustment"
-      ? amount >= dueAmount
-        ? "ADJUSTED_FROM_DOWNPAYMENT"
-        : "PARTIAL"
-      : amount >= dueAmount
-        ? "PAID"
-        : "PARTIAL";
+  const [monthYear, monthNumber] = month.split("-").map(Number);
 
   await prisma.$transaction(async (tx) => {
+    // A second payment toward the same month ADDS to what's already paid (and
+    // a fully settled month refuses more) — overwriting paidAmount while still
+    // writing a fresh Transaction double-counted income and left the rent row
+    // disagreeing with the ledger of money actually received.
+    const existing = await tx.rentPayment.findUnique({
+      where: { tenantLeaseId_month: { tenantLeaseId, month } },
+      select: { paidAmount: true, dueAmount: true },
+    });
+    const alreadyPaid = existing ? Number(existing.paidAmount) : 0;
+    if (existing && alreadyPaid >= Number(existing.dueAmount)) {
+      throw new Error("Rent for this month is already fully paid");
+    }
+    const totalPaid = alreadyPaid + amount;
+    const status =
+      totalPaid >= dueAmount
+        ? mode === "downpaymentAdjustment"
+          ? "ADJUSTED_FROM_DOWNPAYMENT"
+          : "PAID"
+        : "PARTIAL";
+
     const rentPayment = await tx.rentPayment.upsert({
       where: { tenantLeaseId_month: { tenantLeaseId, month } },
-      update: { dueAmount, paidAmount: amount, status, paidAt: paidDate },
+      update: { dueAmount, paidAmount: totalPaid, status, paidAt: paidDate },
       create: {
         tenantLeaseId,
         month,
-        dueDate: paidDate,
+        // The month's real deadline, not the day the money arrived — otherwise
+        // "paid on time" is true by construction for every payment.
+        dueDate: new Date(monthYear, monthNumber - 1, RENT_DUE_DAY),
         dueAmount,
-        paidAmount: amount,
+        paidAmount: totalPaid,
         status,
         paidAt: paidDate,
       },
@@ -300,7 +315,16 @@ export async function recordAdvanceRentPayment(formData: FormData) {
   await prisma.$transaction(async (tx) => {
     for (const month of months) {
       const [year, monthIndex] = month.split("-").map(Number);
-      const monthDueDate = new Date(year, monthIndex - 1, 1);
+      const monthDueDate = new Date(year, monthIndex - 1, RENT_DUE_DAY);
+
+      // Months that are already (partly) paid only take the remaining gap —
+      // re-collecting the full amount would double-count the income.
+      const existing = await tx.rentPayment.findUnique({
+        where: { tenantLeaseId_month: { tenantLeaseId, month } },
+        select: { paidAmount: true },
+      });
+      const payNow = dueAmount - (existing ? Number(existing.paidAmount) : 0);
+      if (payNow <= 0) continue;
 
       const rentPayment = await tx.rentPayment.upsert({
         where: { tenantLeaseId_month: { tenantLeaseId, month } },
@@ -321,7 +345,7 @@ export async function recordAdvanceRentPayment(formData: FormData) {
           propertyId,
           type: "RENT_RECEIVED_FROM_TENANT",
           direction: "INCOMING",
-          amount: dueAmount,
+          amount: payNow,
           method,
           tenantLeaseId,
           rentPaymentId: rentPayment.id,

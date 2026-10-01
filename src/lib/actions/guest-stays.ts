@@ -1,5 +1,6 @@
 "use server";
 
+import { dhakaToday } from "@/lib/dhaka-time";
 import { revalidatePath } from "next/cache";
 import { getLocale } from "next-intl/server";
 import { prisma } from "@/lib/prisma";
@@ -165,7 +166,7 @@ export async function checkOutGuestStay(formData: FormData) {
 
     await tx.guestStay.updateMany({
       where: { id: guestStayId, status: "CHECKED_IN" },
-      data: { status: "CHECKED_OUT", checkOutDate: new Date() },
+      data: { status: "CHECKED_OUT", checkOutDate: dhakaToday() },
     });
 
     const maxRefund = Number(stay.depositAmount ?? 0);
@@ -180,7 +181,7 @@ export async function checkOutGuestStay(formData: FormData) {
           amount: refundAmount,
           method,
           guestStayId,
-          date: new Date(),
+          date: dhakaToday(),
         },
       });
     }
@@ -213,7 +214,7 @@ export async function recordGuestStayPayment(formData: FormData) {
       amount,
       method,
       guestStayId,
-      date: dateStr ? new Date(dateStr) : new Date(),
+      date: dateStr ? new Date(dateStr) : dhakaToday(),
     },
   });
 

@@ -1,5 +1,6 @@
 "use client";
 
+import { dhakaTodayISO } from "@/lib/dhaka-time";
 import { useState, useTransition } from "react";
 import { useTranslations } from "next-intl";
 import { Loader2, HandCoins } from "lucide-react";
@@ -31,7 +32,7 @@ export function AddOwnerWithdrawalDialogGlobal() {
   const t = useTranslations("Properties");
   const [isPending, startTransition] = useTransition();
   const [method, setMethod] = useState(NONE_VALUE);
-  const todayValue = new Date().toISOString().slice(0, 10);
+  const todayValue = dhakaTodayISO();
 
   return (
     <Dialog>

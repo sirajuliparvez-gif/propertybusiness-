@@ -1,5 +1,6 @@
 "use server";
 
+import { dhakaToday } from "@/lib/dhaka-time";
 import { revalidatePath } from "next/cache";
 import { getLocale } from "next-intl/server";
 import { prisma } from "@/lib/prisma";
@@ -37,7 +38,7 @@ export async function terminateEmployee(formData: FormData) {
 
   await prisma.employee.updateMany({
     where: { id: employeeId, status: { in: ["ACTIVE", "INACTIVE"] } },
-    data: { status: "TERMINATED", terminatedAt: new Date() },
+    data: { status: "TERMINATED", terminatedAt: dhakaToday() },
   });
 
   const returnTo = str(formData, "returnTo") ?? (propertyId ? `/properties/${propertyId}` : "/employees");

@@ -2,7 +2,8 @@
 
 import { useMemo, useState } from "react";
 import { useTranslations } from "next-intl";
-import { Search } from "lucide-react";
+import { Printer, Search } from "lucide-react";
+import { Link } from "@/i18n/navigation";
 import { Card, CardContent } from "@/components/ui/card";
 import { InputGroup, InputGroupAddon, InputGroupInput } from "@/components/ui/input-group";
 import { InitialAvatar } from "@/components/properties/initial-avatar";
@@ -134,7 +135,8 @@ export function MobileRentList({
         <Card className="overflow-hidden p-0">
           <ul className="divide-y">
             {filtered.map((p) => (
-              <li key={p.id} className={p.pastDueAmount > 0 ? "bg-destructive/5" : undefined}>
+              <li key={p.id} className={cn("flex items-stretch", p.pastDueAmount > 0 ? "bg-destructive/5" : undefined)}>
+                <div className="min-w-0 flex-1">
                 <RecordTenantRentPaymentDialog
                   propertyId={p.propertyId}
                   tenantLeaseId={p.id}
@@ -143,6 +145,7 @@ export function MobileRentList({
                   serviceChargeType={p.serviceChargeType}
                   serviceChargeValue={p.serviceChargeValue}
                   overdueMonths={p.overdueMonths}
+                  monthSettled={isRentSettled(p.rentStatus, p.overdueAmount)}
                   returnTo="/rent"
                   variant="row"
                   rowContent={
@@ -168,6 +171,15 @@ export function MobileRentList({
                     </>
                   }
                 />
+                </div>
+                <Link
+                  href={`/tenants/${p.id}/invoice`}
+                  title={t("invoiceLabel")}
+                  className="flex w-12 shrink-0 items-center justify-center border-l text-primary transition-colors active:bg-muted/60"
+                >
+                  <Printer className="size-4" />
+                  <span className="sr-only">{t("invoiceLabel")}</span>
+                </Link>
               </li>
             ))}
           </ul>

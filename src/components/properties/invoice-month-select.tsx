@@ -15,10 +15,13 @@ export function InvoiceMonthSelect({
   leaseId,
   months,
   selectedMonth,
+  basePath,
 }: {
   leaseId: string;
   months: string[];
   selectedMonth: string;
+  // Defaults to the tenant invoice; the salary slip passes its own route.
+  basePath?: string;
 }) {
   const t = useTranslations("Properties");
   const router = useRouter();
@@ -28,7 +31,7 @@ export function InvoiceMonthSelect({
       <Select
         value={selectedMonth}
         onValueChange={(v) => {
-          if (v) router.push(`/tenants/${leaseId}/invoice?month=${v}`);
+          if (v) router.push(`${basePath ?? `/tenants/${leaseId}/invoice`}?month=${v}`);
         }}
         items={months.map((m) => ({ value: m, label: monthLabel(m) }))}
       >

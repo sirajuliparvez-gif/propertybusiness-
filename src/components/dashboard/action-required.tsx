@@ -77,7 +77,7 @@ export function ActionRequired({ data }: { data: ActionRequiredData }) {
       key: "rentDue",
       label: t("rentDue"),
       icon: Wallet,
-      count: data.rentDue.length,
+      count: data.counts.rentDue,
       render: () =>
         data.rentDue.length === 0 ? (
           <EmptyState label={t("noItems")} />
@@ -102,7 +102,7 @@ export function ActionRequired({ data }: { data: ActionRequiredData }) {
       key: "utilityDue",
       label: t("utilityDueTab"),
       icon: Zap,
-      count: data.utilityDue.length,
+      count: data.counts.utilityDue,
       render: () =>
         data.utilityDue.length === 0 ? (
           <EmptyState label={t("noItems")} />
@@ -149,7 +149,7 @@ export function ActionRequired({ data }: { data: ActionRequiredData }) {
       key: "payrollDue",
       label: t("payrollDue"),
       icon: Users2,
-      count: data.payrollDue.length,
+      count: data.counts.payrollDue,
       render: () =>
         data.payrollDue.length === 0 ? (
           <EmptyState label={t("noItems")} />
@@ -174,7 +174,7 @@ export function ActionRequired({ data }: { data: ActionRequiredData }) {
       key: "vacantUnits",
       label: t("vacantUnitsTab"),
       icon: DoorOpen,
-      count: data.vacantUnits.length,
+      count: data.counts.vacantUnits,
       render: () =>
         data.vacantUnits.length === 0 ? (
           <EmptyState label={t("noItems")} />
@@ -190,7 +190,7 @@ export function ActionRequired({ data }: { data: ActionRequiredData }) {
       key: "agreementsExpiring",
       label: t("agreementsExpiring"),
       icon: FileClock,
-      count: data.agreementsExpiring.length,
+      count: data.counts.agreementsExpiring,
       render: () =>
         data.agreementsExpiring.length === 0 ? (
           <EmptyState label={t("noItems")} />
@@ -211,7 +211,7 @@ export function ActionRequired({ data }: { data: ActionRequiredData }) {
       key: "tenantLeaseExpiring",
       label: t("tenantLeaseExpiring"),
       icon: CalendarClock,
-      count: data.tenantLeaseExpiring.length,
+      count: data.counts.tenantLeaseExpiring,
       render: () =>
         data.tenantLeaseExpiring.length === 0 ? (
           <EmptyState label={t("noItems")} />
@@ -233,7 +233,7 @@ export function ActionRequired({ data }: { data: ActionRequiredData }) {
       key: "missingDocuments",
       label: t("missingDocuments"),
       icon: FileWarning,
-      count: data.missingDocuments.length,
+      count: data.counts.missingDocuments,
       render: () =>
         data.missingDocuments.length === 0 ? (
           <EmptyState label={t("noItems")} />

@@ -45,18 +45,31 @@ export async function recordPayrollPayment(formData: FormData) {
   await prisma.$transaction(async (tx) => {
     const employee = await tx.employee.findUnique({ where: { id: employeeId }, select: { salaryAmount: true } });
     if (!employee) throw new Error("Employee not found");
-    const dueAmount = Number(employee.salaryAmount);
-    const status = amount >= dueAmount ? "PAID" : "PARTIAL";
+    // A second payment toward the same month ADDS to what was already paid and a
+    // fully settled month refuses more — overwriting amountPaid while still
+    // writing a fresh Transaction double-counted the expense (same flaw as rent).
+    const existing = await tx.payrollRecord.findUnique({
+      where: { employeeId_month: { employeeId, month } },
+      select: { amountPaid: true, dueAmount: true },
+    });
+    const alreadyPaid = existing ? Number(existing.amountPaid) : 0;
+    // Keep the salary snapshotted the first time the month was touched.
+    const dueAmount = existing?.dueAmount != null ? Number(existing.dueAmount) : Number(employee.salaryAmount);
+    if (existing && alreadyPaid >= dueAmount) {
+      throw new Error("Salary for this month is already fully paid");
+    }
+    const totalPaid = alreadyPaid + amount;
+    const status = totalPaid >= dueAmount ? "PAID" : "PARTIAL";
 
     const payrollRecord = await tx.payrollRecord.upsert({
       where: { employeeId_month: { employeeId, month } },
-      update: { dueAmount, amountPaid: amount, status, paidAt: paidDate },
+      update: { dueAmount, amountPaid: totalPaid, status, paidAt: paidDate },
       create: {
         employeeId,
         month,
         dueDate: paidDate,
         dueAmount,
-        amountPaid: amount,
+        amountPaid: totalPaid,
         status,
         paidAt: paidDate,
       },

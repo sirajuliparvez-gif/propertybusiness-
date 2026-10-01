@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { useTranslations } from "next-intl";
-import { Search } from "lucide-react";
+import { Printer, Search } from "lucide-react";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Link } from "@/i18n/navigation";
 import {
@@ -255,7 +255,18 @@ export function RentCollectionTable({ payments }: { payments: RentCollectionData
                     </div>
                   </TableCell>
                   <TableCell className="text-right">
-                    <div className="flex justify-end">
+                    <div className="flex items-center justify-end gap-1.5">
+                      <Button
+                        variant="outline"
+                        size="icon-sm"
+                        title={t("invoiceLabel")}
+                        render={<Link href={`/tenants/${p.id}/invoice`} />}
+                        nativeButton={false}
+                        className="border-primary/40 text-primary hover:bg-primary/10"
+                      >
+                        <Printer className="size-3.5" />
+                        <span className="sr-only">{t("invoiceLabel")}</span>
+                      </Button>
                       <RecordTenantRentPaymentDialog
                         propertyId={p.propertyId}
                         tenantLeaseId={p.id}
@@ -264,6 +275,7 @@ export function RentCollectionTable({ payments }: { payments: RentCollectionData
                         serviceChargeType={p.serviceChargeType}
                         serviceChargeValue={p.serviceChargeValue}
                         overdueMonths={p.overdueMonths}
+                        monthSettled={isRentSettled(p.rentStatus, p.overdueAmount)}
                         returnTo="/rent"
                         iconOnly
                       />

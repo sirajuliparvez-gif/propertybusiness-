@@ -1,5 +1,6 @@
 import { dhakaNow } from "@/lib/dhaka-time";
 import { prisma } from "@/lib/prisma";
+import { isIncomeType } from "@/lib/finance-types";
 import { computeServiceChargeAmount } from "@/lib/service-charge";
 import { attachElectricityConsumption, latestElectricityReadingByUnit } from "@/lib/electricity-consumption";
 import { buildRentLedger, overdueEntries, pastDueEntries, totalOverdue, totalPastDue, RENT_DUE_DAY } from "@/lib/rent-ledger";
@@ -139,8 +140,9 @@ export async function getPropertiesList() {
       0
     );
     const expectedIncome = tenantIncome + guestStayIncome;
+    // Real income only — a tenant's utility reimbursement is a pass-through.
     const collectedIncome = p.transactions
-      .filter((t) => t.direction === "INCOMING")
+      .filter((t) => isIncomeType(t.type))
       .reduce((sum, t) => sum + Number(t.amount), 0);
     const payrollCost = p.employees.reduce((sum, e) => sum + Number(e.salaryAmount), 0);
     const otherExpense = p.transactions
@@ -548,7 +550,8 @@ export async function getPropertyDetail(id: string) {
   // any single tenant's row, so those stay unrepresented here on purpose.
   const latestUtilityBillStatusByUnitId = new Map<string, "PAID" | "UNPAID" | "PARTIAL">();
   for (const b of property.utilityBills) {
-    if (b.unitId && !latestUtilityBillStatusByUnitId.has(b.unitId)) {
+    // Company-paid bills (water) are never the tenant's to settle.
+    if (b.unitId && !b.paidByCompany && !latestUtilityBillStatusByUnitId.has(b.unitId)) {
       latestUtilityBillStatusByUnitId.set(b.unitId, b.status);
     }
   }
@@ -708,6 +711,12 @@ export async function getPropertyDetail(id: string) {
   const unitLabelById = new Map(
     unitTypes.flatMap((ut) => ut.units.map((u) => [u.id, u.label] as const))
   );
+  const tenantNameByUnitId = new Map(
+    unitTypes.flatMap((ut) => ut.units.map((u) => [u.id, u.tenantName] as const))
+  );
+  const leaseIdByUnitId = new Map(
+    unitTypes.flatMap((ut) => ut.units.map((u) => [u.id, u.currentTenant?.leaseId ?? null] as const))
+  );
   const allUnits = unitTypes.flatMap((ut) =>
     ut.units.map((u) => ({
       id: u.id,
@@ -775,6 +784,9 @@ export async function getPropertyDetail(id: string) {
       companyAbsorbedAmount: split.companyAbsorbedAmount,
       profitAmount: split.profitAmount,
       unitLabel: b.unitId ? (unitLabelById.get(b.unitId) ?? null) : null,
+      tenantName: b.unitId ? (tenantNameByUnitId.get(b.unitId) ?? null) : null,
+      tenantLeaseId: b.unitId ? (leaseIdByUnitId.get(b.unitId) ?? null) : null,
+      month: b.month,
       propertyId: property.id,
       propertyName: property.name,
       meterReading: b.meterReading != null ? Number(b.meterReading) : null,
@@ -784,7 +796,7 @@ export async function getPropertyDetail(id: string) {
   });
 
   const collectedIncome = monthTransactions
-    .filter((t) => t.direction === "INCOMING")
+    .filter((t) => isIncomeType(t.type))
     .reduce((sum, t) => sum + Number(t.amount), 0);
 
   // Real, unscheduled income — a tenant paid more than the actual utility

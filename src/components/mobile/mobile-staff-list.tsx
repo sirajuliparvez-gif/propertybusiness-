@@ -2,7 +2,9 @@
 
 import { useMemo, useState } from "react";
 import { useTranslations } from "next-intl";
+import { Printer } from "lucide-react";
 import { Link } from "@/i18n/navigation";
+import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { InitialAvatar } from "@/components/properties/initial-avatar";
@@ -128,12 +130,24 @@ export function MobileStaffList({
                   </p>
                 ) : (
                   <div className="flex items-center justify-end gap-1.5 border-t px-4 py-2">
+                    <Button
+                      variant="outline"
+                      size="icon-sm"
+                      title={t("salarySlipTitle")}
+                      render={<Link href={`/employees/${s.id}/invoice`} />}
+                      nativeButton={false}
+                      className="border-primary/40 text-primary hover:bg-primary/10"
+                    >
+                      <Printer className="size-3.5" />
+                      <span className="sr-only">{t("salarySlipTitle")}</span>
+                    </Button>
                     {s.status === "ACTIVE" ? (
                       <RecordPayrollPaymentDialog
                         propertyId={rowPropertyId}
                         employeeId={s.id}
                         defaultAmount={s.salaryAmount}
                         overdueMonths={s.overdueMonths}
+                        settled={s.payrollStatus === "PAID" && s.overdueAmount <= 0}
                         returnTo={propertyId ? undefined : "/employees"}
                         iconOnly
                       />

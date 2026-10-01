@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { useTranslations } from "next-intl";
-import { Search } from "lucide-react";
+import { Printer, Search } from "lucide-react";
 import { Link } from "@/i18n/navigation";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -94,10 +94,10 @@ export function MobileTenantsList({ tenants }: { tenants: PropertyDetail["tenant
             {filtered.map((tn) => {
               const isFormer = tn.leaseStatus !== "ACTIVE";
               return (
-                <li key={tn.id} className={isFormer ? "opacity-60" : undefined}>
+                <li key={tn.id} className={cn("flex items-stretch", isFormer ? "opacity-60" : undefined)}>
                   <Link
                     href={`/tenants/${tn.id}`}
-                    className="flex items-center gap-3 px-4 py-3 transition-colors active:bg-muted/60"
+                    className="flex min-w-0 flex-1 items-center gap-3 px-4 py-3 transition-colors active:bg-muted/60"
                   >
                     <InitialAvatar name={tn.tenantName} />
                     <div className="min-w-0 flex-1">
@@ -118,6 +118,14 @@ export function MobileTenantsList({ tenants }: { tenants: PropertyDetail["tenant
                         <StatusPill status={rentPillStatus(tn.rentStatus, tn.rentPastDue)} labels={rentStatusLabels} />
                       )}
                     </div>
+                  </Link>
+                  <Link
+                    href={`/tenants/${tn.id}/invoice`}
+                    title={t("invoiceLabel")}
+                    className="flex w-12 shrink-0 items-center justify-center border-l text-primary transition-colors active:bg-muted/60"
+                  >
+                    <Printer className="size-4" />
+                    <span className="sr-only">{t("invoiceLabel")}</span>
                   </Link>
                 </li>
               );

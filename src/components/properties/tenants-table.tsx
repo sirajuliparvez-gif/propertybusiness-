@@ -306,6 +306,7 @@ export function TenantsTable({
                             serviceChargeType={tn.serviceChargeType}
                             serviceChargeValue={tn.serviceChargeValue}
                             overdueMonths={tn.overdueMonths}
+                            monthSettled={isRentSettled(tn.rentStatus, tn.overdueAmount)}
                             returnTo={showPropertyColumn ? "/tenants" : undefined}
                             iconOnly
                           />

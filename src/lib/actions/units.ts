@@ -1,5 +1,6 @@
 "use server";
 
+import { dhakaToday } from "@/lib/dhaka-time";
 import { revalidatePath } from "next/cache";
 import { getLocale } from "next-intl/server";
 import { prisma } from "@/lib/prisma";
@@ -60,7 +61,7 @@ export async function vacateTenantLease(formData: FormData) {
 
     await tx.tenantLease.updateMany({
       where: { id: leaseId, status: "ACTIVE" },
-      data: { status: "VACATED", movedOutAt: new Date() },
+      data: { status: "VACATED", movedOutAt: dhakaToday() },
     });
 
     const requested = refundAmountRaw ? Number(refundAmountRaw) : 0;
@@ -74,7 +75,7 @@ export async function vacateTenantLease(formData: FormData) {
           amount: refundAmount,
           method,
           tenantLeaseId: leaseId,
-          date: new Date(),
+          date: dhakaToday(),
         },
       });
       await tx.tenantLease.update({

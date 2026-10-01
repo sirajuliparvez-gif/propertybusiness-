@@ -1,4 +1,5 @@
 import { dhakaNow } from "@/lib/dhaka-time";
+import { INCOME_TYPES, EXPENSE_TYPES } from "@/lib/finance-types";
 import { getTranslations } from "next-intl/server";
 import {
   Building2,
@@ -61,11 +62,11 @@ async function getDashboardData() {
     prisma.tenantLease.count({ where: { status: "ACTIVE" } }),
     prisma.transaction.aggregate({
       _sum: { amount: true },
-      where: { direction: "INCOMING", date: { gte: monthStart, lt: monthEnd } },
+      where: { type: { in: [...INCOME_TYPES] }, date: { gte: monthStart, lt: monthEnd } },
     }),
     prisma.transaction.aggregate({
       _sum: { amount: true },
-      where: { direction: "OUTGOING", date: { gte: monthStart, lt: monthEnd } },
+      where: { type: { in: [...EXPENSE_TYPES] }, date: { gte: monthStart, lt: monthEnd } },
     }),
     // Broken out separately so the expense stat tile can show how much of
     // this month's outgoing money was a company-absorbed utility bill

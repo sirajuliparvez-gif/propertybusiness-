@@ -1,5 +1,6 @@
 "use client";
 
+import { dhakaTodayISO } from "@/lib/dhaka-time";
 import { useState, useTransition } from "react";
 import { useTranslations } from "next-intl";
 import { Loader2, Plus } from "lucide-react";
@@ -39,7 +40,7 @@ export function AddExpenseDialog({
   const [type, setType] = useState<"MAINTENANCE_EXPENSE" | "OTHER">("MAINTENANCE_EXPENSE");
   const [unitId, setUnitId] = useState(NONE_VALUE);
   const [method, setMethod] = useState(NONE_VALUE);
-  const todayValue = new Date().toISOString().slice(0, 10);
+  const todayValue = dhakaTodayISO();
 
   return (
     <Dialog>

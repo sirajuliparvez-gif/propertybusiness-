@@ -20,7 +20,18 @@ function getPropertiesWithBills() {
       unitTypes: {
         select: {
           label: true,
-          units: { select: { id: true, label: true } },
+          units: {
+            select: {
+              id: true,
+              label: true,
+              // Who the unit's bills are billed to right now.
+              tenantLeases: {
+                where: { status: "ACTIVE" },
+                take: 1,
+                select: { id: true, tenant: { select: { name: true } } },
+              },
+            },
+          },
         },
       },
       utilityBills: {
@@ -92,6 +103,12 @@ export async function getAllUtilityBillsData() {
       const unitLabelById = new Map(
         p.unitTypes.flatMap((ut) => ut.units.map((u) => [u.id, u.label] as const))
       );
+      const tenantNameByUnitId = new Map(
+        p.unitTypes.flatMap((ut) => ut.units.map((u) => [u.id, u.tenantLeases[0]?.tenant.name ?? null] as const))
+      );
+      const leaseIdByUnitId = new Map(
+        p.unitTypes.flatMap((ut) => ut.units.map((u) => [u.id, u.tenantLeases[0]?.id ?? null] as const))
+      );
       const consumptionByBillId = attachElectricityConsumption(
         p.utilityBills.map((b) => ({
           id: b.id,
@@ -119,6 +136,9 @@ export async function getAllUtilityBillsData() {
           companyAbsorbedAmount: split.companyAbsorbedAmount,
           profitAmount: split.profitAmount,
           unitLabel: b.unitId ? (unitLabelById.get(b.unitId) ?? null) : null,
+          tenantName: b.unitId ? (tenantNameByUnitId.get(b.unitId) ?? null) : null,
+          tenantLeaseId: b.unitId ? (leaseIdByUnitId.get(b.unitId) ?? null) : null,
+          month: b.month,
           propertyId: p.id,
           propertyName: p.name,
           meterReading: b.meterReading != null ? Number(b.meterReading) : null,
@@ -148,3 +168,84 @@ export async function getAllUtilityBillsData() {
 }
 
 export type AllUtilityBillsData = Awaited<ReturnType<typeof getAllUtilityBillsData>>;
+
+// Everything one printable utility-bill invoice needs: the bill, where it
+// belongs, who the active tenant of that unit is, what has been settled so
+// far and when, and (electricity only) the meter-reading chain.
+export async function getUtilityBillInvoice(billId: string) {
+  const bill = await prisma.utilityBill.findUnique({
+    where: { id: billId },
+    select: {
+      id: true,
+      type: true,
+      month: true,
+      dueDate: true,
+      createdAt: true,
+      amount: true,
+      paidAmount: true,
+      status: true,
+      paidByCompany: true,
+      meterReading: true,
+      unitId: true,
+      property: { select: { id: true, name: true } },
+      unit: {
+        select: {
+          label: true,
+          unitType: { select: { label: true } },
+          tenantLeases: {
+            where: { status: "ACTIVE" },
+            take: 1,
+            select: { id: true, tenant: { select: { name: true, contactInfo: true } } },
+          },
+        },
+      },
+      transactions: {
+        orderBy: { date: "desc" },
+        select: { type: true, amount: true, method: true, date: true },
+      },
+    },
+  });
+  if (!bill) return null;
+
+  let previousMeterReading: number | null = null;
+  let consumptionUnits: number | null = null;
+  if (bill.type === "ELECTRICITY") {
+    const chain = await prisma.utilityBill.findMany({
+      where: { type: "ELECTRICITY", propertyId: bill.property.id, unitId: bill.unitId },
+      select: { id: true, type: true, unitId: true, dueDate: true, createdAt: true, meterReading: true },
+    });
+    const consumption = attachElectricityConsumption(
+      chain.map((b) => ({ ...b, meterReading: b.meterReading != null ? Number(b.meterReading) : null }))
+    ).get(bill.id);
+    previousMeterReading = consumption?.previousReading ?? null;
+    consumptionUnits = consumption?.consumption ?? null;
+  }
+
+  const split = splitUtilityBillTransactions(
+    bill.transactions.map((t) => ({ type: t.type, amount: Number(t.amount), method: t.method }))
+  );
+  const lease = bill.unit?.tenantLeases[0] ?? null;
+
+  return {
+    id: bill.id,
+    type: bill.type,
+    month: bill.month,
+    dueDate: bill.dueDate,
+    amount: Number(bill.amount),
+    paidAmount: Number(bill.paidAmount),
+    status: bill.status,
+    paidByCompany: bill.paidByCompany,
+    paidAt: bill.transactions[0]?.date ?? null,
+    paymentMethod: split.method,
+    collectedFromTenant: split.collectedFromTenant,
+    companyAbsorbedAmount: split.companyAbsorbedAmount,
+    propertyName: bill.property.name,
+    unitLabel: bill.unit?.label ?? null,
+    unitTypeLabel: bill.unit?.unitType.label ?? null,
+    tenantName: lease?.tenant.name ?? null,
+    tenantContact: lease?.tenant.contactInfo ?? null,
+    meterReading: bill.meterReading != null ? Number(bill.meterReading) : null,
+    previousMeterReading,
+    consumptionUnits,
+  };
+}

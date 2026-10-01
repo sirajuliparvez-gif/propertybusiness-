@@ -65,7 +65,7 @@ export const UTILITY_BILL_COLUMNS = [
 ] as const;
 
 export const PAYROLL_COLUMNS = [
-  "প্রপার্টির নাম",
+  "প্রপার্টির নাম (কোম্পানি স্টাফ হলে খালি রাখুন)",
   "কর্মচারীর নাম",
   "মাস (YYYY-MM)",
   "পরিমাণ পরিশোধিত",

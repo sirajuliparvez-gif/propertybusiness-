@@ -1,3 +1,5 @@
+import { dhakaToday } from "@/lib/dhaka-time";
+import { RENT_DUE_DAY } from "@/lib/rent-ledger";
 import ExcelJS from "exceljs";
 import { prisma } from "@/lib/prisma";
 import type { ImportEntityType } from "@/generated/prisma/enums";
@@ -155,7 +157,7 @@ async function importProperties(
             propertyId: property.id,
             fixedMonthlyRentAmount: num(row, "মাসিক ভাড়া (শুধু ফিক্সড হলে)"),
             downpaymentAmount: num(row, "অগ্রিম/ডাউনপেমেন্ট (শুধু ফিক্সড হলে)"),
-            startDate: new Date(),
+            startDate: dhakaToday(),
             status: "ACTIVE",
           },
         });
@@ -163,7 +165,7 @@ async function importProperties(
         // Still needs an active agreement row to exist for OwnerRentPayment
         // imports to resolve against later, even with no fixed figures set.
         await prisma.ownerLeaseAgreement.create({
-          data: { propertyId: property.id, startDate: new Date(), status: "ACTIVE" },
+          data: { propertyId: property.id, startDate: dhakaToday(), status: "ACTIVE" },
         });
       }
       ctx.propertyId.set(name, property.id);
@@ -398,6 +400,10 @@ async function importRentPayments(
       });
       continue;
     }
+    if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(month)) {
+      errors.push({ sheet: SHEET_NAMES.RENT_PAYMENTS, row: rowNum, message: `মাস YYYY-MM ফরম্যাটে দিন (পেয়েছি: "${month}")` });
+      continue;
+    }
     const leaseId = ctx.activeLeaseId.get(`${propertyName}::${unitLabel}::${tenantName}`);
     const propertyId = ctx.propertyId.get(propertyName);
     if (!leaseId || !propertyId) {
@@ -435,6 +441,18 @@ async function importRentPayments(
       const previousPaidAmount = existing ? Number(existing.paidAmount) : 0;
       const delta = paidAmount - previousPaidAmount;
 
+      // The import only ever ADDS money: lowering a recorded figure would change
+      // the rent row but leave the Transaction (and any downpayment adjustment)
+      // behind, so the books would no longer agree. Correct it in the app instead.
+      if (delta < 0) {
+        errors.push({
+          sheet: SHEET_NAMES.RENT_PAYMENTS,
+          row: rowNum,
+          message: `আগে ৳${previousPaidAmount} রেকর্ড করা আছে — শীট থেকে কমিয়ে ৳${paidAmount} করা যায় না`,
+        });
+        continue;
+      }
+
       if (mode === "downpaymentAdjustment" && delta > 0 && delta > Number(lease.currentDownpaymentBalance)) {
         errors.push({
           sheet: SHEET_NAMES.RENT_PAYMENTS,
@@ -455,7 +473,17 @@ async function importRentPayments(
       const rentPayment = await prisma.rentPayment.upsert({
         where: { tenantLeaseId_month: { tenantLeaseId: leaseId, month } },
         update: { dueAmount, paidAmount, status, paidAt },
-        create: { tenantLeaseId: leaseId, month, dueDate: paidAt ?? new Date(), dueAmount, paidAmount, status, paidAt },
+        // The month's real deadline (the 10th), not the payment date — otherwise
+        // every imported payment counts as "on time" by construction.
+        create: {
+          tenantLeaseId: leaseId,
+          month,
+          dueDate: new Date(Number(month.slice(0, 4)), Number(month.slice(5, 7)) - 1, RENT_DUE_DAY),
+          dueAmount,
+          paidAmount,
+          status,
+          paidAt,
+        },
       });
 
       if (delta > 0) {
@@ -478,7 +506,7 @@ async function importRentPayments(
               method,
               tenantLeaseId: leaseId,
               rentPaymentId: rentPayment.id,
-              date: paidAt ?? new Date(),
+              date: paidAt ?? dhakaToday(),
             },
           });
         }
@@ -555,7 +583,7 @@ async function importOwnerRentPayments(
             data: { dueAmount, paidAmount, status, paidAt },
           })
         : await prisma.ownerRentPayment.create({
-            data: { ownerLeaseAgreementId: agreementId, unitId, month, dueDate: paidAt ?? new Date(), dueAmount, paidAmount, status, paidAt },
+            data: { ownerLeaseAgreementId: agreementId, unitId, month, dueDate: paidAt ?? dhakaToday(), dueAmount, paidAmount, status, paidAt },
           });
       // Only the newly-added portion moves money — re-uploading an
       // already-recorded figure must not create a second OUTGOING transaction.
@@ -569,7 +597,7 @@ async function importOwnerRentPayments(
             method: parsePaymentMethod(str(row, "পেমেন্ট মাধ্যম")),
             unitId,
             ownerRentPaymentId: orp.id,
-            date: paidAt ?? new Date(),
+            date: paidAt ?? dhakaToday(),
           },
         });
       }
@@ -647,10 +675,27 @@ async function importUtilityBills(
         meterReading === previousMeterReading;
       if (unchanged) continue;
 
+      // paidAmount is what the bill pages, invoices and outstanding totals read,
+      // so it must move with the status (a PAID bill with paidAmount 0 showed
+      // "collected 0" and broke the unpaid sums). A part-paid bill the sheet
+      // still calls unpaid keeps what was already collected.
+      const previousPaidAmount = existing ? Number(existing.paidAmount) : 0;
+      // Same rule as rent: the sheet can settle more of a bill, never reverse
+      // money that was already recorded against it.
+      if ((wasPaid && !isPaid) || (isPaid && amount < previousPaidAmount)) {
+        errors.push({
+          sheet: SHEET_NAMES.UTILITY_BILLS,
+          row: rowNum,
+          message: `এই বিলে আগে ৳${previousPaidAmount} আদায়/পরিশোধ রেকর্ড করা আছে — শীট থেকে কমানো বা অপরিশোধিত করা যায় না`,
+        });
+        continue;
+      }
+      const newPaidAmount = isPaid ? amount : previousPaidAmount;
+      const newStatus = isPaid ? "PAID" : previousPaidAmount > 0 ? "PARTIAL" : "UNPAID";
       const bill = existing
         ? await prisma.utilityBill.update({
             where: { id: existing.id },
-            data: { amount, dueDate, status: isPaid ? "PAID" : "UNPAID", paidByCompany, meterReading },
+            data: { amount, dueDate, status: newStatus, paidAmount: newPaidAmount, paidByCompany, meterReading },
           })
         : await prisma.utilityBill.create({
             data: {
@@ -660,19 +705,18 @@ async function importUtilityBills(
               month: monthKey,
               dueDate,
               amount,
-              status: isPaid ? "PAID" : "UNPAID",
+              status: newStatus,
+              paidAmount: newPaidAmount,
               paidByCompany,
               meterReading,
             },
           });
 
-      const delta = amount - previousAmount;
-      const justBecamePaid = isPaid && !wasPaid;
-      // Fire a transaction for the newly-paid amount: the full amount the
-      // first time this bill is marked paid, or just the increase if an
-      // already-paid bill's amount was corrected upward.
-      if (isPaid && (justBecamePaid || delta > 0)) {
-        const txAmount = justBecamePaid ? amount : delta;
+      // Fire a transaction for the newly-settled money only: everything the
+      // first time the bill is marked paid (minus anything already collected
+      // in the app), or just the increase if a paid bill was corrected upward.
+      const txAmount = newPaidAmount - previousPaidAmount;
+      if (isPaid && txAmount > 0) {
         const paidAt = dateVal(row, "পরিশোধের তারিখ (হ্যাঁ হলে)") ?? dueDate;
         const method = parsePaymentMethod(str(row, "পেমেন্ট মাধ্যম (হ্যাঁ হলে)"));
         if (paidByCompany) {
@@ -749,7 +793,7 @@ async function importEmployees(
           role: str(row, "পদবি") ?? "",
           contactInfo: str(row, "ফোন"),
           salaryAmount,
-          joinedAt: dateVal(row, "যোগদানের তারিখ (YYYY-MM-DD)") ?? new Date(),
+          joinedAt: dateVal(row, "যোগদানের তারিখ (YYYY-MM-DD)") ?? dhakaToday(),
         },
       });
       ctx.employeeId.set(`${propertyName ?? ""}::${name}`, employee.id);
@@ -798,18 +842,44 @@ async function importPayroll(rows: RawRow[], fileName: string, userId: string | 
       });
       continue;
     }
+    if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(month)) {
+      errors.push({ sheet: SHEET_NAMES.PAYROLL, row: rowNum, message: `মাস YYYY-MM ফরম্যাটে দিন (পেয়েছি: "${month}")` });
+      continue;
+    }
     const paidAt = dateVal(row, "পরিশোধের তারিখ (YYYY-MM-DD)");
     try {
       const existing = await prisma.payrollRecord.findUnique({
         where: { employeeId_month: { employeeId, month } },
-        select: { amountPaid: true },
+        select: { amountPaid: true, dueAmount: true },
       });
+      const employee = await prisma.employee.findUnique({ where: { id: employeeId }, select: { salaryAmount: true } });
       const previousAmountPaid = existing ? Number(existing.amountPaid) : 0;
       const delta = amountPaid - previousAmountPaid;
+      if (delta < 0) {
+        errors.push({
+          sheet: SHEET_NAMES.PAYROLL,
+          row: rowNum,
+          message: `আগে ৳${previousAmountPaid} বেতন রেকর্ড করা আছে — শীট থেকে কমিয়ে ৳${amountPaid} করা যায় না`,
+        });
+        continue;
+      }
+      // Same rule as recordPayrollPayment: snapshot the salary as the month's due
+      // amount and let the status reflect paid-vs-due (a half salary is PARTIAL,
+      // not a false "settled").
+      const dueAmount = existing?.dueAmount != null ? Number(existing.dueAmount) : Number(employee?.salaryAmount ?? amountPaid);
+      const status = amountPaid >= dueAmount ? "PAID" : "PARTIAL";
       const payroll = await prisma.payrollRecord.upsert({
         where: { employeeId_month: { employeeId, month } },
-        update: { amountPaid, status: "PAID", paidAt },
-        create: { employeeId, month, dueDate: paidAt ?? new Date(), amountPaid, status: "PAID", paidAt },
+        update: { dueAmount, amountPaid, status, paidAt },
+        create: {
+          employeeId,
+          month,
+          dueDate: paidAt ?? new Date(Number(month.slice(0, 4)), Number(month.slice(5, 7)) - 1, 1),
+          dueAmount,
+          amountPaid,
+          status,
+          paidAt,
+        },
       });
       // Only the newly-added portion moves money — re-uploading an
       // already-recorded figure must not create a second OUTGOING transaction.
@@ -822,7 +892,7 @@ async function importPayroll(rows: RawRow[], fileName: string, userId: string | 
             amount: delta,
             method: parsePaymentMethod(str(row, "পেমেন্ট মাধ্যম")),
             payrollRecordId: payroll.id,
-            date: paidAt ?? new Date(),
+            date: paidAt ?? dhakaToday(),
           },
         });
       }
@@ -845,6 +915,24 @@ async function importExpenses(rows: RawRow[], fileName: string, userId: string |
   const errors: RowError[] = [];
   let created = 0;
   const createdIds: string[] = [];
+  // Expense rows have no natural key, so a file uploaded twice would double
+  // every expense. Identical rows (same property, unit, category, amount, date
+  // and note) already imported earlier are matched by count: the Nth identical
+  // row in a file is only created if fewer than N of them exist already —
+  // a genuine pair of identical expenses in ONE file still both go in.
+  const expenseKey = (propertyId: string, unitId: string | null, type: string, amount: number, date: Date, notes: string | null) =>
+    [propertyId, unitId ?? "", type, amount, date.toISOString().slice(0, 10), notes ?? ""].join("|");
+  const alreadyImported = new Map<string, number>();
+  const seenInFile = new Map<string, number>();
+  const priorExpenses = await prisma.transaction.findMany({
+    where: { importBatchId: { not: null }, type: { in: ["MAINTENANCE_EXPENSE", "OTHER"] } },
+    select: { propertyId: true, unitId: true, type: true, amount: true, date: true, notes: true },
+  });
+  for (const p of priorExpenses) {
+    if (!p.propertyId) continue;
+    const k = expenseKey(p.propertyId, p.unitId, p.type, Number(p.amount), p.date, p.notes);
+    alreadyImported.set(k, (alreadyImported.get(k) ?? 0) + 1);
+  }
 
   for (let i = 0; i < rows.length; i++) {
     const row = rows[i];
@@ -863,11 +951,16 @@ async function importExpenses(rows: RawRow[], fileName: string, userId: string |
     }
     const unitLabel = str(row, "ইউনিট লেবেল (ঐচ্ছিক)");
     const unitId = unitLabel ? (ctx.unitId.get(`${propertyName}::${unitLabel}`) ?? null) : null;
+    const expenseType = parseExpenseCategory(str(row, "ক্যাটাগরি (মেরামত/অন্যান্য)"));
+    const key = expenseKey(propertyId, unitId, expenseType, amount, date, str(row, "নোট"));
+    const nth = (seenInFile.get(key) ?? 0) + 1;
+    seenInFile.set(key, nth);
+    if (nth <= (alreadyImported.get(key) ?? 0)) continue;
     try {
       const tx = await prisma.transaction.create({
         data: {
           propertyId,
-          type: parseExpenseCategory(str(row, "ক্যাটাগরি (মেরামত/অন্যান্য)")),
+          type: expenseType,
           direction: "OUTGOING",
           amount,
           method: parsePaymentMethod(str(row, "পেমেন্ট মাধ্যম")),

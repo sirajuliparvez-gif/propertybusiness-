@@ -1,7 +1,10 @@
 import { dhakaNow } from "@/lib/dhaka-time";
 import { cache } from "react";
 import { prisma } from "@/lib/prisma";
+import { isIncomeType, isExpenseType } from "@/lib/finance-types";
 import { getAllTenantsData } from "@/lib/tenants-data";
+import { getAllStaffData } from "@/lib/employees-data";
+import { computeServiceChargeAmount } from "@/lib/service-charge";
 import { isMonthPastDue, RENT_DUE_DAY } from "@/lib/rent-ledger";
 
 const DAYS_AHEAD = 7; // "expiring/due soon" window
@@ -30,6 +33,9 @@ function endOfDay(date: Date) {
 export const getActionRequiredData = cache(async function getActionRequiredData() {
   const now = dhakaNow();
   const today = dhakaNow();
+  const currentMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+  const rentPastDueNow = isMonthPastDue(currentMonth, RENT_DUE_DAY, now);
+  const todayStart = startOfDay(now);
 
   const [
     rentDue,
@@ -45,11 +51,12 @@ export const getActionRequiredData = cache(async function getActionRequiredData(
     guestCheckIns,
     guestCheckOuts,
   ] = await Promise.all([
-    // Rent due soon or overdue
+    // Recorded rent months still owing something and already past the 10th
+    // (months nobody recorded at all come from the lease-based query below).
     prisma.rentPayment.findMany({
       where: {
         status: { in: ["UNPAID", "PARTIAL"] },
-        dueDate: { lte: daysFromNow(DAYS_AHEAD) },
+        month: rentPastDueNow ? { lte: currentMonth } : { lt: currentMonth },
       },
       orderBy: { dueDate: "asc" },
       take: 20,
@@ -64,10 +71,10 @@ export const getActionRequiredData = cache(async function getActionRequiredData(
         },
       },
     }),
-    // Utility bills due soon or overdue
+    // Utility bills due soon or overdue (partly paid ones still owe the rest)
     prisma.utilityBill.findMany({
       where: {
-        status: "UNPAID",
+        status: { in: ["UNPAID", "PARTIAL"] },
         dueDate: { lte: daysFromNow(DAYS_AHEAD) },
       },
       orderBy: { dueDate: "asc" },
@@ -88,11 +95,12 @@ export const getActionRequiredData = cache(async function getActionRequiredData(
         },
       },
     }),
-    // Payroll due soon or pending
+    // This month's part-paid salaries. Fully unpaid staff come from the
+    // employee-based query below: a PayrollRecord row only exists once a
+    // payment has been recorded, so PENDING rows practically never exist.
     prisma.payrollRecord.findMany({
-      where: { status: "PENDING", dueDate: { lte: daysFromNow(DAYS_AHEAD) } },
-      orderBy: { dueDate: "asc" },
-      take: 20,
+      where: { month: currentMonth, status: "PARTIAL", employee: { status: "ACTIVE" } },
+      take: 100,
       include: { employee: { include: { property: { select: { name: true } } } } },
     }),
     // Vacant units (no active tenant lease)
@@ -169,8 +177,76 @@ export const getActionRequiredData = cache(async function getActionRequiredData(
     }),
   ]);
 
+  // Second batch: what the first queries cannot see (rent months with no row at
+  // all, staff nobody has paid yet) plus true totals, because each list above is
+  // capped at 20 rows and the tab badges must show the real number.
+  const unrecordedRentWhere = {
+    status: "ACTIVE" as const,
+    monthlyRentAmount: { gt: 0 },
+    rentPayments: { none: { month: currentMonth } },
+  };
+  const utilityWhere = {
+    status: { in: ["UNPAID" as const, "PARTIAL" as const] },
+    dueDate: { lte: daysFromNow(DAYS_AHEAD) },
+  };
+  const [
+    unrecordedRent,
+    unrecordedRentCount,
+    rowRentCount,
+    unpaidEmployees,
+    utilityCount,
+    vacantCount,
+    tenantExpiringCount,
+    agreementExpiringCount,
+    nidCount,
+    tenantDocCount,
+    ownerDocCount,
+  ] = await Promise.all([
+    rentPastDueNow
+      ? prisma.tenantLease.findMany({
+          where: unrecordedRentWhere,
+          take: 20,
+          include: {
+            tenant: { select: { name: true } },
+            unit: { include: { unitType: { include: { property: { select: { name: true } } } } } },
+          },
+        })
+      : Promise.resolve([]),
+    rentPastDueNow ? prisma.tenantLease.count({ where: unrecordedRentWhere }) : Promise.resolve(0),
+    prisma.rentPayment.count({
+      where: {
+        status: { in: ["UNPAID", "PARTIAL"] },
+        month: rentPastDueNow ? { lte: currentMonth } : { lt: currentMonth },
+      },
+    }),
+    prisma.employee.findMany({
+      where: { status: "ACTIVE", payrollRecords: { none: { month: currentMonth } } },
+      take: 100,
+      include: { property: { select: { name: true } } },
+    }),
+    prisma.utilityBill.count({ where: utilityWhere }),
+    prisma.unit.count({ where: { tenantLeases: { none: { status: "ACTIVE" } } } }),
+    prisma.tenantLease.count({ where: { status: "ACTIVE", endDate: { not: null, lte: daysFromNow(30) } } }),
+    prisma.ownerLeaseAgreement.count({
+      where: { status: "ACTIVE", endDate: { not: null, lte: daysFromNow(30) } },
+    }),
+    prisma.tenant.count({ where: { type: "INDIVIDUAL", nidNumber: null } }),
+    prisma.tenantLease.count({ where: { status: "ACTIVE", documents: { none: {} } } }),
+    prisma.ownerLeaseAgreement.count({ where: { status: "ACTIVE", documents: { none: {} } } }),
+  ]);
+
   return {
-    rentDue: rentDue.map((r) => ({
+    counts: {
+      rentDue: rowRentCount + unrecordedRentCount,
+      utilityDue: utilityCount,
+      payrollDue: payrollDue.length + unpaidEmployees.length,
+      vacantUnits: vacantCount,
+      agreementsExpiring: agreementExpiringCount,
+      tenantLeaseExpiring: tenantExpiringCount,
+      missingDocuments: nidCount + tenantDocCount + ownerDocCount,
+    },
+    rentDue: [
+      ...rentDue.map((r) => ({
       id: r.id,
       tenantName: r.tenantLease.tenant.name,
       propertyName: r.tenantLease.unit.unitType.property.name,
@@ -179,14 +255,34 @@ export const getActionRequiredData = cache(async function getActionRequiredData(
       dueDate: r.dueDate,
       overdue: isMonthPastDue(r.month, RENT_DUE_DAY, now),
     })),
+      ...unrecordedRent.map((l) => {
+        const rent = Number(l.monthlyRentAmount);
+        return {
+          id: `lease-${l.id}`,
+          tenantName: l.tenant.name,
+          propertyName: l.unit.unitType.property.name,
+          unitLabel: l.unit.label,
+          amount:
+            rent +
+            computeServiceChargeAmount(
+              rent,
+              l.serviceChargeType,
+              l.serviceChargeValue != null ? Number(l.serviceChargeValue) : null
+            ),
+          dueDate: new Date(now.getFullYear(), now.getMonth(), RENT_DUE_DAY),
+          overdue: true,
+        };
+      }),
+    ],
     utilityDue: utilityDue.map((u) => ({
       id: u.id,
       propertyName: u.property.name,
       tenantName: u.tenantLease?.tenant.name ?? null,
       type: u.type,
-      amount: Number(u.amount),
+      amount: Number(u.amount) - Number(u.paidAmount),
       dueDate: u.dueDate,
-      overdue: u.dueDate < now,
+      // A bill dated today is not late until tomorrow.
+      overdue: u.dueDate < todayStart,
     })),
     downpaymentExhausted: downpaymentExhausted.map((t) => ({
       id: t.id,
@@ -195,16 +291,26 @@ export const getActionRequiredData = cache(async function getActionRequiredData(
       unitLabel: t.unit.label,
       balance: Number(t.currentDownpaymentBalance),
     })),
-    payrollDue: payrollDue.map((p) => ({
-      id: p.id,
-      employeeName: p.employee.name,
-      // Company-level staff (no property) — same fallback label used across
-      // the Staff pages, so this reads consistently everywhere.
-      propertyName: p.employee.property?.name ?? "কোম্পানি স্টাফ",
-      amount: Number(p.amountPaid),
-      dueDate: p.dueDate,
-      overdue: p.dueDate < now,
-    })),
+    payrollDue: [
+      ...payrollDue.map((p) => ({
+        id: p.id,
+        employeeName: p.employee.name,
+        // Company-level staff (no property) — same fallback label used across
+        // the Staff pages, so this reads consistently everywhere.
+        propertyName: p.employee.property?.name ?? "কোম্পানি স্টাফ",
+        amount: Number(p.dueAmount ?? p.employee.salaryAmount) - Number(p.amountPaid),
+        dueDate: p.dueDate,
+        overdue: false,
+      })),
+      ...unpaidEmployees.map((e) => ({
+        id: `emp-${e.id}`,
+        employeeName: e.name,
+        propertyName: e.property?.name ?? "কোম্পানি স্টাফ",
+        amount: Number(e.salaryAmount),
+        dueDate: new Date(now.getFullYear(), now.getMonth(), 1),
+        overdue: false,
+      })),
+    ],
     vacantUnits: vacantUnits.map((u) => ({
       id: u.id,
       unitLabel: u.label,
@@ -276,7 +382,7 @@ export async function getMonthlyFinancials(monthsBack = 12) {
 
   const transactions = await prisma.transaction.findMany({
     where: { date: { gte: start } },
-    select: { date: true, amount: true, direction: true },
+    select: { date: true, amount: true, type: true },
   });
 
   const buckets = new Map<string, { income: number; expense: number }>();
@@ -290,8 +396,8 @@ export async function getMonthlyFinancials(monthsBack = 12) {
     const key = `${tx.date.getFullYear()}-${String(tx.date.getMonth() + 1).padStart(2, "0")}`;
     const bucket = buckets.get(key);
     if (!bucket) continue;
-    if (tx.direction === "INCOMING") bucket.income += Number(tx.amount);
-    else bucket.expense += Number(tx.amount);
+    if (isIncomeType(tx.type)) bucket.income += Number(tx.amount);
+    else if (isExpenseType(tx.type)) bucket.expense += Number(tx.amount);
   }
 
   return Array.from(buckets.entries()).map(([month, v]) => ({
@@ -308,7 +414,7 @@ export async function getYearlyFinancials(yearsBack = 3) {
 
   const transactions = await prisma.transaction.findMany({
     where: { date: { gte: start } },
-    select: { date: true, amount: true, direction: true },
+    select: { date: true, amount: true, type: true },
   });
 
   const buckets = new Map<number, { income: number; expense: number }>();
@@ -319,8 +425,8 @@ export async function getYearlyFinancials(yearsBack = 3) {
   for (const tx of transactions) {
     const bucket = buckets.get(tx.date.getFullYear());
     if (!bucket) continue;
-    if (tx.direction === "INCOMING") bucket.income += Number(tx.amount);
-    else bucket.expense += Number(tx.amount);
+    if (isIncomeType(tx.type)) bucket.income += Number(tx.amount);
+    else if (isExpenseType(tx.type)) bucket.expense += Number(tx.amount);
   }
 
   return Array.from(buckets.entries()).map(([year, v]) => ({
@@ -350,9 +456,9 @@ export async function getPropertyPerformance() {
 
     for (const tx of p.transactions) {
       const amount = Number(tx.amount);
-      if (tx.direction === "INCOMING") {
+      if (isIncomeType(tx.type)) {
         income += amount;
-      } else {
+      } else if (isExpenseType(tx.type)) {
         expense += amount;
         const category = TRANSACTION_TYPE_TO_CATEGORY[tx.type] ?? "other";
         expenseByCategory[category] = (expenseByCategory[category] ?? 0) + amount;
@@ -380,25 +486,22 @@ export async function getPropertyPerformance() {
 // ---- Total outstanding (arrears already past due, across categories) ----
 
 export async function getTotalOutstanding() {
-  const now = dhakaNow();
-
-  const [tenantsData, utilityAgg, payrollAgg] = await Promise.all([
-    // Rent comes from the ledger (not just recorded RentPayment rows) so months
-    // nobody has touched yet count too, and only once past the 10th.
+  // Every component comes from the same source the matching page uses, so the
+  // dashboard total can never disagree with the Rent, Utility Bills and Staff
+  // pages: rent past the 10th (ledger-based), every bill still owing, and the
+  // salary that is still unpaid.
+  const [tenantsData, staffData, utilityAgg] = await Promise.all([
     getAllTenantsData(),
+    getAllStaffData(),
     prisma.utilityBill.aggregate({
-      _sum: { amount: true },
-      where: { status: "UNPAID", dueDate: { lt: now } },
-    }),
-    prisma.payrollRecord.aggregate({
-      _sum: { amountPaid: true },
-      where: { status: "PENDING", dueDate: { lt: now } },
+      _sum: { amount: true, paidAmount: true },
+      where: { status: { in: ["UNPAID", "PARTIAL"] } },
     }),
   ]);
 
   const rent = tenantsData.totalPastDueRent;
-  const utility = Number(utilityAgg._sum.amount ?? 0);
-  const payroll = Number(payrollAgg._sum.amountPaid ?? 0);
+  const utility = Number(utilityAgg._sum.amount ?? 0) - Number(utilityAgg._sum.paidAmount ?? 0);
+  const payroll = staffData.totalOverduePayroll;
 
   return { total: rent + utility + payroll, rent, utility, payroll };
 }
@@ -424,20 +527,21 @@ export async function getOccupancyStats() {
 
 export async function getCashFlowForecast() {
   const now = dhakaNow();
-  const horizon = daysFromNow(30);
+  const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+  const monthEnd = new Date(now.getFullYear(), now.getMonth() + 1, 1);
 
-  const [rentDue, utilityDue, payrollDue, ownerRentDue] = await Promise.all([
-    prisma.rentPayment.aggregate({
-      _sum: { dueAmount: true, paidAmount: true },
-      where: { status: { in: ["UNPAID", "PARTIAL"] }, dueDate: { lte: horizon } },
-    }),
+  const [tenantsData, staffData, companyBillAgg, ownerRentPaid, ownerRentDue] = await Promise.all([
+    getAllTenantsData(),
+    getAllStaffData(),
+    // Only bills the company bears itself are a real outflow — tenant-billed
+    // ones are reimbursed, a pass-through that nets to zero (see finance-types).
     prisma.utilityBill.aggregate({
-      _sum: { amount: true },
-      where: { status: "UNPAID", dueDate: { lte: horizon } },
+      _sum: { amount: true, paidAmount: true },
+      where: { status: { in: ["UNPAID", "PARTIAL"] }, paidByCompany: true },
     }),
-    prisma.payrollRecord.aggregate({
-      _sum: { amountPaid: true },
-      where: { status: "PENDING", dueDate: { lte: horizon } },
+    prisma.transaction.aggregate({
+      _sum: { amount: true },
+      where: { type: "RENT_PAID_TO_OWNER", date: { gte: monthStart, lt: monthEnd } },
     }),
     // Approximate owner rent obligation for the period, per active Property —
     // prefers the active agreement's fixedMonthlyRentAmount (whole-property
@@ -460,11 +564,12 @@ export async function getCashFlowForecast() {
     }),
   ]);
 
-  const incoming =
-    Number(rentDue._sum.dueAmount ?? 0) - Number(rentDue._sum.paidAmount ?? 0);
-  const outgoingUtility = Number(utilityDue._sum.amount ?? 0);
-  const outgoingPayroll = Number(payrollDue._sum.amountPaid ?? 0);
-  const outgoingOwnerRent = ownerRentDue.reduce((sum, property) => {
+  // Rent still to collect, from the ledger (recorded and unrecorded months alike).
+  const incoming = tenantsData.totalOverdueRent;
+  const outgoingUtility =
+    Number(companyBillAgg._sum.amount ?? 0) - Number(companyBillAgg._sum.paidAmount ?? 0);
+  const outgoingPayroll = staffData.totalOverduePayroll;
+  const ownerRentTotal = ownerRentDue.reduce((sum, property) => {
     const fixedRent = property.ownerLeaseAgreements[0]?.fixedMonthlyRentAmount;
     if (fixedRent != null) return sum + Number(fixedRent);
     return (
@@ -480,6 +585,8 @@ export async function getCashFlowForecast() {
       )
     );
   }, 0);
+  // Owner rent already paid this month is no longer a future outflow.
+  const outgoingOwnerRent = Math.max(0, ownerRentTotal - Number(ownerRentPaid._sum.amount ?? 0));
   const outgoing = outgoingUtility + outgoingPayroll + outgoingOwnerRent;
 
   return {

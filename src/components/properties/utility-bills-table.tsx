@@ -2,7 +2,8 @@
 
 import { useMemo, useState, useTransition } from "react";
 import { useTranslations } from "next-intl";
-import { Loader2, Wallet } from "lucide-react";
+import { Loader2, Printer, Search, Wallet } from "lucide-react";
+import { Link } from "@/i18n/navigation";
 import {
   Table,
   TableBody,
@@ -15,6 +16,7 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { InputGroup, InputGroupAddon, InputGroupInput } from "@/components/ui/input-group";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
   Select,
@@ -45,6 +47,10 @@ export type UtilityBillRow = {
   id: string;
   type: "GAS" | "ELECTRICITY" | "WATER" | "OTHER";
   dueDate: Date;
+  // "YYYY-MM" the bill belongs to.
+  month: string;
+  // The unit's active lease, i.e. the tenant this bill is billed to (null for property-wide bills or an empty unit).
+  tenantLeaseId?: string | null;
   amount: number;
   paidAmount: number;
   status: "PAID" | "UNPAID" | "PARTIAL";
@@ -57,12 +63,23 @@ export type UtilityBillRow = {
   companyAbsorbedAmount: number;
   profitAmount: number;
   unitLabel: string | null;
+  // Current tenant of the unit the bill is billed to (null for property-wide bills).
+  tenantName?: string | null;
   propertyId: string;
   propertyName?: string;
   meterReading?: number | null;
   previousMeterReading?: number | null;
   consumptionUnits?: number | null;
 };
+
+// Where a bill's print button leads. A bill the tenant pays belongs on that tenant's statement (the month's rent, every
+// bill still owing, and the balance), so it opens the tenant invoice for the bill's month with this bill highlighted.
+// A bill the company bears itself, or one on a unit nobody rents, has no tenant to bill and keeps its own invoice.
+export function utilityInvoiceHref(b: Pick<UtilityBillRow, "id" | "month" | "paidByCompany" | "tenantLeaseId">) {
+  return b.tenantLeaseId && !b.paidByCompany
+    ? `/tenants/${b.tenantLeaseId}/invoice?month=${b.month}&bill=${b.id}`
+    : `/utility-bills/${b.id}/invoice`;
+}
 
 export const UTILITY_TYPE_LABEL_KEYS: Record<string, string> = {
   GAS: "utilityTypeGas",
@@ -250,10 +267,14 @@ export function PayUtilityBillButton({
 export function UtilityBillsTable({
   bills,
   showPropertyColumn = false,
+  propertyOptions,
   returnTo,
 }: {
   bills: UtilityBillRow[];
   showPropertyColumn?: boolean;
+  // Every property to offer in the filter. Without it the list is derived from
+  // the bills themselves, so a property with no bills yet could not be picked.
+  propertyOptions?: { id: string; name: string }[];
   // Overrides the default per-row returnTo (otherwise /utility-bills when
   // showPropertyColumn, else /properties/{propertyId}) — the Tenant Profile
   // page needs paying a bill to come back to itself instead of either default.
@@ -264,15 +285,17 @@ export function UtilityBillsTable({
   const [propertyFilter, setPropertyFilter] = useState(ALL_PROPERTIES);
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
+  const [query, setQuery] = useState("");
 
   const properties = useMemo(() => {
     if (!showPropertyColumn) return [];
+    if (propertyOptions && propertyOptions.length > 0) return propertyOptions;
     const byId = new Map<string, string>();
     bills.forEach((b) => {
       if (b.propertyName && !byId.has(b.propertyId)) byId.set(b.propertyId, b.propertyName);
     });
     return Array.from(byId, ([id, name]) => ({ id, name }));
-  }, [bills, showPropertyColumn]);
+  }, [bills, showPropertyColumn, propertyOptions]);
 
   // Kept separate from `filtered` (which also applies the status chip) so the
   // footer's "total unpaid" tracks the property/date scope but doesn't
@@ -285,16 +308,24 @@ export function UtilityBillsTable({
     [bills, propertyFilter, showPropertyColumn]
   );
 
+  const bySearch = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    if (!q) return byProperty;
+    return byProperty.filter((b) =>
+      `${b.propertyName ?? ""} ${b.unitLabel ?? ""} ${b.tenantName ?? ""}`.toLowerCase().includes(q)
+    );
+  }, [byProperty, query]);
+
   const byPropertyAndDate = useMemo(() => {
-    if (!dateFrom && !dateTo) return byProperty;
+    if (!dateFrom && !dateTo) return bySearch;
     const rangeStart = dateFrom ? new Date(dateFrom) : null;
     const rangeEnd = dateTo ? new Date(dateTo) : null;
     if (rangeEnd) rangeEnd.setDate(rangeEnd.getDate() + 1); // inclusive of the "to" day
-    return byProperty.filter((b) => {
+    return bySearch.filter((b) => {
       const due = new Date(b.dueDate);
       return (!rangeStart || due >= rangeStart) && (!rangeEnd || due < rangeEnd);
     });
-  }, [byProperty, dateFrom, dateTo]);
+  }, [bySearch, dateFrom, dateTo]);
 
   const filtered = useMemo(() => {
     if (filter === "unpaid") return byPropertyAndDate.filter((b) => b.status !== "PAID");
@@ -339,6 +370,19 @@ export function UtilityBillsTable({
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
+          {showPropertyColumn ? (
+            <InputGroup className="h-8 w-64">
+              <InputGroupAddon>
+                <Search className="size-3.5 opacity-50" />
+              </InputGroupAddon>
+              <InputGroupInput
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                placeholder={t("utilitySearchPlaceholder")}
+                className="text-xs"
+              />
+            </InputGroup>
+          ) : null}
           <Input
             type="date"
             value={dateFrom}
@@ -433,7 +477,10 @@ export function UtilityBillsTable({
                     </p>
                   ) : null}
                 </TableCell>
-                <TableCell className="font-mono text-muted-foreground">{b.unitLabel ?? "—"}</TableCell>
+                <TableCell className="font-mono text-muted-foreground">
+                  {b.unitLabel ?? "—"}
+                  {b.tenantName ? <p className="font-sans text-xs">{b.tenantName}</p> : null}
+                </TableCell>
                 <TableCell className="text-muted-foreground">
                   {paymentMethodLabel(t, b.paymentMethod)}
                 </TableCell>
@@ -470,20 +517,31 @@ export function UtilityBillsTable({
                   </Badge>
                 </TableCell>
                 <TableCell className="text-right">
-                  {b.status !== "PAID" ? (
-                    <PayUtilityBillButton
-                      billId={b.id}
-                      propertyId={b.propertyId}
-                      type={b.type}
-                      amount={b.amount}
-                      paidAmount={b.paidAmount}
-                      paidByCompany={b.paidByCompany}
-                      returnTo={returnTo ?? (showPropertyColumn ? "/utility-bills" : `/properties/${b.propertyId}`)}
-                      iconOnly={showPropertyColumn}
-                    />
-                  ) : (
-                    <span className="text-xs text-muted-foreground">—</span>
-                  )}
+                  <div className="flex items-center justify-end gap-1.5">
+                    <Button
+                      variant="outline"
+                      size="icon-sm"
+                      title={t("invoicePrint")}
+                      render={<Link href={utilityInvoiceHref(b)} />}
+                      nativeButton={false}
+                      className="border-primary/40 text-primary hover:bg-primary/10"
+                    >
+                      <Printer className="size-3.5" />
+                      <span className="sr-only">{t("invoicePrint")}</span>
+                    </Button>
+                    {b.status !== "PAID" ? (
+                      <PayUtilityBillButton
+                        billId={b.id}
+                        propertyId={b.propertyId}
+                        type={b.type}
+                        amount={b.amount}
+                        paidAmount={b.paidAmount}
+                        paidByCompany={b.paidByCompany}
+                        returnTo={returnTo ?? (showPropertyColumn ? "/utility-bills" : `/properties/${b.propertyId}`)}
+                        iconOnly={showPropertyColumn}
+                      />
+                    ) : null}
+                  </div>
                 </TableCell>
               </TableRow>
             ))}

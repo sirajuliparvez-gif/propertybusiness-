@@ -1,5 +1,6 @@
 "use server";
 
+import { dhakaToday } from "@/lib/dhaka-time";
 import { revalidatePath } from "next/cache";
 import { getLocale } from "next-intl/server";
 import { prisma } from "@/lib/prisma";
@@ -46,6 +47,17 @@ export async function recordOwnerRentPayment(formData: FormData) {
       where: { ownerLeaseAgreementId, month, unitId },
     });
 
+    // `amount` is what has been paid to the owner for this month in total. Only
+    // the increase over what is already recorded moves money: submitting the same
+    // figure again is a harmless no-op, where it used to write a second expense
+    // Transaction while the row still said "paid once". Lowering it is refused —
+    // that would leave the earlier transaction behind and the books disagreeing.
+    const previousPaid = existing ? Number(existing.paidAmount) : 0;
+    const delta = Number(amount) - previousPaid;
+    if (existing && delta < 0) {
+      throw new Error("Owner rent already recorded for this month is higher than this amount");
+    }
+
     const payment = existing
       ? await tx.ownerRentPayment.update({
           where: { id: existing.id },
@@ -64,18 +76,20 @@ export async function recordOwnerRentPayment(formData: FormData) {
           },
         });
 
-    await tx.transaction.create({
-      data: {
-        propertyId,
-        type: "RENT_PAID_TO_OWNER",
-        direction: "OUTGOING",
-        amount,
-        method,
-        unitId,
-        ownerRentPaymentId: payment.id,
-        date: paidDate,
-      },
-    });
+    if (delta > 0) {
+      await tx.transaction.create({
+        data: {
+          propertyId,
+          type: "RENT_PAID_TO_OWNER",
+          direction: "OUTGOING",
+          amount: delta,
+          method,
+          unitId,
+          ownerRentPaymentId: payment.id,
+          date: paidDate,
+        },
+      });
+    }
   });
 
   revalidatePath(`/properties/${propertyId}`);
@@ -113,7 +127,7 @@ export async function endLeaseAgreement(formData: FormData) {
 
     await tx.ownerLeaseAgreement.updateMany({
       where: { id: agreementId, status: "ACTIVE" },
-      data: { status: "ENDED", endDate: new Date() },
+      data: { status: "ENDED", endDate: dhakaToday() },
     });
 
     const maxRefund = Number(agreement.downpaymentAmount ?? 0);
@@ -129,7 +143,7 @@ export async function endLeaseAgreement(formData: FormData) {
           direction: "INCOMING",
           amount: refundAmount,
           method,
-          date: new Date(),
+          date: dhakaToday(),
         },
       });
     }

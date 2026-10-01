@@ -1,5 +1,6 @@
 "use server";
 
+import { dhakaToday } from "@/lib/dhaka-time";
 import { revalidatePath } from "next/cache";
 import { getLocale } from "next-intl/server";
 import { prisma } from "@/lib/prisma";
@@ -129,7 +130,7 @@ export async function payUtilityBill(formData: FormData) {
 
     const newPaidAmount = alreadyPaid + billPortion + companyAmount;
     const newStatus = newPaidAmount >= totalAmount ? "PAID" : "PARTIAL";
-    const paidDate = new Date();
+    const paidDate = dhakaToday();
 
     await tx.utilityBill.update({
       where: { id: billId },

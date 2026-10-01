@@ -1,5 +1,6 @@
 "use client";
 
+import { dhakaTodayISO } from "@/lib/dhaka-time";
 import { useState, useTransition } from "react";
 import { useTranslations } from "next-intl";
 import { Loader2, Wallet } from "lucide-react";
@@ -51,6 +52,7 @@ export function RecordTenantRentPaymentDialog({
   serviceChargeType = null,
   serviceChargeValue = null,
   overdueMonths = [],
+  monthSettled = false,
   returnTo,
   iconOnly = false,
   variant = "button",
@@ -66,6 +68,9 @@ export function RecordTenantRentPaymentDialog({
   // RentPayment rows AND months nobody ever recorded (see rent-ledger.ts).
   // Powers the "Settle Overdue" tab's breakdown and its oldest-first payoff.
   overdueMonths?: OverdueMonth[];
+  // This month is already fully paid — a second cash/downpayment payment for
+  // it would double-count, so only overdue/advance payments are offered.
+  monthSettled?: boolean;
   returnTo?: string;
   // Table rows need the button to just be an icon (hover reveals the label
   // via the native `title` tooltip) so the actions column doesn't force the
@@ -81,18 +86,18 @@ export function RecordTenantRentPaymentDialog({
 }) {
   const t = useTranslations("Properties");
   const [isPending, startTransition] = useTransition();
-  const [mode, setMode] = useState<Mode>("cash");
+  const [mode, setMode] = useState<Mode>(monthSettled ? "advance" : "cash");
   const [method, setMethod] = useState("NONE");
   const serviceChargeAmount = computeServiceChargeAmount(monthlyRentAmount, serviceChargeType, serviceChargeValue);
   // "Rent due" is rent + service charge bundled as one figure — see the
   // matching note in actions/tenant-rent.ts.
   const dueAmount = monthlyRentAmount + serviceChargeAmount;
   const [amount, setAmount] = useState(String(dueAmount || ""));
-  const [startMonth, setStartMonth] = useState(new Date().toISOString().slice(0, 7));
+  const [startMonth, setStartMonth] = useState(dhakaTodayISO().slice(0, 7));
   const [monthsCount, setMonthsCount] = useState("3");
   const totalOverdueAmount = overdueMonths.reduce((sum, m) => sum + m.gap, 0);
   const [overdueAmount, setOverdueAmount] = useState(String(totalOverdueAmount || ""));
-  const todayValue = new Date().toISOString().slice(0, 10);
+  const todayValue = dhakaTodayISO();
   const advanceTotal = dueAmount * (Number(monthsCount) || 0);
 
   function handleModeChange(next: Mode) {
@@ -157,9 +162,11 @@ export function RecordTenantRentPaymentDialog({
           <FormField label={t("paymentMode")} htmlFor="rentPaymentModeTabs">
             <Tabs value={mode} onValueChange={(v) => handleModeChange(v as Mode)}>
               <TabsList className="h-8 w-full flex-wrap">
-                <TabsTrigger value="cash" className="flex-1 text-xs">
-                  {t("cashPayment")}
-                </TabsTrigger>
+                {monthSettled ? null : (
+                  <TabsTrigger value="cash" className="flex-1 text-xs">
+                    {t("cashPayment")}
+                  </TabsTrigger>
+                )}
                 {overdueMonths.length > 0 ? (
                   <TabsTrigger value="overdue" className="flex-1 text-xs">
                     {t("settleOverdue")}
@@ -168,9 +175,11 @@ export function RecordTenantRentPaymentDialog({
                 <TabsTrigger value="advance" className="flex-1 text-xs">
                   {t("advanceRentPayment")}
                 </TabsTrigger>
-                <TabsTrigger value="downpaymentAdjustment" className="flex-1 text-xs">
-                  {t("adjustFromDownpayment")}
-                </TabsTrigger>
+                {monthSettled ? null : (
+                  <TabsTrigger value="downpaymentAdjustment" className="flex-1 text-xs">
+                    {t("adjustFromDownpayment")}
+                  </TabsTrigger>
+                )}
               </TabsList>
             </Tabs>
           </FormField>

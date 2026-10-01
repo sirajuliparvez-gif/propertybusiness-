@@ -1,5 +1,6 @@
 "use client";
 
+import { dhakaTodayISO } from "@/lib/dhaka-time";
 import { useMemo, useState, useTransition } from "react";
 import { useTranslations } from "next-intl";
 import { Building2, Loader2, User, Home, FileText, MapPin } from "lucide-react";
@@ -327,7 +328,7 @@ export function PropertyCreateForm({ owners }: { owners: { id: string; name: str
                   name="startDate"
                   type="date"
                   required
-                  defaultValue={new Date().toISOString().slice(0, 10)}
+                  defaultValue={dhakaTodayISO()}
                 />
               </FormField>
               <FormField label={t("endDate")} htmlFor="endDate">

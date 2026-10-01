@@ -17,7 +17,7 @@ import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { InitialAvatar } from "@/components/properties/initial-avatar";
-import { StatusPill, rentPillStatus } from "@/components/properties/status-pill";
+import { StatusPill, isRentSettled, rentPillStatus } from "@/components/properties/status-pill";
 import { StatTile } from "@/components/stat-tile";
 import { RecordTenantRentPaymentDialog } from "@/components/properties/record-tenant-rent-payment-dialog";
 import { VacateTenantDialog } from "@/components/properties/vacate-tenant-dialog";
@@ -125,6 +125,7 @@ export default async function TenantProfilePage({
                 serviceChargeType={tenant.serviceChargeType}
                 serviceChargeValue={tenant.serviceChargeValue}
                 overdueMonths={tenant.overdueMonths}
+                monthSettled={isRentSettled(tenant.rentStatus, tenant.remaining)}
                 returnTo={`/tenants/${tenant.id}`}
               />
               <VacateTenantDialog

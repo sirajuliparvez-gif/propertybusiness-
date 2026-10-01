@@ -1,5 +1,6 @@
 "use client";
 
+import { dhakaTodayISO } from "@/lib/dhaka-time";
 import { useState, useTransition } from "react";
 import { useTranslations } from "next-intl";
 import { Loader2, Plus } from "lucide-react";
@@ -49,7 +50,7 @@ export function AddEmployeeDialogGlobal({
   const [propertyId, setPropertyId] = useState(properties[0]?.id ?? COMPANY_STAFF_VALUE);
   const [role, setRole] = useState("");
   const [salaryAmount, setSalaryAmount] = useState("");
-  const todayValue = new Date().toISOString().slice(0, 10);
+  const todayValue = dhakaTodayISO();
 
   function applyRolePreset(preset: (typeof ROLE_PRESETS)[number]) {
     setRole(preset.label);

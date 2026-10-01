@@ -1,5 +1,6 @@
 "use client";
 
+import { dhakaTodayISO } from "@/lib/dhaka-time";
 import { useMemo, useState, useTransition } from "react";
 import { useTranslations } from "next-intl";
 import { Loader2, Plus } from "lucide-react";
@@ -62,7 +63,7 @@ export function AddTenantDialogGlobal({
   const [initialDownpaymentAmount, setInitialDownpaymentAmount] = useState(
     initialUnit?.tenantDefaultDownpaymentAmount != null ? String(initialUnit.tenantDefaultDownpaymentAmount) : ""
   );
-  const todayValue = new Date().toISOString().slice(0, 10);
+  const todayValue = dhakaTodayISO();
 
   const unitsForProperty = useMemo(
     () => properties.find((p) => p.id === propertyId)?.units ?? [],

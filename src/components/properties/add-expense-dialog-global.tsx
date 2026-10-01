@@ -1,5 +1,6 @@
 "use client";
 
+import { dhakaTodayISO } from "@/lib/dhaka-time";
 import { useMemo, useState, useTransition } from "react";
 import { useTranslations } from "next-intl";
 import { Loader2, Plus } from "lucide-react";
@@ -36,7 +37,7 @@ export function AddExpenseDialogGlobal({ properties }: { properties: PropertyUni
   const [type, setType] = useState<"MAINTENANCE_EXPENSE" | "OTHER">("OTHER");
   const [unitId, setUnitId] = useState(NONE_VALUE);
   const [method, setMethod] = useState(NONE_VALUE);
-  const todayValue = new Date().toISOString().slice(0, 10);
+  const todayValue = dhakaTodayISO();
 
   const unitsForProperty = useMemo(
     () => properties.find((p) => p.id === propertyId)?.units ?? [],

@@ -1,3 +1,4 @@
+import { cache } from "react";
 import { dhakaNow } from "@/lib/dhaka-time";
 import { prisma } from "@/lib/prisma";
 import { buildRentLedger, overdueEntries, totalOverdue } from "@/lib/rent-ledger";
@@ -34,7 +35,7 @@ export async function getActiveProperties() {
   });
 }
 
-export async function getAllStaffData() {
+export const getAllStaffData = cache(async function getAllStaffData() {
   const now = dhakaNow();
   const { monthStart, monthEnd } = monthRange(now);
 
@@ -127,7 +128,7 @@ export async function getAllStaffData() {
     payrollSettledRate,
     properties,
   };
-}
+});
 
 export type AllStaffData = Awaited<ReturnType<typeof getAllStaffData>>;
 

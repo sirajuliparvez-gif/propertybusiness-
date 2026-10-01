@@ -1,5 +1,6 @@
 import { dhakaNow } from "@/lib/dhaka-time";
 import { prisma } from "@/lib/prisma";
+import { INCOME_TYPES } from "@/lib/finance-types";
 
 function monthKey(d: Date) {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
@@ -18,12 +19,6 @@ function monthKey(d: Date) {
 // all real operating revenue. UTILITY_PROFIT_FROM_TENANT (tenant paid more
 // than the actual bill) is real income too, unlike the plain reimbursement
 // case which stays excluded as a pass-through.
-const INCOME_TYPES = [
-  "RENT_RECEIVED_FROM_TENANT",
-  "GUEST_STAY_PAYMENT_RECEIVED",
-  "SERVICE_CHARGE_RECEIVED_FROM_TENANT",
-  "UTILITY_PROFIT_FROM_TENANT",
-] as const;
 const OWNER_RENT_TYPE = "RENT_PAID_TO_OWNER";
 const PAYROLL_TYPE = "PAYROLL_EXPENSE";
 const UTILITY_EXPENSE_TYPE = "UTILITY_EXPENSE";

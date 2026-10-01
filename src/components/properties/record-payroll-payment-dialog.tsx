@@ -1,5 +1,6 @@
 "use client";
 
+import { dhakaTodayISO } from "@/lib/dhaka-time";
 import { useState, useTransition } from "react";
 import { useTranslations } from "next-intl";
 import { Loader2, Wallet } from "lucide-react";
@@ -40,6 +41,7 @@ export function RecordPayrollPaymentDialog({
   employeeId,
   defaultAmount,
   overdueMonths = [],
+  settled = false,
   returnTo,
   iconOnly = false,
 }: {
@@ -47,6 +49,9 @@ export function RecordPayrollPaymentDialog({
   employeeId: string;
   defaultAmount: number;
   overdueMonths?: OverdueMonth[];
+  // This month is fully paid and nothing older is owed — a further payment
+  // would double-count, so the button is not offered.
+  settled?: boolean;
   returnTo?: string;
   iconOnly?: boolean;
 }) {
@@ -57,7 +62,9 @@ export function RecordPayrollPaymentDialog({
   const [amount, setAmount] = useState(String(defaultAmount || ""));
   const totalOverdueAmount = overdueMonths.reduce((sum, m) => sum + m.gap, 0);
   const [overdueAmount, setOverdueAmount] = useState(String(totalOverdueAmount || ""));
-  const todayValue = new Date().toISOString().slice(0, 10);
+  const todayValue = dhakaTodayISO();
+
+  if (settled) return null;
 
   return (
     <Dialog>

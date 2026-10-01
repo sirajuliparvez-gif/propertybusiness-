@@ -51,7 +51,11 @@ export default async function UtilityBillsPage() {
 
       <MobileUtilityBillsList bills={bills} />
       <div className="hidden md:block">
-        <UtilityBillsTable bills={bills} showPropertyColumn />
+        <UtilityBillsTable
+          bills={bills}
+          showPropertyColumn
+          propertyOptions={properties.map((p) => ({ id: p.id, name: p.name }))}
+        />
       </div>
     </div>
   );

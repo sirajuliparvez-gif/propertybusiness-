@@ -1,5 +1,6 @@
 import { dhakaNow } from "@/lib/dhaka-time";
 import { prisma } from "@/lib/prisma";
+import { INCOME_TYPES, EXPENSE_TYPES } from "@/lib/finance-types";
 
 function monthRange(now: Date) {
   return {
@@ -7,33 +8,6 @@ function monthRange(now: Date) {
     monthEnd: new Date(now.getFullYear(), now.getMonth() + 1, 1),
   };
 }
-
-// Only these types are real operating income/expense — everything else
-// (downpayment movements in every direction, utility bill reimbursement,
-// guest deposit refund) is a pass-through/balance-sheet item, excluded from
-// these totals for the same reason DOWNPAYMENT_REFUND_TO_TENANT was already
-// excluded from netProfit: it's money changing hands, not money earned or
-// spent. Still shown as a full row in the ledger table — just not summed
-// into the KPI numbers. GUEST_STAY_PAYMENT_RECEIVED is real hotel revenue and
-// SERVICE_CHARGE_RECEIVED_FROM_TENANT is a real optional fee, so both count
-// as income alongside tenant rent. UTILITY_EXPENSE only ever gets created for
-// a bill the company pays itself (paidByCompany), so it's a real cost too —
-// UTILITY_REIMBURSEMENT_FROM_TENANT (the normal case) stays excluded, but
-// UTILITY_PROFIT_FROM_TENANT (tenant paid more than the actual bill) is real
-// income.
-const INCOME_TYPES = [
-  "RENT_RECEIVED_FROM_TENANT",
-  "GUEST_STAY_PAYMENT_RECEIVED",
-  "SERVICE_CHARGE_RECEIVED_FROM_TENANT",
-  "UTILITY_PROFIT_FROM_TENANT",
-] as const;
-const EXPENSE_TYPES = [
-  "RENT_PAID_TO_OWNER",
-  "PAYROLL_EXPENSE",
-  "UTILITY_EXPENSE",
-  "MAINTENANCE_EXPENSE",
-  "OTHER",
-] as const;
 
 export async function getAllTransactionsData() {
   const now = dhakaNow();
