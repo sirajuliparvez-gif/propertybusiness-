@@ -21,7 +21,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { InitialAvatar } from "@/components/properties/initial-avatar";
-import { StatusPill } from "@/components/properties/status-pill";
+import { StatusPill, isRentSettled, payrollPillStatus } from "@/components/properties/status-pill";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -54,7 +54,7 @@ export function StaffTable({
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
 
-  const payrollStatusLabels = { PAID: t("paid"), PENDING: t("overdueStatus"), PARTIAL: t("pending") };
+  const payrollStatusLabels = { PAID: t("paid"), PARTIAL: t("pending"), PENDING: t("dueInPeriod"), UNPAID: t("overdueStatus") };
 
   // Only meaningful on the cross-property page (showPropertyColumn) — the
   // per-property usage has just one property, so no dropdown is rendered.
@@ -87,9 +87,9 @@ export function StaffTable({
 
     const byStatus =
       filter === "paid"
-        ? byProperty.filter((s) => s.status === "ACTIVE" && s.overdueAmount <= 0)
+        ? byProperty.filter((s) => s.status === "ACTIVE" && isRentSettled(s.payrollStatus, s.overdueAmount))
         : filter === "overdue"
-          ? byProperty.filter((s) => s.status === "ACTIVE" && s.overdueAmount > 0)
+          ? byProperty.filter((s) => s.status === "ACTIVE" && s.pastDueAmount > 0)
           : filter === "inactive"
             ? byProperty.filter((s) => s.status === "INACTIVE")
             : filter === "former"
@@ -282,10 +282,10 @@ export function StaffTable({
                       </Badge>
                     ) : (
                       <div className="flex flex-col gap-0.5">
-                        <StatusPill status={s.payrollStatus} labels={payrollStatusLabels} />
-                        {s.overdueMonths.length > 1 ? (
+                        <StatusPill status={payrollPillStatus(s.payrollStatus, s.payrollPastDue)} labels={payrollStatusLabels} />
+                        {s.pastDueMonthsCount > 1 ? (
                           <span className="text-xs font-medium text-destructive">
-                            {t("monthsOverdueCount", { count: s.overdueMonths.length })}
+                            {t("monthsOverdueCount", { count: s.pastDueMonthsCount })}
                           </span>
                         ) : null}
                       </div>

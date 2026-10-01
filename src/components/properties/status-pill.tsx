@@ -9,6 +9,12 @@ export function rentPillStatus(status: Status, pastDue: boolean): Status {
   return status === "UNPAID" && !pastDue ? "PENDING" : status;
 }
 
+// Salary has the same two stages: unpaid inside its window (amber "payment period") and, once the 15th has passed,
+// overdue (red). An unpaid PENDING month past its due day is shown as UNPAID so the pill turns red.
+export function payrollPillStatus(status: Status, pastDue: boolean): Status {
+  return status === "PENDING" && pastDue ? "UNPAID" : status;
+}
+
 // "Paid" means this month is actually settled. A lease with nothing owing
 // because its rent is ৳0 has no recorded payment, so it stays unpaid until
 // one is recorded instead of landing in the paid list automatically.

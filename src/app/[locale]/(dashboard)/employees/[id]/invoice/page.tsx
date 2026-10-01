@@ -10,6 +10,7 @@ import { getEmployeeProfile } from "@/lib/employees-data";
 import { formatTaka, formatDate, monthLabel } from "@/lib/format";
 import { paymentMethodLabel } from "@/lib/payment-method";
 import { dhakaNow } from "@/lib/dhaka-time";
+import { isMonthPastDue, SALARY_DUE_DAY } from "@/lib/rent-ledger";
 
 function currentMonthKey() {
   const now = dhakaNow();
@@ -46,9 +47,12 @@ export default async function EmployeeSalarySlipPage({
   const statusLabels: Record<string, string> = {
     PAID: t("paid"),
     PARTIAL: t("pending"),
-    PENDING: t("billStatusUnpaid"),
+    // Unpaid is "payment period" until the 15th, বকেয়া after it.
+    PENDING: isMonthPastDue(selectedMonth, SALARY_DUE_DAY) ? t("overdueStatus") : t("dueInPeriod"),
   };
   const remaining = Math.max(0, salaryDue - salaryPaid);
+  const [selectedYear, selectedMonthNumber] = selectedMonth.split("-").map(Number);
+  const salaryDeadline = new Date(selectedYear, selectedMonthNumber - 1, SALARY_DUE_DAY);
 
   return (
     <div className="mx-auto flex w-full max-w-3xl min-w-0 flex-1 flex-col gap-4">
@@ -106,7 +110,7 @@ export default async function EmployeeSalarySlipPage({
           <p className="mb-2 text-xs font-semibold tracking-wide text-muted-foreground uppercase">
             {t("invoiceSalarySection")}
           </p>
-          <div className="grid grid-cols-2 gap-3 rounded-lg border p-3 sm:grid-cols-4">
+          <div className="grid grid-cols-2 gap-3 rounded-lg border p-3 sm:grid-cols-3">
             <div>
               <p className="text-xs text-muted-foreground">{t("invoiceSalaryDueLabel")}</p>
               <p className="font-mono font-semibold tabular-nums">{formatTaka(salaryDue)}</p>
@@ -114,6 +118,16 @@ export default async function EmployeeSalarySlipPage({
             <div>
               <p className="text-xs text-muted-foreground">{t("invoiceSalaryPaidLabel")}</p>
               <p className="font-mono font-semibold tabular-nums text-success">{formatTaka(salaryPaid)}</p>
+            </div>
+            <div>
+              <p className="text-xs text-muted-foreground">{t("remaining")}</p>
+              <p className={`font-mono font-semibold tabular-nums ${remaining > 0 ? "text-destructive" : ""}`}>
+                {formatTaka(remaining)}
+              </p>
+            </div>
+            <div>
+              <p className="text-xs text-muted-foreground">{t("invoiceDueDateLabel")}</p>
+              <p className="font-mono font-medium tabular-nums">{formatDate(salaryDeadline)}</p>
             </div>
             <div>
               <p className="text-xs text-muted-foreground">{t("status")}</p>

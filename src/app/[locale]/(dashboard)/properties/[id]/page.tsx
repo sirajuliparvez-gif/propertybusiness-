@@ -171,9 +171,9 @@ export default async function PropertyDetailPage({
         />
         <StatTile
           label={t("overduePayroll")}
-          value={formatTaka(property.totalOverduePayroll)}
+          value={formatTaka(property.totalPastDuePayroll)}
           icon={UserX}
-          tone={property.totalOverduePayroll > 0 ? "destructive" : "default"}
+          tone={property.totalPastDuePayroll > 0 ? "destructive" : "default"}
         />
       </div>
 

@@ -7,7 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { InitialAvatar } from "@/components/properties/initial-avatar";
-import { StatusPill } from "@/components/properties/status-pill";
+import { StatusPill, payrollPillStatus } from "@/components/properties/status-pill";
 import { StatTile } from "@/components/stat-tile";
 import { RecordPayrollPaymentDialog } from "@/components/properties/record-payroll-payment-dialog";
 import { EmployeeActions } from "@/components/properties/employee-actions";
@@ -28,7 +28,7 @@ export default async function EmployeeProfilePage({
 
   const isTerminated = employee.status === "TERMINATED";
   const isInactive = employee.status === "INACTIVE";
-  const payrollStatusLabels = { PAID: t("paid"), PENDING: t("overdueStatus"), PARTIAL: t("pending") };
+  const payrollStatusLabels = { PAID: t("paid"), PARTIAL: t("pending"), PENDING: t("dueInPeriod"), UNPAID: t("overdueStatus") };
   const progressPct = employee.totalDue > 0 ? Math.min(100, Math.round((employee.totalPaid / employee.totalDue) * 100)) : 0;
 
   return (
@@ -80,7 +80,7 @@ export default async function EmployeeProfilePage({
                   {t("inactiveLabel")}
                 </Badge>
               ) : (
-                <StatusPill status={employee.payrollStatus} labels={payrollStatusLabels} />
+                <StatusPill status={payrollPillStatus(employee.payrollStatus, employee.payrollPastDue)} labels={payrollStatusLabels} />
               )}
             </div>
           </div>
@@ -258,7 +258,7 @@ export default async function EmployeeProfilePage({
                 {employee.payments.map((p) => (
                   <li
                     key={p.id}
-                    className={`flex items-center gap-3 px-4 py-3 ${p.isVirtual ? "bg-destructive/5" : ""}`}
+                    className={`flex items-center gap-3 px-4 py-3 ${p.pastDue ? "bg-destructive/5" : ""}`}
                   >
                     <div className="min-w-0 flex-1">
                       <p className="font-mono text-sm font-medium">{p.month}</p>
@@ -271,7 +271,7 @@ export default async function EmployeeProfilePage({
                       <p className="font-mono text-sm font-semibold tabular-nums">
                         {formatTaka(p.amountPaid)}
                       </p>
-                      <StatusPill status={p.status} labels={payrollStatusLabels} />
+                      <StatusPill status={payrollPillStatus(p.status, p.pastDue)} labels={payrollStatusLabels} />
                     </div>
                   </li>
                 ))}
@@ -290,7 +290,7 @@ export default async function EmployeeProfilePage({
               </TableHeader>
               <TableBody>
                 {employee.payments.map((p) => (
-                  <TableRow key={p.id} className={p.isVirtual ? "bg-destructive/5" : undefined}>
+                  <TableRow key={p.id} className={p.pastDue ? "bg-destructive/5" : undefined}>
                     <TableCell className="font-mono">{p.month}</TableCell>
                     <TableCell className="text-right font-mono tabular-nums">
                       {formatTaka(p.amountPaid)}
@@ -302,7 +302,7 @@ export default async function EmployeeProfilePage({
                       {p.paidAt ? formatDate(p.paidAt) : "—"}
                     </TableCell>
                     <TableCell>
-                      <StatusPill status={p.status} labels={payrollStatusLabels} />
+                      <StatusPill status={payrollPillStatus(p.status, p.pastDue)} labels={payrollStatusLabels} />
                     </TableCell>
                   </TableRow>
                 ))}

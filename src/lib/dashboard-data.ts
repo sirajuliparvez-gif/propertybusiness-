@@ -5,7 +5,7 @@ import { isIncomeType, isExpenseType } from "@/lib/finance-types";
 import { getAllTenantsData } from "@/lib/tenants-data";
 import { getAllStaffData } from "@/lib/employees-data";
 import { computeServiceChargeAmount } from "@/lib/service-charge";
-import { isMonthPastDue, RENT_DUE_DAY } from "@/lib/rent-ledger";
+import { isMonthPastDue, RENT_DUE_DAY, SALARY_DUE_DAY } from "@/lib/rent-ledger";
 
 const DAYS_AHEAD = 7; // "expiring/due soon" window
 
@@ -35,6 +35,7 @@ export const getActionRequiredData = cache(async function getActionRequiredData(
   const today = dhakaNow();
   const currentMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
   const rentPastDueNow = isMonthPastDue(currentMonth, RENT_DUE_DAY, now);
+  const salaryPastDueNow = isMonthPastDue(currentMonth, SALARY_DUE_DAY, now);
   const todayStart = startOfDay(now);
 
   const [
@@ -95,11 +96,15 @@ export const getActionRequiredData = cache(async function getActionRequiredData(
         },
       },
     }),
-    // This month's part-paid salaries. Fully unpaid staff come from the
-    // employee-based query below: a PayrollRecord row only exists once a
-    // payment has been recorded, so PENDING rows practically never exist.
+    // Recorded salary months still owing something and already past the 15th. Fully
+    // unpaid staff come from the employee-based query below: a PayrollRecord row
+    // only exists once a payment has been recorded.
     prisma.payrollRecord.findMany({
-      where: { month: currentMonth, status: "PARTIAL", employee: { status: "ACTIVE" } },
+      where: {
+        status: { in: ["PARTIAL", "PENDING"] },
+        month: salaryPastDueNow ? { lte: currentMonth } : { lt: currentMonth },
+        employee: { status: "ACTIVE" },
+      },
       take: 100,
       include: { employee: { include: { property: { select: { name: true } } } } },
     }),
@@ -219,11 +224,13 @@ export const getActionRequiredData = cache(async function getActionRequiredData(
         month: rentPastDueNow ? { lte: currentMonth } : { lt: currentMonth },
       },
     }),
-    prisma.employee.findMany({
-      where: { status: "ACTIVE", payrollRecords: { none: { month: currentMonth } } },
-      take: 100,
-      include: { property: { select: { name: true } } },
-    }),
+    salaryPastDueNow
+      ? prisma.employee.findMany({
+          where: { status: "ACTIVE", payrollRecords: { none: { month: currentMonth } } },
+          take: 100,
+          include: { property: { select: { name: true } } },
+        })
+      : Promise.resolve([]),
     prisma.utilityBill.count({ where: utilityWhere }),
     prisma.unit.count({ where: { tenantLeases: { none: { status: "ACTIVE" } } } }),
     prisma.tenantLease.count({ where: { status: "ACTIVE", endDate: { not: null, lte: daysFromNow(30) } } }),
@@ -300,15 +307,15 @@ export const getActionRequiredData = cache(async function getActionRequiredData(
         propertyName: p.employee.property?.name ?? "কোম্পানি স্টাফ",
         amount: Number(p.dueAmount ?? p.employee.salaryAmount) - Number(p.amountPaid),
         dueDate: p.dueDate,
-        overdue: false,
+        overdue: true,
       })),
       ...unpaidEmployees.map((e) => ({
         id: `emp-${e.id}`,
         employeeName: e.name,
         propertyName: e.property?.name ?? "কোম্পানি স্টাফ",
         amount: Number(e.salaryAmount),
-        dueDate: new Date(now.getFullYear(), now.getMonth(), 1),
-        overdue: false,
+        dueDate: new Date(now.getFullYear(), now.getMonth(), SALARY_DUE_DAY),
+        overdue: true,
       })),
     ],
     vacantUnits: vacantUnits.map((u) => ({
@@ -501,7 +508,7 @@ export async function getTotalOutstanding() {
 
   const rent = tenantsData.totalPastDueRent;
   const utility = Number(utilityAgg._sum.amount ?? 0) - Number(utilityAgg._sum.paidAmount ?? 0);
-  const payroll = staffData.totalOverduePayroll;
+  const payroll = staffData.totalPastDuePayroll;
 
   return { total: rent + utility + payroll, rent, utility, payroll };
 }

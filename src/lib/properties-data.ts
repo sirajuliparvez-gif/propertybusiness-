@@ -3,7 +3,15 @@ import { prisma } from "@/lib/prisma";
 import { isIncomeType } from "@/lib/finance-types";
 import { computeServiceChargeAmount } from "@/lib/service-charge";
 import { attachElectricityConsumption, latestElectricityReadingByUnit } from "@/lib/electricity-consumption";
-import { buildRentLedger, overdueEntries, pastDueEntries, totalOverdue, totalPastDue, RENT_DUE_DAY } from "@/lib/rent-ledger";
+import {
+  buildRentLedger,
+  overdueEntries,
+  pastDueEntries,
+  totalOverdue,
+  totalPastDue,
+  RENT_DUE_DAY,
+  SALARY_DUE_DAY,
+} from "@/lib/rent-ledger";
 import { splitUtilityBillTransactions } from "@/lib/utility-bill-split";
 import { fromLedgerStatus } from "@/lib/employees-data";
 
@@ -678,10 +686,12 @@ export async function getPropertyDetail(id: string) {
         paidAt: pr.paidAt,
         method: pr.transactions[0]?.method ?? null,
       })),
-      asOf
+      asOf,
+      SALARY_DUE_DAY
     );
     const overdue = overdueEntries(ledger);
     const overdueAmount = e.status === "ACTIVE" ? totalOverdue(ledger) : 0;
+    const pastDueAmount = e.status === "ACTIVE" ? totalPastDue(ledger) : 0;
     const currentEntry = ledger[ledger.length - 1] ?? null;
     return {
       id: e.id,
@@ -696,11 +706,15 @@ export async function getPropertyDetail(id: string) {
       paymentMethod: currentEntry?.method ?? null,
       overdueAmount,
       overdueMonths: e.status === "ACTIVE" ? overdue : [],
+      pastDueAmount,
+      pastDueMonthsCount: e.status === "ACTIVE" ? pastDueEntries(ledger).length : 0,
+      payrollPastDue: e.status === "ACTIVE" && (currentEntry?.pastDue ?? false),
     };
   });
   const activeStaff = staff.filter((s) => s.status === "ACTIVE");
   const payrollCost = activeStaff.reduce((sum, s) => sum + s.salaryAmount, 0);
   const totalOverduePayroll = activeStaff.reduce((sum, s) => sum + s.overdueAmount, 0);
+  const totalPastDuePayroll = activeStaff.reduce((sum, s) => sum + s.pastDueAmount, 0);
 
   const vacantUnitsList = unitTypes.flatMap((ut) =>
     ut.units
@@ -877,6 +891,7 @@ export async function getPropertyDetail(id: string) {
     totalOverdueRent,
     totalPastDueRent,
     totalOverduePayroll,
+    totalPastDuePayroll,
     netProfit,
     profitMargin,
     thisMonthIncome: collectedIncome,

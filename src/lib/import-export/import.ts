@@ -1,5 +1,5 @@
 import { dhakaToday } from "@/lib/dhaka-time";
-import { RENT_DUE_DAY } from "@/lib/rent-ledger";
+import { RENT_DUE_DAY, SALARY_DUE_DAY } from "@/lib/rent-ledger";
 import ExcelJS from "exceljs";
 import { prisma } from "@/lib/prisma";
 import type { ImportEntityType } from "@/generated/prisma/enums";
@@ -874,7 +874,7 @@ async function importPayroll(rows: RawRow[], fileName: string, userId: string | 
         create: {
           employeeId,
           month,
-          dueDate: paidAt ?? new Date(Number(month.slice(0, 4)), Number(month.slice(5, 7)) - 1, 1),
+          dueDate: new Date(Number(month.slice(0, 4)), Number(month.slice(5, 7)) - 1, SALARY_DUE_DAY),
           dueAmount,
           amountPaid,
           status,

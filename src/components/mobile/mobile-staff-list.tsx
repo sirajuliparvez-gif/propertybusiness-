@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { InitialAvatar } from "@/components/properties/initial-avatar";
-import { StatusPill } from "@/components/properties/status-pill";
+import { StatusPill, isRentSettled, payrollPillStatus } from "@/components/properties/status-pill";
 import { EmployeeActions } from "@/components/properties/employee-actions";
 import { RecordPayrollPaymentDialog } from "@/components/properties/record-payroll-payment-dialog";
 import { formatTaka, formatDate } from "@/lib/format";
@@ -31,11 +31,11 @@ export function MobileStaffList({
   const t = useTranslations("Properties");
   const [filter, setFilter] = useState<Filter>("all");
 
-  const payrollStatusLabels = { PAID: t("paid"), PENDING: t("overdueStatus"), PARTIAL: t("pending") };
+  const payrollStatusLabels = { PAID: t("paid"), PARTIAL: t("pending"), PENDING: t("dueInPeriod"), UNPAID: t("overdueStatus") };
 
   const filtered = useMemo(() => {
-    if (filter === "paid") return staff.filter((s) => s.status === "ACTIVE" && s.overdueAmount <= 0);
-    if (filter === "overdue") return staff.filter((s) => s.status === "ACTIVE" && s.overdueAmount > 0);
+    if (filter === "paid") return staff.filter((s) => s.status === "ACTIVE" && isRentSettled(s.payrollStatus, s.overdueAmount));
+    if (filter === "overdue") return staff.filter((s) => s.status === "ACTIVE" && s.pastDueAmount > 0);
     if (filter === "inactive") return staff.filter((s) => s.status === "INACTIVE");
     if (filter === "former") return staff.filter((s) => s.status === "TERMINATED");
     return staff;
@@ -114,10 +114,10 @@ export function MobileStaffList({
                       </Badge>
                     ) : (
                       <>
-                        <StatusPill status={s.payrollStatus} labels={payrollStatusLabels} />
-                        {s.overdueMonths.length > 1 ? (
+                        <StatusPill status={payrollPillStatus(s.payrollStatus, s.payrollPastDue)} labels={payrollStatusLabels} />
+                        {s.pastDueMonthsCount > 1 ? (
                           <p className="text-xs font-medium text-destructive">
-                            {t("monthsOverdueCount", { count: s.overdueMonths.length })}
+                            {t("monthsOverdueCount", { count: s.pastDueMonthsCount })}
                           </p>
                         ) : null}
                       </>

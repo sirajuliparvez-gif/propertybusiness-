@@ -67,6 +67,9 @@ export const LEDGER_START_MONTH = "2026-10";
 // unpaid month turn into বকেয়া.
 export const RENT_DUE_DAY = 10;
 
+// Salary is payable from the 1st through the 15th; only after the 15th does an unpaid month turn into বকেয়া.
+export const SALARY_DUE_DAY = 15;
+
 export function isMonthPastDue(month: string, dueDay: number, today: Date = dhakaNow()) {
   const todayKey = monthKeyOf(today);
   return compareMonthKeys(month, todayKey) < 0 || (month === todayKey && today.getDate() > dueDay);

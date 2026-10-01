@@ -5,7 +5,7 @@ import { revalidatePath } from "next/cache";
 import { getLocale } from "next-intl/server";
 import { prisma } from "@/lib/prisma";
 import { redirect } from "@/i18n/navigation";
-import { buildRentLedger, overdueEntries, totalOverdue } from "@/lib/rent-ledger";
+import { buildRentLedger, overdueEntries, totalOverdue, SALARY_DUE_DAY } from "@/lib/rent-ledger";
 
 function str(formData: FormData, key: string) {
   const v = formData.get(key);
@@ -67,7 +67,8 @@ export async function recordPayrollPayment(formData: FormData) {
       create: {
         employeeId,
         month,
-        dueDate: paidDate,
+        // The month's real deadline (the 15th), not the day the money was handed over.
+        dueDate: new Date(Number(month.slice(0, 4)), Number(month.slice(5, 7)) - 1, SALARY_DUE_DAY),
         dueAmount,
         amountPaid: totalPaid,
         status,
@@ -141,7 +142,8 @@ export async function recordOverduePayrollPayment(formData: FormData) {
       status: pr.status === "PENDING" ? "UNPAID" : pr.status,
       paidAt: pr.paidAt,
     })),
-    asOf
+    asOf,
+    SALARY_DUE_DAY
   );
   const overdue = overdueEntries(ledger); // oldest month first
   if (overdue.length === 0) throw new Error("No overdue salary for this employee");

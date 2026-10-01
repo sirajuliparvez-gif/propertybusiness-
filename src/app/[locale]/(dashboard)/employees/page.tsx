@@ -14,7 +14,7 @@ export default async function EmployeesPage() {
     totalActiveStaff,
     totalMonthlyPayroll,
     paidThisMonth,
-    totalOverduePayroll,
+    totalPastDuePayroll,
     payrollSettledRate,
     properties,
   } = await getAllStaffData();
@@ -50,9 +50,9 @@ export default async function EmployeesPage() {
         />
         <StatTile
           label={t("overduePayroll")}
-          value={formatTaka(totalOverduePayroll)}
+          value={formatTaka(totalPastDuePayroll)}
           icon={AlertTriangle}
-          tone={totalOverduePayroll > 0 ? "destructive" : "default"}
+          tone={totalPastDuePayroll > 0 ? "destructive" : "default"}
         />
         <StatTile
           label={t("payrollSettledRate")}

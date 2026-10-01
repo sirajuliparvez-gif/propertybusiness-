@@ -1,7 +1,14 @@
 import { cache } from "react";
 import { dhakaNow } from "@/lib/dhaka-time";
 import { prisma } from "@/lib/prisma";
-import { buildRentLedger, overdueEntries, totalOverdue } from "@/lib/rent-ledger";
+import {
+  buildRentLedger,
+  overdueEntries,
+  pastDueEntries,
+  totalOverdue,
+  totalPastDue,
+  SALARY_DUE_DAY,
+} from "@/lib/rent-ledger";
 
 // PayrollStatus has PENDING where RentPaymentStatus has UNPAID (same
 // meaning) — normalize so buildRentLedger (written against the rent
@@ -88,10 +95,12 @@ export const getAllStaffData = cache(async function getAllStaffData() {
         paidAt: pr.paidAt,
         method: pr.transactions[0]?.method ?? null,
       })),
-      asOf
+      asOf,
+      SALARY_DUE_DAY
     );
     const overdue = overdueEntries(ledger);
     const overdueAmount = e.status === "ACTIVE" ? totalOverdue(ledger) : 0;
+    const pastDueAmount = e.status === "ACTIVE" ? totalPastDue(ledger) : 0;
     const currentEntry = ledger[ledger.length - 1] ?? null;
     return {
       id: e.id,
@@ -108,12 +117,16 @@ export const getAllStaffData = cache(async function getAllStaffData() {
       paymentMethod: currentEntry?.method ?? null,
       overdueAmount,
       overdueMonths: e.status === "ACTIVE" ? overdue : [],
+      pastDueAmount,
+      pastDueMonthsCount: e.status === "ACTIVE" ? pastDueEntries(ledger).length : 0,
+      payrollPastDue: e.status === "ACTIVE" && (currentEntry?.pastDue ?? false),
     };
   });
 
   const activeStaff = staff.filter((s) => s.status === "ACTIVE");
   const totalMonthlyPayroll = activeStaff.reduce((sum, s) => sum + s.salaryAmount, 0);
   const totalOverduePayroll = activeStaff.reduce((sum, s) => sum + s.overdueAmount, 0);
+  const totalPastDuePayroll = activeStaff.reduce((sum, s) => sum + s.pastDueAmount, 0);
   const paidThisMonth = Number(paidThisMonthAgg._sum.amount ?? 0);
   const settledThisMonthCount = activeStaff.filter((s) => s.payrollStatus === "PAID").length;
   const payrollSettledRate =
@@ -125,6 +138,7 @@ export const getAllStaffData = cache(async function getAllStaffData() {
     totalMonthlyPayroll,
     paidThisMonth,
     totalOverduePayroll,
+    totalPastDuePayroll,
     payrollSettledRate,
     properties,
   };
@@ -175,7 +189,8 @@ export async function getEmployeeProfile(employeeId: string) {
       paidAt: pr.paidAt,
       method: pr.transactions[0]?.method ?? null,
     })),
-    ledgerAsOf
+    ledgerAsOf,
+    SALARY_DUE_DAY
   );
   // Newest first, matching the payment-history table's existing convention.
   const payments = [...ledger].reverse().map((entry) => ({
@@ -188,6 +203,7 @@ export async function getEmployeeProfile(employeeId: string) {
     paidAt: entry.paidAt,
     method: entry.method ?? null,
     isVirtual: entry.rentPaymentId === null,
+    pastDue: entry.pastDue,
   }));
   const overdueMonths = overdueEntries(ledger);
 
@@ -251,6 +267,7 @@ export async function getEmployeeProfile(employeeId: string) {
     onTimeRate,
     avgPaymentDay,
     preferredMethod,
+    payrollPastDue: employee.status === "ACTIVE" && (ledger[ledger.length - 1]?.pastDue ?? false),
     payrollStatus:
       employee.status === "ACTIVE"
         ? ledger.length > 0
