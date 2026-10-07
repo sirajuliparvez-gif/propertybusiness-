@@ -81,7 +81,12 @@ export async function getAllUtilityBillsData() {
     id: p.id,
     name: p.name,
     units: p.unitTypes.flatMap((ut) =>
-      ut.units.map((u) => ({ id: u.id, label: u.label, unitTypeLabel: ut.label }))
+      ut.units.map((u) => ({
+        id: u.id,
+        label: u.label,
+        unitTypeLabel: ut.label,
+        tenantName: u.tenantLeases[0]?.tenant.name ?? null,
+      }))
     ),
     previousElectricityReadingByUnit: Object.fromEntries(
       latestElectricityReadingByUnit(
@@ -136,6 +141,7 @@ export async function getAllUtilityBillsData() {
           companyAbsorbedAmount: split.companyAbsorbedAmount,
           profitAmount: split.profitAmount,
           unitLabel: b.unitId ? (unitLabelById.get(b.unitId) ?? null) : null,
+          unitId: b.unitId,
           tenantName: b.unitId ? (tenantNameByUnitId.get(b.unitId) ?? null) : null,
           tenantLeaseId: b.unitId ? (leaseIdByUnitId.get(b.unitId) ?? null) : null,
           month: b.month,
@@ -188,6 +194,10 @@ export async function getUtilityBillInvoice(billId: string) {
       meterReading: true,
       unitId: true,
       property: { select: { id: true, name: true } },
+      // The lease this bill was raised against — the tenant who actually owes
+      // it. Preferred over the unit's current ACTIVE lease below, which may
+      // already belong to a different tenant if this one moved out.
+      tenantLease: { select: { tenant: { select: { name: true, contactInfo: true } } } },
       unit: {
         select: {
           label: true,
@@ -224,7 +234,10 @@ export async function getUtilityBillInvoice(billId: string) {
   const split = splitUtilityBillTransactions(
     bill.transactions.map((t) => ({ type: t.type, amount: Number(t.amount), method: t.method }))
   );
-  const lease = bill.unit?.tenantLeases[0] ?? null;
+  // Tenant the bill belongs to: the lease it was raised against when recorded
+  // that way, else whichever lease is on the unit now (bills created before a
+  // tenant moved in carry no tenantLeaseId).
+  const lease = bill.tenantLease ?? bill.unit?.tenantLeases[0] ?? null;
 
   return {
     id: bill.id,
@@ -241,6 +254,7 @@ export async function getUtilityBillInvoice(billId: string) {
     companyAbsorbedAmount: split.companyAbsorbedAmount,
     propertyName: bill.property.name,
     unitLabel: bill.unit?.label ?? null,
+    unitId: bill.unitId,
     unitTypeLabel: bill.unit?.unitType.label ?? null,
     tenantName: lease?.tenant.name ?? null,
     tenantContact: lease?.tenant.contactInfo ?? null,

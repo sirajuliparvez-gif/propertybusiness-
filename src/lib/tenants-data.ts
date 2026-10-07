@@ -498,6 +498,7 @@ export async function getTenantProfile(leaseId: string) {
         companyAbsorbedAmount: split.companyAbsorbedAmount,
         profitAmount: split.profitAmount,
         unitLabel: lease.unit.label,
+        unitId: lease.unitId,
         month: b.month,
         tenantLeaseId: lease.status === "ACTIVE" ? lease.id : null,
         propertyId: lease.unit.unitType.property.id,

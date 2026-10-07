@@ -33,6 +33,14 @@ export function dhakaTodayISO(): string {
   return dateFormatter.format(new Date());
 }
 
+// Any stored date as the YYYY-MM-DD an <input type="date"> wants, in the
+// same Dhaka calendar day the rest of the app displays — the edit forms'
+// defaults. Without the timezone this reads the server's own clock, which
+// on Vercel (UTC) rolls a Dhaka "1st" back to the previous month.
+export function dhakaISO(date: Date | string): string {
+  return dateFormatter.format(typeof date === "string" ? new Date(date) : date);
+}
+
 // Today's Bangladesh date as a date-only Date (00:00 UTC of that calendar
 // day) — the same shape `new Date("YYYY-MM-DD")` gives for the payment-date
 // inputs, so transactions dated "now" by a server action bucket into the same

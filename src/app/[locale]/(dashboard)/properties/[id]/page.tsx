@@ -533,7 +533,10 @@ export default async function PropertyDetailPage({
           />
         </CardHeader>
         <CardContent>
-          <MobileUtilityBillsList bills={property.utilityBills} />
+          <MobileUtilityBillsList
+            bills={property.utilityBills}
+            returnTo={`/properties/${property.id}`}
+          />
           <div className="hidden md:block">
             <UtilityBillsTable bills={property.utilityBills} />
           </div>

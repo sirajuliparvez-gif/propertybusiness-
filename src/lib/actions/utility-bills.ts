@@ -11,6 +11,19 @@ function str(formData: FormData, key: string) {
   return typeof v === "string" && v.trim() !== "" ? v.trim() : null;
 }
 
+// Every reason an edit/delete can be refused, as a stable key the client
+// translates — the dialogs stay open and show the message instead of the
+// action throwing (which would blow up the whole page). Success is the
+// other branch: the action redirects back to `returnTo` and never returns.
+export type UtilityBillErrorCode =
+  | "missingFields"
+  | "notFound"
+  | "unitNotInProperty"
+  | "amountBelowPaid"
+  | "hasPayments";
+
+export type UtilityBillActionResult = { ok: true } | { ok: false; error: UtilityBillErrorCode };
+
 export async function addUtilityBill(formData: FormData) {
   const locale = await getLocale();
   const propertyId = formData.get("propertyId") as string;
@@ -199,4 +212,136 @@ export async function payUtilityBill(formData: FormData) {
   const returnTo = str(formData, "returnTo") ?? `/properties/${propertyId}`;
   revalidatePath(returnTo);
   redirect({ href: returnTo, locale });
+}
+
+// Edits a bill in place — type, unit, amount, due date, who pays it and the
+// meter reading — without disturbing the payments already recorded against
+// it. Every way it can be refused comes back as a code (the dialog shows the
+// translated message); a successful edit redirects back to `returnTo` like
+// every other action in this file.
+//
+// Refusals:
+//  - amount dropping below paidAmount — that money is already in the ledger,
+//    so a lower amount would understate what was collected;
+//  - a unit that isn't part of this bill's property (bills move unit, never
+//    property).
+export async function updateUtilityBill(formData: FormData): Promise<UtilityBillActionResult> {
+  const locale = await getLocale();
+  const billId = str(formData, "billId");
+  const propertyId = str(formData, "propertyId");
+  const typeRaw = formData.get("type");
+  const type =
+    typeRaw === "GAS" || typeRaw === "ELECTRICITY" || typeRaw === "WATER" || typeRaw === "OTHER"
+      ? typeRaw
+      : "OTHER";
+  const unitId = str(formData, "unitId");
+  const amount = str(formData, "amount");
+  const dueDate = str(formData, "dueDate");
+  if (!billId || !propertyId || !amount || !dueDate) return { ok: false, error: "missingFields" };
+  // Same two company rules as addUtilityBill, re-applied server-side here
+  // (stale/tampered form can't make a WATER bill tenant-paid, or smuggle a
+  // meter reading onto a gas bill).
+  const paidByCompany = type === "WATER" ? true : formData.get("paidByCompany") === "true";
+  const meterReadingRaw = type === "ELECTRICITY" ? str(formData, "meterReading") : null;
+  const meterReading = meterReadingRaw ? Number(meterReadingRaw) : null;
+  const returnTo = str(formData, "returnTo") ?? `/properties/${propertyId}`;
+
+  const problem = await prisma.$transaction(async (tx) => {
+    const bill = await tx.utilityBill.findUnique({
+      where: { id: billId },
+      select: { unitId: true, paidAmount: true },
+    });
+    if (!bill) return "notFound" as const;
+    if (unitId) {
+      const unit = await tx.unit.findUnique({
+        where: { id: unitId },
+        select: { unitType: { select: { propertyId: true } } },
+      });
+      if (!unit || unit.unitType.propertyId !== propertyId) return "unitNotInProperty" as const;
+    }
+    const paidAmount = Number(bill.paidAmount);
+    if (Number(amount) < paidAmount) return "amountBelowPaid" as const;
+
+    await tx.utilityBill.update({
+      where: { id: billId },
+      data: {
+        type,
+        unitId,
+        month: dueDate.slice(0, 7),
+        dueDate: new Date(dueDate),
+        amount,
+        paidByCompany,
+        meterReading,
+        // Rebuilt from what's settled against the NEW amount — a ৳2000 bill
+        // already fully collected, edited down to ৳1000, is PAID rather than
+        // an impossible overpaid PARTIAL.
+        status: paidAmount >= Number(amount) ? "PAID" : paidAmount > 0 ? "PARTIAL" : "UNPAID",
+      },
+    });
+    // The bill moved unit: its ledger rows move with it, otherwise unit and
+    // transaction views would disagree about where this money sits (the
+    // reimbursement follows whichever tenant is active on the new unit).
+    if (unitId !== bill.unitId) {
+      const lease = unitId
+        ? await tx.tenantLease.findFirst({
+            where: { unitId, status: "ACTIVE" },
+            orderBy: { createdAt: "desc" },
+            select: { id: true },
+          })
+        : null;
+      await tx.transaction.updateMany({
+        where: { utilityBillId: billId },
+        data: { unitId: unitId ?? null, tenantLeaseId: lease?.id ?? null },
+      });
+    }
+    return null;
+  });
+  if (problem) return { ok: false, error: problem };
+
+  revalidatePath(returnTo);
+  redirect({ href: returnTo, locale });
+  // Unreachable — redirect() throws — but TypeScript can't see that through
+  // next-intl's destructured navigation object, so the success path closes
+  // here to keep the action's declared return type honest.
+  return { ok: true };
+}
+
+// Deleting is only ever the correction of a bill nobody has paid for yet.
+// Once money is recorded against it the row must stay as the history of
+// that money — refused with a code (the dialog shows how much has already
+// been collected) rather than deleted or thrown.
+export async function deleteUtilityBill(formData: FormData): Promise<UtilityBillActionResult> {
+  const locale = await getLocale();
+  const billId = str(formData, "billId");
+  const propertyId = str(formData, "propertyId");
+  if (!billId || !propertyId) return { ok: false, error: "missingFields" };
+  const returnTo = str(formData, "returnTo") ?? `/properties/${propertyId}`;
+
+  const problem = await prisma.$transaction(async (tx) => {
+    const bill = await tx.utilityBill.findUnique({
+      where: { id: billId },
+      select: {
+        paidAmount: true,
+        transactions: { select: { id: true }, take: 1 },
+        documents: { select: { id: true } },
+      },
+    });
+    if (!bill) return "notFound" as const;
+    if (Number(bill.paidAmount) > 0 || bill.transactions.length > 0) return "hasPayments" as const;
+    // Attached file rows go with the bill — left alone they'd point at
+    // nothing (the uploaded file itself stays in storage either way).
+    if (bill.documents.length > 0) {
+      await tx.document.deleteMany({ where: { utilityBillId: billId } });
+    }
+    await tx.utilityBill.delete({ where: { id: billId } });
+    return null;
+  });
+  if (problem) return { ok: false, error: problem };
+
+  revalidatePath(returnTo);
+  redirect({ href: returnTo, locale });
+  // Unreachable — redirect() throws — but TypeScript can't see that through
+  // next-intl's destructured navigation object, so the success path closes
+  // here to keep the action's declared return type honest.
+  return { ok: true };
 }

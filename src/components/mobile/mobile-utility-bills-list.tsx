@@ -13,6 +13,8 @@ import {
   utilityInvoiceHref,
   type UtilityBillRow,
 } from "@/components/properties/utility-bills-table";
+import { EditUtilityBillDialog } from "@/components/properties/edit-utility-bill-dialog";
+import { DeleteUtilityBillButton } from "@/components/properties/delete-utility-bill-button";
 import { formatTaka, formatDate } from "@/lib/format";
 import { paymentMethodLabel } from "@/lib/payment-method";
 import { cn } from "@/lib/utils";
@@ -138,14 +140,29 @@ export function MobileUtilityBillsList({
                       <div className="flex w-full items-center gap-3 px-4 py-3">{row}</div>
                     )}
                   </div>
-                  <Link
-                    href={utilityInvoiceHref(b)}
-                    title={t("invoicePrint")}
-                    className="flex w-12 shrink-0 items-center justify-center border-l text-primary transition-colors active:bg-muted/60"
-                  >
-                    <Printer className="size-4" />
-                    <span className="sr-only">{t("invoicePrint")}</span>
-                  </Link>
+                  <div className="flex shrink-0 items-stretch divide-x">
+                    <Link
+                      href={utilityInvoiceHref(b)}
+                      title={t("invoicePrint")}
+                      className="flex w-12 items-center justify-center text-primary transition-colors active:bg-muted/60"
+                    >
+                      <Printer className="size-4" />
+                      <span className="sr-only">{t("invoicePrint")}</span>
+                    </Link>
+                    <div className="flex w-12 items-center justify-center">
+                      <EditUtilityBillDialog bill={b} returnTo={returnTo} />
+                    </div>
+                    {b.status !== "PAID" ? (
+                      <div className="flex w-12 items-center justify-center">
+                        <DeleteUtilityBillButton
+                          billId={b.id}
+                          propertyId={b.propertyId}
+                          paidAmount={b.paidAmount}
+                          returnTo={returnTo}
+                        />
+                      </div>
+                    ) : null}
+                  </div>
                 </li>
               );
             })}

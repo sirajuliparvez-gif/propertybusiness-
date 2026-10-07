@@ -25,6 +25,7 @@ import {
 import { Checkbox } from "@/components/ui/checkbox";
 import { FormField } from "@/components/properties/form-field";
 import { addUtilityBill } from "@/lib/actions/utility-bills";
+import { unitPickerLabel } from "@/lib/unit-label";
 
 const NONE_VALUE = "NONE";
 type UtilityType = "GAS" | "ELECTRICITY" | "WATER" | "OTHER";
@@ -37,7 +38,7 @@ export function AddUtilityBillDialog({
   previousElectricityReadingByUnit = {},
 }: {
   propertyId: string;
-  units?: { id: string; label: string; unitTypeLabel: string }[];
+  units?: { id: string; label: string; unitTypeLabel: string; tenantName?: string | null }[];
   // When set, this bill is always for one specific unit (e.g. the Tenant
   // Profile page's own utility bills section) — skips the unit picker
   // entirely instead of showing a dropdown whose only sensible answer is
@@ -180,7 +181,7 @@ export function AddUtilityBillDialog({
                 onValueChange={(v) => setUnitId(v ?? NONE_VALUE)}
                 items={[
                   { value: NONE_VALUE, label: t("noSpecificUnit") },
-                  ...units.map((u) => ({ value: u.id, label: `${u.label} · ${u.unitTypeLabel}` })),
+                  ...units.map((u) => ({ value: u.id, label: unitPickerLabel(u) })),
                 ]}
               >
                 <SelectTrigger id="utilityBillUnit" className="w-full">
@@ -189,8 +190,8 @@ export function AddUtilityBillDialog({
                 <SelectContent>
                   <SelectItem value={NONE_VALUE}>{t("noSpecificUnit")}</SelectItem>
                   {units.map((u) => (
-                    <SelectItem key={u.id} value={u.id}>
-                      {u.label} · {u.unitTypeLabel}
+                    <SelectItem key={u.id} value={u.id} className="[&_span]:whitespace-normal">
+                      {unitPickerLabel(u)}
                     </SelectItem>
                   ))}
                 </SelectContent>

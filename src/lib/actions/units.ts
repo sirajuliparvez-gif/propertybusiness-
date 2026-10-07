@@ -236,3 +236,41 @@ export async function addTenantToUnit(formData: FormData) {
   revalidatePath(returnTo);
   redirect({ href: returnTo, locale });
 }
+
+// Units of one property, flat and labelled, for the edit-bill dialog's unit
+// picker — a read-only action, fetched when that dialog opens (the cross-
+// property Utility Bills page has no unit list of its own to pass in).
+export async function listPropertyUnits(propertyId: string) {
+  if (!propertyId) return [];
+  const unitTypes = await prisma.unitType.findMany({
+    where: { propertyId },
+    orderBy: { label: "asc" },
+    select: {
+      label: true,
+      // Inactive units included: a bill can legitimately sit on one, and
+      // omitting it would leave the picker unable to show its current value.
+      units: {
+        orderBy: { label: "asc" },
+        select: {
+          id: true,
+          label: true,
+          // Whoever currently rents the shop — pickers show its business
+          // name next to the shop number.
+          tenantLeases: {
+            where: { status: "ACTIVE" },
+            take: 1,
+            select: { tenant: { select: { name: true } } },
+          },
+        },
+      },
+    },
+  });
+  return unitTypes.flatMap((ut) =>
+    ut.units.map((u) => ({
+      id: u.id,
+      label: u.label,
+      unitTypeLabel: ut.label,
+      tenantName: u.tenantLeases[0]?.tenant.name ?? null,
+    }))
+  );
+}
