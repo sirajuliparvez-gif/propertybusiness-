@@ -26,6 +26,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { FormField } from "@/components/properties/form-field";
 import { addUtilityBill } from "@/lib/actions/utility-bills";
 import type { AllUtilityBillsData } from "@/lib/utility-bills-data";
+import { unitPickerLabel } from "@/lib/unit-label";
 
 const NONE_VALUE = "NONE";
 type UtilityType = "GAS" | "ELECTRICITY" | "WATER" | "OTHER";
@@ -192,7 +193,7 @@ export function AddUtilityBillDialogGlobal({
               onValueChange={(v) => setUnitId(v ?? NONE_VALUE)}
               items={[
                 { value: NONE_VALUE, label: t("noSpecificUnit") },
-                ...unitsForProperty.map((u) => ({ value: u.id, label: `${u.label} · ${u.unitTypeLabel}` })),
+                ...unitsForProperty.map((u) => ({ value: u.id, label: unitPickerLabel(u) })),
               ]}
             >
               <SelectTrigger id="utilityBillUnit" className="w-full">
@@ -201,8 +202,8 @@ export function AddUtilityBillDialogGlobal({
               <SelectContent>
                 <SelectItem value={NONE_VALUE}>{t("noSpecificUnit")}</SelectItem>
                 {unitsForProperty.map((u) => (
-                  <SelectItem key={u.id} value={u.id}>
-                    {u.label} · {u.unitTypeLabel}
+                  <SelectItem key={u.id} value={u.id} className="[&_span]:whitespace-normal">
+                    {unitPickerLabel(u)}
                   </SelectItem>
                 ))}
               </SelectContent>

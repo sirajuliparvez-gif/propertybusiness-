@@ -169,3 +169,16 @@
     color: #000 !important;
   }
 }
+
+/* The utility-bill invoice prints as two copies on one A4 sheet — the tenant
+   takes one, the other stays in the file — cut apart along the dashed rule
+   between them. A named page pins A4 paper to this document only, so every
+   other printout in the app keeps whatever paper the browser already chose. */
+@page utilityBillA4 {
+  size: A4;
+  margin: 10mm;
+}
+
+.print-two-up {
+  page: utilityBillA4;
+}

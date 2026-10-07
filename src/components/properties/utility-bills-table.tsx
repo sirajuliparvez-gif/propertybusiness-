@@ -39,6 +39,8 @@ import { formatTaka, formatDate } from "@/lib/format";
 import { paymentMethodLabel } from "@/lib/payment-method";
 import { cn } from "@/lib/utils";
 import { payUtilityBill } from "@/lib/actions/utility-bills";
+import { EditUtilityBillDialog } from "@/components/properties/edit-utility-bill-dialog";
+import { DeleteUtilityBillButton } from "@/components/properties/delete-utility-bill-button";
 
 type Filter = "all" | "unpaid" | "paid";
 const ALL_PROPERTIES = "ALL";
@@ -63,6 +65,8 @@ export type UtilityBillRow = {
   companyAbsorbedAmount: number;
   profitAmount: number;
   unitLabel: string | null;
+  // What the edit dialog needs to move the bill to a different unit.
+  unitId?: string | null;
   // Current tenant of the unit the bill is billed to (null for property-wide bills).
   tenantName?: string | null;
   propertyId: string;
@@ -455,7 +459,10 @@ export function UtilityBillsTable({
             </TableRow>
           </TableHeader>
           <TableBody>
-            {filtered.map((b) => (
+            {filtered.map((b) => {
+              const rowReturnTo =
+                returnTo ?? (showPropertyColumn ? "/utility-bills" : `/properties/${b.propertyId}`);
+              return (
               <TableRow key={b.id}>
                 {showPropertyColumn ? (
                   <TableCell className="font-medium">{b.propertyName ?? "—"}</TableCell>
@@ -529,6 +536,7 @@ export function UtilityBillsTable({
                       <Printer className="size-3.5" />
                       <span className="sr-only">{t("invoicePrint")}</span>
                     </Button>
+                    <EditUtilityBillDialog bill={b} returnTo={rowReturnTo} />
                     {b.status !== "PAID" ? (
                       <PayUtilityBillButton
                         billId={b.id}
@@ -537,14 +545,23 @@ export function UtilityBillsTable({
                         amount={b.amount}
                         paidAmount={b.paidAmount}
                         paidByCompany={b.paidByCompany}
-                        returnTo={returnTo ?? (showPropertyColumn ? "/utility-bills" : `/properties/${b.propertyId}`)}
+                        returnTo={rowReturnTo}
                         iconOnly={showPropertyColumn}
+                      />
+                    ) : null}
+                    {b.status !== "PAID" ? (
+                      <DeleteUtilityBillButton
+                        billId={b.id}
+                        propertyId={b.propertyId}
+                        paidAmount={b.paidAmount}
+                        returnTo={rowReturnTo}
                       />
                     ) : null}
                   </div>
                 </TableCell>
               </TableRow>
-            ))}
+              );
+            })}
           </TableBody>
           <TableFooter>
             <TableRow>
