@@ -371,6 +371,7 @@ export async function getTenantProfile(leaseId: string) {
     ledgerAsOf,
     RENT_DUE_DAY
   );
+  const paymentCreatedAtById = new Map(lease.rentPayments.map((payment) => [payment.id, payment.createdAt]));
   // Newest first, matching the payment-history table's existing convention —
   // the ledger itself builds chronologically ascending.
   const payments = [...ledger].reverse().map((e) => ({
@@ -381,6 +382,7 @@ export async function getTenantProfile(leaseId: string) {
     paidAmount: e.paidAmount,
     status: e.status,
     paidAt: e.paidAt,
+    createdAt: e.rentPaymentId ? (paymentCreatedAtById.get(e.rentPaymentId) ?? null) : null,
     method: e.method ?? null,
     pastDue: e.pastDue,
     // No RentPayment row exists yet for this month — nobody has recorded

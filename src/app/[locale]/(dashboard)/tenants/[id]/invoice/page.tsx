@@ -79,6 +79,7 @@ export default async function TenantInvoicePage({
   const rentPaid = rentTracked ? (payment?.paidAmount ?? 0) : 0;
   const rentRemaining = Math.max(0, rentDue - rentPaid);
   const rentStatus = payment?.status ?? "UNPAID";
+  const invoiceCreatedAt = payment?.createdAt ?? dhakaNow();
   const [selectedYear, selectedMonthNumber] = selectedMonth.split("-").map(Number);
   const rentDeadline = new Date(selectedYear, selectedMonthNumber - 1, RENT_DUE_DAY);
   const adjustment = tenant.downpaymentAdjustments.find((a) => a.month === selectedMonth) ?? null;
@@ -162,7 +163,7 @@ export default async function TenantInvoicePage({
           </div>
           <div className="sm:text-right">
             <p className="text-xs font-semibold text-muted-foreground">{t("invoiceGeneratedOn")}</p>
-            <p className="font-mono font-medium tabular-nums">{formatDate(dhakaNow())}</p>
+            <p className="font-mono font-medium tabular-nums">{formatDate(invoiceCreatedAt)}</p>
           </div>
         </div>
 
