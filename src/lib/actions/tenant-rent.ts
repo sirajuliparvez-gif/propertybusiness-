@@ -13,6 +13,12 @@ function str(formData: FormData, key: string) {
   return typeof v === "string" && v.trim() !== "" ? v.trim() : null;
 }
 
+function revalidateLocalizedPath(locale: string, path: string) {
+  const normalizedPath = path.startsWith("/") ? path : `/${path}`;
+  const localizedPath = normalizedPath === "/" ? `/${locale}` : `/${locale}${normalizedPath}`;
+  revalidatePath(localizedPath);
+}
+
 // Records this month's rent as collected from a tenant — either as a normal
 // cash/mobile-banking payment (creates an INCOMING Transaction), or as an
 // adjustment against the tenant's own downpayment/advance balance (creates a
@@ -132,7 +138,7 @@ export async function recordTenantRentPayment(formData: FormData) {
   // Reachable from both the per-property page and the cross-property global
   // Tenants page — each redirects back to wherever it was submitted from.
   const returnTo = str(formData, "returnTo") ?? `/properties/${propertyId}`;
-  revalidatePath(returnTo);
+  revalidateLocalizedPath(locale, returnTo);
   redirect({ href: returnTo, locale });
 }
 
@@ -245,7 +251,7 @@ export async function recordOverdueRentPayment(formData: FormData) {
   });
 
   const returnTo = str(formData, "returnTo") ?? `/properties/${propertyId}`;
-  revalidatePath(returnTo);
+  revalidateLocalizedPath(locale, returnTo);
   redirect({ href: returnTo, locale });
 }
 
@@ -357,6 +363,6 @@ export async function recordAdvanceRentPayment(formData: FormData) {
   });
 
   const returnTo = str(formData, "returnTo") ?? `/properties/${propertyId}`;
-  revalidatePath(returnTo);
+  revalidateLocalizedPath(locale, returnTo);
   redirect({ href: returnTo, locale });
 }
