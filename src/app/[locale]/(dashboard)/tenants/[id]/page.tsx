@@ -22,6 +22,7 @@ import { StatTile } from "@/components/stat-tile";
 import { RecordTenantRentPaymentDialog } from "@/components/properties/record-tenant-rent-payment-dialog";
 import { VacateTenantDialog } from "@/components/properties/vacate-tenant-dialog";
 import { EditTenantDialog } from "@/components/properties/edit-tenant-dialog";
+import { EditRentPaymentDialog } from "@/components/properties/edit-rent-payment-dialog";
 import { AddUtilityBillDialog } from "@/components/properties/add-utility-bill-dialog";
 import { UtilityBillsTable } from "@/components/properties/utility-bills-table";
 import { MobileUtilityBillsList } from "@/components/mobile/mobile-utility-bills-list";
@@ -428,7 +429,23 @@ export default async function TenantProfilePage({
                       <p className="font-mono text-sm font-semibold tabular-nums">
                         {formatTaka(p.paidAmount)}
                       </p>
-                      <StatusPill status={rentPillStatus(p.status, p.pastDue)} labels={rentStatusLabels} />
+                      <div className="mt-1 flex items-center justify-end gap-2">
+                        <StatusPill status={rentPillStatus(p.status, p.pastDue)} labels={rentStatusLabels} />
+                        {p.editable && p.transactionAmount != null && p.transactionDate ? (
+                          <EditRentPaymentDialog
+                            payment={{
+                              id: p.id,
+                              month: p.month,
+                              amount: p.transactionAmount,
+                              dueAmount: p.dueAmount,
+                              date: p.transactionDate,
+                              method: p.transactionMethod,
+                            }}
+                            tenantLeaseId={tenant.id}
+                            returnTo={`/tenants/${tenant.id}`}
+                          />
+                        ) : null}
+                      </div>
                     </div>
                   </li>
                 ))}
@@ -443,6 +460,7 @@ export default async function TenantProfilePage({
                   <TableHead>{t("paymentMethod")}</TableHead>
                   <TableHead>{t("paidDate")}</TableHead>
                   <TableHead>{t("status")}</TableHead>
+                  <TableHead className="text-right">{t("actions")}</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -466,6 +484,22 @@ export default async function TenantProfilePage({
                     </TableCell>
                     <TableCell>
                       <StatusPill status={rentPillStatus(p.status, p.pastDue)} labels={rentStatusLabels} />
+                    </TableCell>
+                    <TableCell className="text-right">
+                      {p.editable && p.transactionAmount != null && p.transactionDate ? (
+                        <EditRentPaymentDialog
+                          payment={{
+                            id: p.id,
+                            month: p.month,
+                            amount: p.transactionAmount,
+                            dueAmount: p.dueAmount,
+                            date: p.transactionDate,
+                            method: p.transactionMethod,
+                          }}
+                          tenantLeaseId={tenant.id}
+                          returnTo={`/tenants/${tenant.id}`}
+                        />
+                      ) : null}
                     </TableCell>
                   </TableRow>
                 ))}

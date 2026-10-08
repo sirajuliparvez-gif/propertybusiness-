@@ -20,6 +20,80 @@ function revalidateLocalizedPath(locale: string, path: string) {
   revalidatePath(localizedPath);
 }
 
+export type RentPaymentEditErrorCode =
+  | "missingFields"
+  | "notFound"
+  | "notEditable"
+  | "invalidAmount"
+  | "amountExceedsDue";
+
+export type RentPaymentEditResult =
+  | { ok: true }
+  | { ok: false; error: RentPaymentEditErrorCode };
+
+// Corrects one directly-recorded rent payment while keeping its monthly due
+// row and cash-flow transaction in sync. Installments and downpayment
+// adjustments have multiple audit entries, so they are deliberately refused
+// here instead of silently rewriting only part of their history.
+export async function updateTenantRentPayment(formData: FormData): Promise<RentPaymentEditResult> {
+  const locale = await getLocale();
+  const rentPaymentId = str(formData, "rentPaymentId");
+  const tenantLeaseId = str(formData, "tenantLeaseId");
+  const amountRaw = str(formData, "amount");
+  const dateRaw = str(formData, "date");
+  const returnTo = str(formData, "returnTo") ?? (tenantLeaseId ? `/tenants/${tenantLeaseId}` : "/rent");
+  if (!rentPaymentId || !tenantLeaseId || !amountRaw || !dateRaw) {
+    return { ok: false, error: "missingFields" };
+  }
+
+  const amount = Number(amountRaw);
+  if (!Number.isFinite(amount) || amount <= 0) return { ok: false, error: "invalidAmount" };
+
+  const methodRaw = formData.get("method");
+  const method =
+    methodRaw === "CASH" ||
+    methodRaw === "BKASH" ||
+    methodRaw === "NAGAD" ||
+    methodRaw === "BANK" ||
+    methodRaw === "BANK_CHECK" ||
+    methodRaw === "OTHER"
+      ? methodRaw
+      : null;
+  const paidDate = new Date(dateRaw);
+
+  const problem = await prisma.$transaction(async (tx) => {
+    const payment = await tx.rentPayment.findFirst({
+      where: { id: rentPaymentId, tenantLeaseId },
+      select: {
+        dueAmount: true,
+        transactions: { select: { id: true } },
+        downpaymentAdjustments: { select: { id: true }, take: 1 },
+      },
+    });
+    if (!payment) return "notFound" as const;
+    if (payment.transactions.length !== 1 || payment.downpaymentAdjustments.length > 0) {
+      return "notEditable" as const;
+    }
+    if (amount > Number(payment.dueAmount)) return "amountExceedsDue" as const;
+
+    const status = amount >= Number(payment.dueAmount) ? "PAID" : "PARTIAL";
+    await tx.rentPayment.update({
+      where: { id: rentPaymentId },
+      data: { paidAmount: amount, paidAt: paidDate, status },
+    });
+    await tx.transaction.update({
+      where: { id: payment.transactions[0].id },
+      data: { amount, date: paidDate, method },
+    });
+    return null;
+  });
+  if (problem) return { ok: false, error: problem };
+
+  revalidateLocalizedPath(locale, returnTo);
+  redirect({ href: returnTo, locale });
+  return { ok: true };
+}
+
 // Records this month's rent as collected from a tenant — either as a normal
 // cash/mobile-banking payment (creates an INCOMING Transaction), or as an
 // adjustment against the tenant's own downpayment/advance balance (creates a

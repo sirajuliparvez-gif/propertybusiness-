@@ -281,7 +281,12 @@ export async function getTenantProfile(leaseId: string) {
         rentPayments: {
           orderBy: { dueDate: "desc" },
           include: {
-            transactions: { orderBy: { date: "desc" }, take: 1, select: { method: true } },
+            transactions: {
+              orderBy: { date: "desc" },
+              take: 1,
+              select: { id: true, amount: true, method: true, date: true },
+            },
+            _count: { select: { transactions: true, downpaymentAdjustments: true } },
           },
         },
         documents: { orderBy: { uploadedAt: "desc" } },
@@ -372,23 +377,39 @@ export async function getTenantProfile(leaseId: string) {
     RENT_DUE_DAY
   );
   const paymentCreatedAtById = new Map(lease.rentPayments.map((payment) => [payment.id, payment.createdAt]));
+  const paymentEditDetailsById = new Map(
+    lease.rentPayments.map((payment) => [
+      payment.id,
+      {
+        editable: payment._count.transactions === 1 && payment._count.downpaymentAdjustments === 0,
+        transaction: payment.transactions[0] ?? null,
+      },
+    ])
+  );
   // Newest first, matching the payment-history table's existing convention —
   // the ledger itself builds chronologically ascending.
-  const payments = [...ledger].reverse().map((e) => ({
-    id: e.rentPaymentId ?? `virtual-${e.month}`,
-    month: e.month,
-    dueDate: e.dueDate,
-    dueAmount: e.dueAmount,
-    paidAmount: e.paidAmount,
-    status: e.status,
-    paidAt: e.paidAt,
-    createdAt: e.rentPaymentId ? (paymentCreatedAtById.get(e.rentPaymentId) ?? null) : null,
-    method: e.method ?? null,
-    pastDue: e.pastDue,
-    // No RentPayment row exists yet for this month — nobody has recorded
-    // anything, it's shown purely so the arrears aren't invisible.
-    isVirtual: e.rentPaymentId === null,
-  }));
+  const payments = [...ledger].reverse().map((e) => {
+    const editDetails = e.rentPaymentId ? paymentEditDetailsById.get(e.rentPaymentId) : null;
+    return {
+      id: e.rentPaymentId ?? `virtual-${e.month}`,
+      month: e.month,
+      dueDate: e.dueDate,
+      dueAmount: e.dueAmount,
+      paidAmount: e.paidAmount,
+      status: e.status,
+      paidAt: e.paidAt,
+      createdAt: e.rentPaymentId ? (paymentCreatedAtById.get(e.rentPaymentId) ?? null) : null,
+      method: e.method ?? null,
+      pastDue: e.pastDue,
+      editable: editDetails?.editable ?? false,
+      transactionAmount: editDetails?.transaction ? Number(editDetails.transaction.amount) : null,
+      transactionDate: editDetails?.transaction?.date ?? null,
+      transactionMethod: editDetails?.transaction?.method ?? null,
+      // No RentPayment row exists yet for this month — nobody has recorded
+      // anything, it's shown purely so the arrears aren't invisible.
+      isVirtual: e.rentPaymentId === null,
+    };
+  });
   const overdueMonths = overdueEntries(ledger);
 
   const totalDue = ledger.reduce((sum, e) => sum + e.dueAmount, 0);
