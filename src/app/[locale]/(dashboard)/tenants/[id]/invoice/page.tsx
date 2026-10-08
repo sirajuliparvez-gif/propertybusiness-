@@ -1,7 +1,7 @@
 import { dhakaNow } from "@/lib/dhaka-time";
 import { notFound } from "next/navigation";
 import { getTranslations } from "next-intl/server";
-import { ArrowLeft, Building2 } from "lucide-react";
+import { ArrowLeft, Building2, Scissors } from "lucide-react";
 import { Link } from "@/i18n/navigation";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -19,6 +19,19 @@ import { InvoicePrintButton } from "@/components/properties/invoice-print-button
 function currentMonthKey() {
   const now = dhakaNow();
   return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+}
+
+function TwoUpInvoice({ children }: { children: React.ReactNode }) {
+  return (
+    <div data-testid="invoice" className="print-two-up flex flex-col">
+      {children}
+      <div aria-hidden="true" className="my-4 flex items-center gap-2 text-muted-foreground print:my-2">
+        <Scissors className="size-3.5 shrink-0" />
+        <span className="h-0 flex-1 border-t border-dashed border-current opacity-60" />
+      </div>
+      {children}
+    </div>
+  );
 }
 
 // One statement per tenant and month: the month's rent, any rent still owed from earlier months, every utility bill
@@ -129,9 +142,10 @@ export default async function TenantInvoicePage({
         </div>
       </div>
 
+      <TwoUpInvoice>
       <div
-        data-testid="invoice"
-        className="flex flex-col gap-6 rounded-xl border bg-card p-6 text-sm print:rounded-none print:border-0 print:p-0 sm:p-8"
+        data-testid="invoice-copy"
+        className="flex break-inside-avoid flex-col gap-6 rounded-xl border bg-card p-6 text-sm print:break-inside-avoid print:gap-3 print:rounded-none print:border-0 print:p-0 sm:p-8"
       >
         <InvoiceHeader brand={tNav("brand")} title={t("invoiceLabel")} subtitle={monthLabel(selectedMonth)}>
           <p className="mt-1 flex items-center gap-1 text-xs text-muted-foreground">
@@ -339,6 +353,7 @@ export default async function TenantInvoicePage({
           </div>
         </div>
       </div>
+      </TwoUpInvoice>
     </div>
   );
 }
