@@ -7,6 +7,7 @@ import { prisma } from "@/lib/prisma";
 import { redirect } from "@/i18n/navigation";
 import { computeServiceChargeAmount } from "@/lib/service-charge";
 import { buildRentLedger, overdueEntries, totalOverdue, RENT_DUE_DAY } from "@/lib/rent-ledger";
+import { applyRentInstallment } from "@/lib/payment-progress";
 
 function str(formData: FormData, key: string) {
   const v = formData.get(key);
@@ -83,13 +84,12 @@ export async function recordTenantRentPayment(formData: FormData) {
     if (existing && alreadyPaid >= Number(existing.dueAmount)) {
       throw new Error("Rent for this month is already fully paid");
     }
-    const totalPaid = alreadyPaid + amount;
-    const status =
-      totalPaid >= dueAmount
-        ? mode === "downpaymentAdjustment"
-          ? "ADJUSTED_FROM_DOWNPAYMENT"
-          : "PAID"
-        : "PARTIAL";
+    const { totalPaid, status } = applyRentInstallment({
+      dueAmount,
+      alreadyPaid,
+      paymentAmount: amount,
+      adjustedFromDownpayment: mode === "downpaymentAdjustment",
+    });
 
     const rentPayment = await tx.rentPayment.upsert({
       where: { tenantLeaseId_month: { tenantLeaseId, month } },

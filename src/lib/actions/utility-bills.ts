@@ -5,6 +5,7 @@ import { revalidatePath } from "next/cache";
 import { getLocale } from "next-intl/server";
 import { prisma } from "@/lib/prisma";
 import { redirect } from "@/i18n/navigation";
+import { applyUtilityBillInstallment } from "@/lib/payment-progress";
 
 function str(formData: FormData, key: string) {
   const v = formData.get(key);
@@ -131,18 +132,14 @@ export async function payUtilityBill(formData: FormData) {
           : bill.paidByCompany
             ? 0
             : remaining;
-    const tenantAmountInput = Math.max(0, tenantAmountRaw);
-    // The portion that actually settles the bill is capped at what's left;
-    // anything the tenant pays beyond that is real company profit (e.g. a
-    // flat/rounded rate charged regardless of the exact meter share), not
-    // more reimbursement than the bill itself.
-    const billPortion = Math.min(tenantAmountInput, remaining);
-    const profitAmount = Math.max(0, tenantAmountInput - remaining);
-    const companyAmount = companyCoversRest ? remaining - billPortion : 0;
+    const { billPortion, profitAmount, companyAmount, newPaidAmount, status: newStatus } =
+      applyUtilityBillInstallment({
+        totalAmount,
+        alreadyPaid,
+        tenantPaymentAmount: tenantAmountRaw,
+        companyCoversRest,
+      });
     if (billPortion <= 0 && companyAmount <= 0 && profitAmount <= 0) return;
-
-    const newPaidAmount = alreadyPaid + billPortion + companyAmount;
-    const newStatus = newPaidAmount >= totalAmount ? "PAID" : "PARTIAL";
     const paidDate = dhakaToday();
 
     await tx.utilityBill.update({
