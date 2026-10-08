@@ -309,6 +309,7 @@ export function RecordTenantRentPaymentDialog({
                   { value: "BKASH", label: t("paymentMethodBkash") },
                   { value: "NAGAD", label: t("paymentMethodNagad") },
                   { value: "BANK", label: t("paymentMethodBank") },
+                  { value: "BANK_CHECK", label: t("paymentMethodBankCheck") },
                   { value: "OTHER", label: t("paymentMethodOther") },
                 ]}
               >
@@ -321,6 +322,7 @@ export function RecordTenantRentPaymentDialog({
                   <SelectItem value="BKASH">{t("paymentMethodBkash")}</SelectItem>
                   <SelectItem value="NAGAD">{t("paymentMethodNagad")}</SelectItem>
                   <SelectItem value="BANK">{t("paymentMethodBank")}</SelectItem>
+                  <SelectItem value="BANK_CHECK">{t("paymentMethodBankCheck")}</SelectItem>
                   <SelectItem value="OTHER">{t("paymentMethodOther")}</SelectItem>
                 </SelectContent>
               </Select>

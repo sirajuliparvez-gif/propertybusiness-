@@ -5,12 +5,13 @@
 // and the accepted-input set needs to be more forgiving than a single
 // canonical label anyway (synonyms, English fallback).
 
-export function parsePaymentMethod(raw: string | null): "CASH" | "BKASH" | "NAGAD" | "BANK" | "OTHER" | null {
+export function parsePaymentMethod(raw: string | null): "CASH" | "BKASH" | "NAGAD" | "BANK" | "BANK_CHECK" | "OTHER" | null {
   if (!raw) return null;
   const v = raw.trim();
   if (["ক্যাশ", "নগদ টাকা", "cash", "CASH"].includes(v)) return "CASH";
   if (["বিকাশ", "bkash", "BKASH"].includes(v)) return "BKASH";
   if (["নগদ", "nagad", "NAGAD"].includes(v)) return "NAGAD";
+  if (["ব্যাংক চেক", "ব্যাংক চেকের মাধ্যমে", "bank check", "bank cheque", "BANK_CHECK"].includes(v)) return "BANK_CHECK";
   if (["ব্যাংক ট্রান্সফার", "ব্যাংক", "bank", "BANK"].includes(v)) return "BANK";
   if (["অন্যান্য", "other", "OTHER"].includes(v)) return "OTHER";
   return null;
@@ -22,6 +23,7 @@ export function paymentMethodToBengali(method: string | null): string {
     BKASH: "বিকাশ",
     NAGAD: "নগদ",
     BANK: "ব্যাংক ট্রান্সফার",
+    BANK_CHECK: "ব্যাংক চেক",
     OTHER: "অন্যান্য",
   };
   return method ? (map[method] ?? "") : "";

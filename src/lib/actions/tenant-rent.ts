@@ -41,6 +41,7 @@ export async function recordTenantRentPayment(formData: FormData) {
     methodRaw === "BKASH" ||
     methodRaw === "NAGAD" ||
     methodRaw === "BANK" ||
+    methodRaw === "BANK_CHECK" ||
     methodRaw === "OTHER"
       ? methodRaw
       : null;
@@ -163,6 +164,7 @@ export async function recordOverdueRentPayment(formData: FormData) {
     methodRaw === "BKASH" ||
     methodRaw === "NAGAD" ||
     methodRaw === "BANK" ||
+    methodRaw === "BANK_CHECK" ||
     methodRaw === "OTHER"
       ? methodRaw
       : null;
@@ -294,6 +296,7 @@ export async function recordAdvanceRentPayment(formData: FormData) {
     methodRaw === "BKASH" ||
     methodRaw === "NAGAD" ||
     methodRaw === "BANK" ||
+    methodRaw === "BANK_CHECK" ||
     methodRaw === "OTHER"
       ? methodRaw
       : null;

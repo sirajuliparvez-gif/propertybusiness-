@@ -113,6 +113,7 @@ enum PaymentMethod {
   BKASH
   NAGAD
   BANK
+  BANK_CHECK
   OTHER
 }
 

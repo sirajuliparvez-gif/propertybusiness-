@@ -41,6 +41,7 @@ import { cn } from "@/lib/utils";
 import { payUtilityBill } from "@/lib/actions/utility-bills";
 import { EditUtilityBillDialog } from "@/components/properties/edit-utility-bill-dialog";
 import { DeleteUtilityBillButton } from "@/components/properties/delete-utility-bill-button";
+import type { PaymentMethod } from "@/generated/prisma/enums";
 
 type Filter = "all" | "unpaid" | "paid";
 const ALL_PROPERTIES = "ALL";
@@ -57,7 +58,7 @@ export type UtilityBillRow = {
   paidAmount: number;
   status: "PAID" | "UNPAID" | "PARTIAL";
   paidByCompany: boolean;
-  paymentMethod: "CASH" | "BKASH" | "NAGAD" | "BANK" | "OTHER" | null;
+  paymentMethod: PaymentMethod | null;
   // How this bill's paidAmount actually broke down once settled — 0/0 while
   // still UNPAID. Lets the table show "tenant paid X, company covered Y"
   // instead of a single ambiguous total.
