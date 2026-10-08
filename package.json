@@ -8,6 +8,7 @@
     "start": "next start",
     "lint": "eslint",
     "test:rent-status": "node --import tsx --test tests/rent-status.test.ts",
+    "test:payment-flows": "node --import tsx --test tests/payment-flows.test.ts",
     "postinstall": "patch-package && prisma generate"
   },
   "dependencies": {
