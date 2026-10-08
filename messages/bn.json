@@ -346,6 +346,7 @@
     "paymentMethodBkash": "বিকাশ",
     "paymentMethodNagad": "নগদ",
     "paymentMethodBank": "ব্যাংক ট্রান্সফার",
+    "paymentMethodBankCheck": "ব্যাংক চেক",
     "paymentMethodOther": "অন্যান্য",
     "noPaymentRecord": "—",
 

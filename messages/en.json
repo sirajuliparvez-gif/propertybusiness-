@@ -346,6 +346,7 @@
     "paymentMethodBkash": "bKash",
     "paymentMethodNagad": "Nagad",
     "paymentMethodBank": "Bank Transfer",
+    "paymentMethodBankCheck": "Bank Check",
     "paymentMethodOther": "Other",
     "noPaymentRecord": "—",
 

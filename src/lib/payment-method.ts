@@ -3,6 +3,7 @@ const PAYMENT_METHOD_LABEL_KEYS: Record<string, string> = {
   BKASH: "paymentMethodBkash",
   NAGAD: "paymentMethodNagad",
   BANK: "paymentMethodBank",
+  BANK_CHECK: "paymentMethodBankCheck",
   OTHER: "paymentMethodOther",
 };
 
