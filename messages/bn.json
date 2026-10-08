@@ -349,6 +349,13 @@
     "paymentMethodBankCheck": "ব্যাংক চেক",
     "paymentMethodOther": "অন্যান্য",
     "noPaymentRecord": "—",
+    "editRentPayment": "ভাড়া পেমেন্ট সম্পাদনা",
+    "editRentPaymentHint": "{month} মাসের রেকর্ড করা পেমেন্ট সংশোধন করুন। ভাড়ার মাস পরিবর্তন হবে না।",
+    "rentPaymentEditErrMissingFields": "পরিমাণ ও পরিশোধের তারিখ লিখুন।",
+    "rentPaymentEditErrNotFound": "ভাড়ার পেমেন্টটি পাওয়া যায়নি।",
+    "rentPaymentEditErrNotEditable": "কিস্তি বা ডাউনপেমেন্ট সমন্বয়ের ভাড়া এই সারি থেকে সম্পাদনা করা যাবে না।",
+    "rentPaymentEditErrInvalidAmount": "শূন্যের বেশি পরিমাণ লিখুন।",
+    "rentPaymentEditErrAmountExceedsDue": "পেমেন্ট এই মাসের প্রাপ্য ভাড়ার বেশি হতে পারবে না।",
 
     "actions": "অ্যাকশন",
     "filterInactive": "নিষ্ক্রিয়",
