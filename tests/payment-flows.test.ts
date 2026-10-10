@@ -7,6 +7,7 @@ import {
   isRentPaymentSettled,
 } from "@/lib/payment-progress";
 import { resolvePaymentMonth } from "@/lib/payment-month";
+import { localizedMutationPaths } from "@/lib/localized-revalidation";
 
 test("rent payment can settle September when money arrives in October", () => {
   assert.equal(resolvePaymentMonth("2026-09", "2026-10-03"), "2026-09");
@@ -23,6 +24,11 @@ test("invalid billing months are rejected", () => {
 test("a repeated submission for a fully paid rent month is treated as settled", () => {
   assert.equal(isRentPaymentSettled(15_000, 15_000), true);
   assert.equal(isRentPaymentSettled(15_000, 10_000), false);
+});
+
+test("rent mutations invalidate both the return page and localized dashboard", () => {
+  assert.deepEqual(localizedMutationPaths("bn", "/rent"), ["/bn/rent", "/bn"]);
+  assert.deepEqual(localizedMutationPaths("en", "/"), ["/en"]);
 });
 
 test("rent can be paid in two installments", () => {

@@ -9,6 +9,7 @@ import { computeServiceChargeAmount } from "@/lib/service-charge";
 import { buildRentLedger, overdueEntries, totalOverdue, RENT_DUE_DAY } from "@/lib/rent-ledger";
 import { applyRentInstallment, isRentPaymentSettled } from "@/lib/payment-progress";
 import { resolvePaymentMonth } from "@/lib/payment-month";
+import { localizedMutationPaths } from "@/lib/localized-revalidation";
 
 function str(formData: FormData, key: string) {
   const v = formData.get(key);
@@ -16,9 +17,9 @@ function str(formData: FormData, key: string) {
 }
 
 function revalidateLocalizedPath(locale: string, path: string) {
-  const normalizedPath = path.startsWith("/") ? path : `/${path}`;
-  const localizedPath = normalizedPath === "/" ? `/${locale}` : `/${locale}${normalizedPath}`;
-  revalidatePath(localizedPath);
+  for (const localizedPath of localizedMutationPaths(locale, path)) {
+    revalidatePath(localizedPath);
+  }
 }
 
 export type RentPaymentEditErrorCode =
