@@ -61,10 +61,11 @@ export function UnitDetailDialog({
   const [serviceChargeType, setServiceChargeType] = useState("NONE");
   const [serviceChargeValue, setServiceChargeValue] = useState("");
   const [isPending, startTransition] = useTransition();
+  const [mountedAt] = useState(Date.now);
   const isHotel = isHotelType(propertyType);
 
   const vacantDays = unit.vacantSince
-    ? Math.max(0, Math.floor((Date.now() - new Date(unit.vacantSince).getTime()) / 86_400_000))
+    ? Math.max(0, Math.floor((mountedAt - new Date(unit.vacantSince).getTime()) / 86_400_000))
     : null;
 
   function handleOpenChange(next: boolean) {

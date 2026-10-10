@@ -126,7 +126,6 @@ export async function updateGuestStay(formData: FormData) {
 export async function updateGuestStayStatus(formData: FormData) {
   const locale = await getLocale();
   const guestStayId = formData.get("guestStayId") as string;
-  const propertyId = formData.get("propertyId") as string;
   const status = formData.get("status") as string;
   if (!guestStayId || !status) throw new Error("Missing booking id or status");
   if (!["CHECKED_IN", "CANCELLED", "NO_SHOW"].includes(status)) {

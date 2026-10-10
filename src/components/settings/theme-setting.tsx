@@ -1,17 +1,15 @@
 "use client";
 
-import { useEffect, useState } from "react";
 import { useTranslations } from "next-intl";
 import { useTheme } from "next-themes";
 import { Sun, Moon, Monitor } from "lucide-react";
+import { useMounted } from "@/hooks/use-mounted";
 import { cn } from "@/lib/utils";
 
 export function ThemeSetting() {
   const t = useTranslations("Settings");
   const { theme, setTheme } = useTheme();
-  const [mounted, setMounted] = useState(false);
-
-  useEffect(() => setMounted(true), []);
+  const mounted = useMounted();
 
   const options = [
     { value: "light", label: t("themeLight"), icon: Sun },

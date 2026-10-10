@@ -129,6 +129,9 @@ export async function getAllVacantUnitsData() {
     if (!oldest || u.vacantSince < oldest) return u.vacantSince;
     return oldest;
   }, null);
+  const longestVacantDays = oldestVacancy
+    ? Math.max(0, Math.floor((Date.now() - oldestVacancy.getTime()) / 86_400_000))
+    : null;
   const totalActiveUnits = cards.reduce((sum, c) => sum + c.totalUnits, 0);
   const occupancyRate =
     totalActiveUnits > 0 ? Math.round(((totalActiveUnits - totalVacant) / totalActiveUnits) * 100) : 0;
@@ -137,7 +140,7 @@ export async function getAllVacantUnitsData() {
     properties: propertiesWithVacancy,
     totalVacant,
     potentialMonthlyLoss,
-    oldestVacancy,
+    longestVacantDays,
     occupancyRate,
   };
 }

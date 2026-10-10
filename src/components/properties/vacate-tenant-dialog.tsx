@@ -22,7 +22,6 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 import { FormField } from "@/components/properties/form-field";
-import { formatTaka } from "@/lib/format";
 import { vacateTenantLease } from "@/lib/actions/units";
 
 export function VacateTenantDialog({

@@ -8,12 +8,8 @@ import { formatTaka } from "@/lib/format";
 
 export default async function VacantUnitsPage() {
   const t = await getTranslations("Properties");
-  const [{ properties, totalVacant, potentialMonthlyLoss, oldestVacancy, occupancyRate }, existingTenants] =
+  const [{ properties, totalVacant, potentialMonthlyLoss, longestVacantDays, occupancyRate }, existingTenants] =
     await Promise.all([getAllVacantUnitsData(), getAllTenants()]);
-
-  const longestVacantDays = oldestVacancy
-    ? Math.max(0, Math.floor((Date.now() - oldestVacancy.getTime()) / 86_400_000))
-    : null;
 
   // AddTenantDialogGlobal's cascading picker needs this exact shape — built
   // straight from the vacancy data already fetched, no extra query needed.

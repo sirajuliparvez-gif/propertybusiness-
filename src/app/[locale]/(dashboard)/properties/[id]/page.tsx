@@ -1,4 +1,5 @@
 import { notFound } from "next/navigation";
+import { createElement } from "react";
 import { getTranslations, getFormatter } from "next-intl/server";
 import {
   ArrowLeft,
@@ -73,7 +74,7 @@ export default async function PropertyDetailPage({
 
   const vacantUnits = property.totalUnits - property.occupiedUnits;
   const isFixedRent = property.activeAgreement?.fixedMonthlyRentAmount != null;
-  const TypeIcon = getTypeIcon(t, property.type);
+  const typeIcon = getTypeIcon(t, property.type);
   const profitable = property.netProfit >= 0;
 
   return (
@@ -92,7 +93,7 @@ export default async function PropertyDetailPage({
             <ArrowLeft className="size-4" />
           </Button>
           <span className="flex size-11 shrink-0 items-center justify-center rounded-xl bg-linear-to-br from-blue-500/20 to-blue-500/5 text-blue-600 dark:text-blue-400">
-            <TypeIcon className="size-5" />
+            {createElement(typeIcon, { className: "size-5" })}
           </span>
           <div>
             <p className="text-xs font-medium text-muted-foreground">
