@@ -1,6 +1,7 @@
 import { dhakaNow } from "@/lib/dhaka-time";
 import { prisma } from "@/lib/prisma";
 import { INCOME_TYPES, EXPENSE_TYPES } from "@/lib/finance-types";
+import { isDirectlyEditableTransactionType } from "@/lib/transaction-edit";
 
 function monthRange(now: Date) {
   return {
@@ -26,9 +27,15 @@ export async function getAllTransactionsData() {
       propertyId: true,
       property: { select: { name: true } },
       unit: { select: { label: true } },
-      tenantLease: { select: { tenant: { select: { name: true } } } },
-      payrollRecord: { select: { employee: { select: { name: true } } } },
-      guestStay: { select: { guestName: true } },
+      tenantLease: { select: { tenant: { select: { id: true, name: true } } } },
+      payrollRecord: { select: { employee: { select: { id: true, name: true } } } },
+      guestStay: { select: { id: true, guestName: true } },
+      rentPaymentId: true,
+      payrollRecordId: true,
+      utilityBillId: true,
+      ownerRentPaymentId: true,
+      tenantLeaseId: true,
+      guestStayId: true,
     },
   });
 
@@ -52,6 +59,27 @@ export async function getAllTransactionsData() {
       relatedName:
         t.tenantLease?.tenant.name ?? t.payrollRecord?.employee.name ?? t.guestStay?.guestName ?? null,
       isProfitAffecting,
+      canEditDirectly:
+        isDirectlyEditableTransactionType(t.type) &&
+        !(
+          t.rentPaymentId ||
+          t.payrollRecordId ||
+          t.utilityBillId ||
+          t.ownerRentPaymentId ||
+          t.tenantLeaseId ||
+          t.guestStayId
+        ),
+      sourceHref: t.tenantLease?.tenant.id
+        ? `/tenants/${t.tenantLease.tenant.id}`
+        : t.payrollRecord?.employee.id
+          ? `/employees/${t.payrollRecord.employee.id}`
+          : t.utilityBillId
+            ? "/utility-bills"
+            : t.guestStayId
+              ? "/guest-stays"
+              : t.propertyId
+                ? `/properties/${t.propertyId}`
+                : null,
     };
   });
 

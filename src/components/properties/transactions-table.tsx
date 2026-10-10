@@ -17,6 +17,8 @@ import { formatTaka, formatDate } from "@/lib/format";
 import { paymentMethodLabel } from "@/lib/payment-method";
 import { cn } from "@/lib/utils";
 import type { AllTransactionsData } from "@/lib/transactions-data";
+import { EditTransactionDialog } from "@/components/properties/edit-transaction-dialog";
+import { DeleteTransactionButton } from "@/components/properties/delete-transaction-button";
 
 type Direction = "ALL" | "INCOMING" | "OUTGOING";
 const ALL_PROPERTIES = "ALL";
@@ -205,6 +207,7 @@ export function TransactionsTable({ transactions }: { transactions: AllTransacti
               <TableHead className="text-right">{t("amount")}</TableHead>
               <TableHead>{t("paymentMethod")}</TableHead>
               <TableHead>{t("note")}</TableHead>
+              <TableHead className="text-right">{t("actions")}</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -250,6 +253,29 @@ export function TransactionsTable({ transactions }: { transactions: AllTransacti
                 <TableCell className="text-muted-foreground">{paymentMethodLabel(t, tx.method)}</TableCell>
                 <TableCell className="max-w-72 truncate text-muted-foreground" title={tx.notes ?? undefined}>
                   {tx.notes ?? "—"}
+                </TableCell>
+                <TableCell className="text-right">
+                  {tx.canEditDirectly ? (
+                    <div className="flex items-center justify-end gap-1">
+                      <EditTransactionDialog transaction={tx} compact />
+                      <DeleteTransactionButton transactionId={tx.id} />
+                    </div>
+                  ) : tx.sourceHref ? (
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      title={t("linkedTransactionEditHint")}
+                      render={<Link href={tx.sourceHref} />}
+                      nativeButton={false}
+                    >
+                      {t("linkedTransactionLabel")}
+                    </Button>
+                  ) : (
+                    <span className="text-xs text-muted-foreground" title={t("linkedTransactionEditHint")}>
+                      {t("linkedTransactionLabel")}
+                    </span>
+                  )}
                 </TableCell>
               </TableRow>
             ))}

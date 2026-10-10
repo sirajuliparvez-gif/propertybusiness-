@@ -2,12 +2,15 @@
 
 import { useMemo, useState } from "react";
 import { useTranslations } from "next-intl";
-import { ArrowUpRight, ArrowDownRight } from "lucide-react";
+import { ArrowUpRight, ArrowDownRight, SquareArrowOutUpRight } from "lucide-react";
 import { Link } from "@/i18n/navigation";
 import { Card } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
 import { formatTaka, formatDate } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import type { AllTransactionsData } from "@/lib/transactions-data";
+import { EditTransactionDialog } from "@/components/properties/edit-transaction-dialog";
+import { DeleteTransactionButton } from "@/components/properties/delete-transaction-button";
 
 type Direction = "ALL" | "INCOMING" | "OUTGOING";
 
@@ -109,19 +112,39 @@ export function MobileTransactionsList({
                     {tx.notes ? ` · ${tx.notes}` : ""}
                   </p>
                 </div>
-                <span
-                  className={cn(
-                    "shrink-0 font-mono text-sm font-semibold tabular-nums",
-                    !tx.isProfitAffecting
-                      ? "text-muted-foreground"
-                      : tx.direction === "INCOMING"
-                        ? "text-success"
-                        : "text-destructive"
-                  )}
-                >
-                  {tx.direction === "INCOMING" ? "+" : "−"}
-                  {formatTaka(tx.amount)}
-                </span>
+                <div className="flex shrink-0 items-center gap-2">
+                  <span
+                    className={cn(
+                      "font-mono text-sm font-semibold tabular-nums",
+                      !tx.isProfitAffecting
+                        ? "text-muted-foreground"
+                        : tx.direction === "INCOMING"
+                          ? "text-success"
+                          : "text-destructive"
+                    )}
+                  >
+                    {tx.direction === "INCOMING" ? "+" : "−"}
+                    {formatTaka(tx.amount)}
+                  </span>
+                  {tx.canEditDirectly ? (
+                    <>
+                      <EditTransactionDialog transaction={tx} compact />
+                      <DeleteTransactionButton transactionId={tx.id} />
+                    </>
+                  ) : tx.sourceHref ? (
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon-sm"
+                      aria-label={t("linkedTransactionLabel")}
+                      title={t("linkedTransactionEditHint")}
+                      render={<Link href={tx.sourceHref} />}
+                      nativeButton={false}
+                    >
+                      <SquareArrowOutUpRight className="size-3.5" />
+                    </Button>
+                  ) : null}
+                </div>
               </li>
             ))}
           </ul>
