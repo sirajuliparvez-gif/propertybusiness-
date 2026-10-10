@@ -7,7 +7,7 @@ import { prisma } from "@/lib/prisma";
 import { redirect } from "@/i18n/navigation";
 import { computeServiceChargeAmount } from "@/lib/service-charge";
 import { buildRentLedger, overdueEntries, totalOverdue, RENT_DUE_DAY } from "@/lib/rent-ledger";
-import { applyRentInstallment } from "@/lib/payment-progress";
+import { applyRentInstallment, isRentPaymentSettled } from "@/lib/payment-progress";
 import { resolvePaymentMonth } from "@/lib/payment-month";
 
 function str(formData: FormData, key: string) {
@@ -156,9 +156,10 @@ export async function recordTenantRentPayment(formData: FormData) {
       select: { paidAmount: true, dueAmount: true },
     });
     const alreadyPaid = existing ? Number(existing.paidAmount) : 0;
-    if (existing && alreadyPaid >= Number(existing.dueAmount)) {
-      throw new Error("Rent for this month is already fully paid");
-    }
+    // A stale/double-submitted form must not crash after the first request
+    // already committed the payment. Treat it as an idempotent no-op; no
+    // second Transaction or downpayment adjustment is written.
+    if (existing && isRentPaymentSettled(Number(existing.dueAmount), alreadyPaid)) return;
     const { totalPaid, status } = applyRentInstallment({
       dueAmount,
       alreadyPaid,

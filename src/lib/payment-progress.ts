@@ -20,6 +20,10 @@ export function applyRentInstallment({
   return { totalPaid, status };
 }
 
+export function isRentPaymentSettled(dueAmount: number, paidAmount: number) {
+  return paidAmount >= dueAmount;
+}
+
 export function applyUtilityBillInstallment({
   totalAmount,
   alreadyPaid,
