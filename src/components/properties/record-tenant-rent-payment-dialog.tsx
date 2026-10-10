@@ -57,6 +57,8 @@ export function RecordTenantRentPaymentDialog({
   iconOnly = false,
   variant = "button",
   rowContent,
+  initialBillingMonth,
+  triggerLabel,
 }: {
   propertyId: string;
   tenantLeaseId: string;
@@ -84,13 +86,15 @@ export function RecordTenantRentPaymentDialog({
   // body/behavior stays identical either way.
   variant?: "button" | "row";
   rowContent?: React.ReactNode;
+  initialBillingMonth?: string;
+  triggerLabel?: string;
 }) {
   const t = useTranslations("Properties");
   const [isPending, startTransition] = useTransition();
   const todayValue = dhakaTodayISO();
-  const [mode, setMode] = useState<Mode>(monthSettled ? "advance" : "cash");
+  const [mode, setMode] = useState<Mode>(initialBillingMonth ? "cash" : monthSettled ? "advance" : "cash");
   const [method, setMethod] = useState("NONE");
-  const [billingMonth, setBillingMonth] = useState(todayValue.slice(0, 7));
+  const [billingMonth, setBillingMonth] = useState(initialBillingMonth ?? todayValue.slice(0, 7));
   const serviceChargeAmount = computeServiceChargeAmount(monthlyRentAmount, serviceChargeType, serviceChargeValue);
   // "Rent due" is rent + service charge bundled as one figure — see the
   // matching note in actions/tenant-rent.ts.
@@ -125,7 +129,7 @@ export function RecordTenantRentPaymentDialog({
               type="button"
               variant="outline"
               size={iconOnly ? "icon-sm" : "sm"}
-              title={iconOnly ? t("collectRent") : undefined}
+              title={iconOnly ? (triggerLabel ?? t("collectRent")) : undefined}
             />
           )
         }
@@ -135,7 +139,11 @@ export function RecordTenantRentPaymentDialog({
         ) : (
           <>
             <Wallet className="size-3.5" />
-            {iconOnly ? <span className="sr-only">{t("collectRent")}</span> : t("collectRent")}
+            {iconOnly ? (
+              <span className="sr-only">{triggerLabel ?? t("collectRent")}</span>
+            ) : (
+              triggerLabel ?? t("collectRent")
+            )}
           </>
         )}
       </DialogTrigger>

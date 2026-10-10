@@ -29,6 +29,8 @@ import { MobileUtilityBillsList } from "@/components/mobile/mobile-utility-bills
 import { getTenantProfile } from "@/lib/tenants-data";
 import { formatTaka, formatDate } from "@/lib/format";
 import { paymentMethodLabel } from "@/lib/payment-method";
+import { dhakaTodayISO } from "@/lib/dhaka-time";
+import { previousPaymentMonth } from "@/lib/payment-month";
 
 export default async function TenantProfilePage({
   params,
@@ -41,6 +43,7 @@ export default async function TenantProfilePage({
   if (!tenant) notFound();
 
   const isFormer = tenant.leaseStatus !== "ACTIVE";
+  const previousMonth = previousPaymentMonth(dhakaTodayISO().slice(0, 7));
   const rentStatusLabels = {
     PAID: t("paid"),
     PARTIAL: t("pending"),
@@ -118,6 +121,18 @@ export default async function TenantProfilePage({
           />
           {!isFormer ? (
             <>
+              <RecordTenantRentPaymentDialog
+                propertyId={tenant.propertyId}
+                tenantLeaseId={tenant.id}
+                monthlyRentAmount={tenant.monthlyRentAmount}
+                currentDownpaymentBalance={tenant.currentDownpaymentBalance}
+                serviceChargeType={tenant.serviceChargeType}
+                serviceChargeValue={tenant.serviceChargeValue}
+                overdueMonths={tenant.overdueMonths}
+                returnTo={`/tenants/${tenant.id}`}
+                initialBillingMonth={previousMonth}
+                triggerLabel={t("addPreviousMonthRent")}
+              />
               <RecordTenantRentPaymentDialog
                 propertyId={tenant.propertyId}
                 tenantLeaseId={tenant.id}

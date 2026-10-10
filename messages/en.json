@@ -585,6 +585,7 @@
     "ownerRentNotSetYet": "Owner rent not set yet",
 
     "collectRent": "Collect Rent",
+    "addPreviousMonthRent": "Add Previous Month Rent",
     "paymentMode": "Payment Mode",
     "cashPayment": "Cash Payment",
     "advanceRentPayment": "Advance Rent",
@@ -633,7 +634,9 @@
     "companyExpenseRowLabel": "Company Staff / Admin Expense",
 
     "rentCollectionTitle": "Rent Collection",
-    "rentPageSubtitle": "See and collect this month's rent status across all properties",
+    "rentPageSubtitle": "See and collect rent status across all properties by billing month",
+    "rentMonthFilter": "Billing Month",
+    "collectedForMonth": "Collected for Month",
     "rentSearchPlaceholder": "Search by name, phone, property, or unit...",
     "noRentSearchResults": "No results found.",
 

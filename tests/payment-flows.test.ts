@@ -6,7 +6,7 @@ import {
   applyUtilityBillInstallment,
   isRentPaymentSettled,
 } from "@/lib/payment-progress";
-import { resolvePaymentMonth } from "@/lib/payment-month";
+import { previousPaymentMonth, resolvePaymentMonth } from "@/lib/payment-month";
 import { localizedMutationPaths } from "@/lib/localized-revalidation";
 import { reportingMonthKey } from "@/lib/reporting-period";
 
@@ -20,6 +20,11 @@ test("older payment forms still fall back to the payment date month", () => {
 
 test("invalid billing months are rejected", () => {
   assert.throws(() => resolvePaymentMonth("2026-13", "2026-10-03"), /Invalid billing month/);
+});
+
+test("the previous-month shortcut handles year boundaries", () => {
+  assert.equal(previousPaymentMonth("2026-10"), "2026-09");
+  assert.equal(previousPaymentMonth("2026-01"), "2025-12");
 });
 
 test("a repeated submission for a fully paid rent month is treated as settled", () => {

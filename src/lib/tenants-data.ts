@@ -3,8 +3,18 @@ import { dhakaNow } from "@/lib/dhaka-time";
 import { prisma } from "@/lib/prisma";
 import { computeServiceChargeAmount } from "@/lib/service-charge";
 import { attachElectricityConsumption, latestElectricityReadingByUnit } from "@/lib/electricity-consumption";
-import { buildRentLedger, overdueEntries, pastDueEntries, totalOverdue, totalPastDue, RENT_DUE_DAY } from "@/lib/rent-ledger";
+import {
+  buildRentLedger,
+  overdueEntries,
+  pastDueEntries,
+  totalOverdue,
+  totalPastDue,
+  isMonthPastDue,
+  LEDGER_START_MONTH,
+  RENT_DUE_DAY,
+} from "@/lib/rent-ledger";
 import { splitUtilityBillTransactions } from "@/lib/utility-bill-split";
+import { isPaymentMonth } from "@/lib/payment-month";
 
 function monthRange(now: Date) {
   return {
@@ -241,15 +251,72 @@ export type AllTenantsData = Awaited<ReturnType<typeof getAllTenantsData>>;
 // of this month's rent status per active lease, rather than the Tenants
 // page's full directory. Former/vacated leases don't owe current rent, so
 // they're excluded here (they still appear on the Tenants page).
-export async function getRentCollectionData() {
+export async function getRentCollectionData(requestedMonth?: string) {
   const data = await getAllTenantsData();
-  const payments = data.tenants.filter((t) => t.leaseStatus === "ACTIVE");
+  const now = dhakaNow();
+  const currentMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+  const selectedMonth = isPaymentMonth(requestedMonth) && requestedMonth <= currentMonth ? requestedMonth : currentMonth;
+  const activeTenants = data.tenants.filter((t) => t.leaseStatus === "ACTIVE");
+  const selectedRows = await prisma.rentPayment.findMany({
+    where: { tenantLeaseId: { in: activeTenants.map((t) => t.id) }, month: selectedMonth },
+    select: {
+      tenantLeaseId: true,
+      dueDate: true,
+      dueAmount: true,
+      paidAmount: true,
+      paidAt: true,
+      status: true,
+      transactions: { orderBy: { date: "desc" }, take: 1, select: { method: true } },
+    },
+  });
+  const recordedMonths = await prisma.rentPayment.findMany({
+    where: { month: { lte: currentMonth } },
+    distinct: ["month"],
+    orderBy: { month: "desc" },
+    select: { month: true },
+  });
+  const rowByLease = new Map(selectedRows.map((row) => [row.tenantLeaseId, row]));
+  const [year, monthNumber] = selectedMonth.split("-").map(Number);
+
+  const payments = activeTenants.flatMap((tenant) => {
+    const row = rowByLease.get(tenant.id);
+    // Before the ledger reset, only explicitly recorded months are real dues.
+    if (!row && selectedMonth < LEDGER_START_MONTH) return [];
+    const leaseStartMonth = `${tenant.startDate.getFullYear()}-${String(tenant.startDate.getMonth() + 1).padStart(2, "0")}`;
+    if (!row && leaseStartMonth > selectedMonth) return [];
+
+    const dueAmount = row ? Number(row.dueAmount) : tenant.monthlyRentAmount + tenant.serviceChargeAmount;
+    const paidAmount = row ? Number(row.paidAmount) : 0;
+    const gap = Math.max(0, dueAmount - paidAmount);
+    const dueDate = row?.dueDate ?? new Date(year, monthNumber - 1, RENT_DUE_DAY);
+    const pastDue = gap > 0 && isMonthPastDue(selectedMonth, RENT_DUE_DAY, now);
+
+    return [{
+      ...tenant,
+      rentStatus: row?.status ?? "UNPAID",
+      overdueAmount: gap,
+      pastDueAmount: pastDue ? gap : 0,
+      pastDueMonthsCount: pastDue ? 1 : 0,
+      rentPastDue: pastDue,
+      paymentMethod: row?.transactions[0]?.method ?? null,
+      currentDueDate: dueDate,
+      currentPaidAt: row?.paidAt ?? null,
+      selectedPaidAmount: paidAmount,
+      selectedDueAmount: dueAmount,
+    }];
+  });
+  const totalDue = payments.reduce((sum, payment) => sum + payment.selectedDueAmount, 0);
+  const totalCollected = payments.reduce((sum, payment) => sum + payment.selectedPaidAmount, 0);
+  const totalRemaining = payments.reduce((sum, payment) => sum + payment.overdueAmount, 0);
+  const settledCount = payments.filter((payment) => payment.overdueAmount === 0).length;
   return {
     payments,
-    totalDue: data.expectedIncome,
-    totalCollected: data.collectedThisMonth,
-    totalRemaining: data.totalOverdueRent,
-    collectionRate: data.collectionRate,
+    totalDue,
+    totalCollected,
+    totalRemaining,
+    collectionRate: payments.length > 0 ? Math.round((settledCount / payments.length) * 100) : 0,
+    selectedMonth,
+    availableMonths: Array.from(new Set([currentMonth, ...recordedMonths.map((row) => row.month)])).sort().reverse(),
   };
 }
 

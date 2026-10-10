@@ -585,6 +585,7 @@
     "ownerRentNotSetYet": "মালিকের ভাড়া এখনো নির্ধারণ করা হয়নি",
 
     "collectRent": "ভাড়া আদায় করুন",
+    "addPreviousMonthRent": "আগের মাসের ভাড়া যোগ করুন",
     "paymentMode": "পেমেন্টের ধরন",
     "cashPayment": "নগদ পরিশোধ",
     "advanceRentPayment": "অগ্রিম ভাড়া",
@@ -633,7 +634,9 @@
     "companyExpenseRowLabel": "কোম্পানি স্টাফ / প্রশাসনিক খরচ",
 
     "rentCollectionTitle": "ভাড়া আদায়",
-    "rentPageSubtitle": "সব প্রপার্টির এই মাসের ভাড়া আদায়ের অবস্থা একসাথে দেখুন ও আদায় করুন",
+    "rentPageSubtitle": "বিলের মাস অনুযায়ী সব প্রপার্টির ভাড়া আদায়ের অবস্থা দেখুন ও আদায় করুন",
+    "rentMonthFilter": "বিলের মাস",
+    "collectedForMonth": "মাসের আদায়",
     "rentSearchPlaceholder": "নাম, ফোন, প্রপার্টি বা ইউনিট দিয়ে খুঁজুন...",
     "noRentSearchResults": "কোনো ফলাফল পাওয়া যায়নি।",
 

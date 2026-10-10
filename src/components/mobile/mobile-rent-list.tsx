@@ -12,6 +12,7 @@ import { RecordTenantRentPaymentDialog } from "@/components/properties/record-te
 import { formatTaka } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import type { RentCollectionData } from "@/lib/tenants-data";
+import { RentMonthSelect } from "@/components/properties/rent-month-select";
 
 type Filter = "all" | "paid" | "overdue";
 
@@ -21,6 +22,8 @@ export function MobileRentList({
   totalCollected,
   totalRemaining,
   collectionRate,
+  selectedMonth,
+  availableMonths,
 }: RentCollectionData) {
   const t = useTranslations("Properties");
   const [filter, setFilter] = useState<Filter>("all");
@@ -65,9 +68,12 @@ export function MobileRentList({
 
   return (
     <div className="flex min-w-0 flex-1 flex-col gap-4 md:hidden">
-      <div>
-        <h1 className="text-2xl font-bold tracking-tight">{t("rentCollectionTitle")}</h1>
-        <p className="text-sm text-muted-foreground">{t("rentPageSubtitle")}</p>
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <h1 className="text-2xl font-bold tracking-tight">{t("rentCollectionTitle")}</h1>
+          <p className="text-sm text-muted-foreground">{t("rentPageSubtitle")}</p>
+        </div>
+        <RentMonthSelect months={availableMonths} selectedMonth={selectedMonth} />
       </div>
 
       <Card>
@@ -88,7 +94,7 @@ export function MobileRentList({
               <p className="font-mono text-sm font-bold tabular-nums text-success">
                 {formatTaka(totalCollected)}
               </p>
-              <p className="text-[10px] leading-tight text-muted-foreground">{t("collectedThisMonth")}</p>
+              <p className="text-[10px] leading-tight text-muted-foreground">{t("collectedForMonth")}</p>
             </div>
             <div>
               <p className="font-mono text-sm font-bold tabular-nums text-destructive">
