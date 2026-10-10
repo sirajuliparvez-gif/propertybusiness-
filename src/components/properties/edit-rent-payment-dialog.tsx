@@ -2,7 +2,7 @@
 
 import { useState, useTransition } from "react";
 import { useTranslations } from "next-intl";
-import { Loader2, Pencil } from "lucide-react";
+import { FilePenLine, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -22,7 +22,7 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 import { FormField } from "@/components/properties/form-field";
-import { dhakaISO } from "@/lib/dhaka-time";
+import { dhakaISO, dhakaTodayISO } from "@/lib/dhaka-time";
 import {
   updateTenantRentPayment,
   type RentPaymentEditErrorCode,
@@ -58,6 +58,8 @@ export function EditRentPaymentDialog({
     notEditable: t("rentPaymentEditErrNotEditable"),
     invalidAmount: t("rentPaymentEditErrInvalidAmount"),
     amountExceedsDue: t("rentPaymentEditErrAmountExceedsDue"),
+    invalidBillingMonth: t("rentPaymentEditErrInvalidBillingMonth"),
+    monthAlreadyExists: t("rentPaymentEditErrMonthAlreadyExists"),
   };
   const options: { value: PaymentMethod | "NONE"; label: string }[] = [
     { value: "NONE", label: t("noPaymentRecord") },
@@ -78,10 +80,10 @@ export function EditRentPaymentDialog({
       }}
     >
       <DialogTrigger
-        render={<Button type="button" variant="outline" size="icon-sm" title={t("editRentPayment")} />}
+        render={<Button type="button" variant="outline" size="sm" title={t("editRentPayment")} />}
       >
-        <Pencil className="size-3.5" />
-        <span className="sr-only">{t("editRentPayment")}</span>
+        <FilePenLine className="size-3.5" />
+        {t("paymentDetailsEdit")}
       </DialogTrigger>
       <DialogContent>
         <DialogHeader>
@@ -104,6 +106,16 @@ export function EditRentPaymentDialog({
           <p className="text-sm text-muted-foreground sm:col-span-2">
             {t("editRentPaymentHint", { month: payment.month })}
           </p>
+          <FormField label={t("billingMonth")} htmlFor={`editRentMonth-${payment.id}`} required>
+            <Input
+              id={`editRentMonth-${payment.id}`}
+              name="billingMonth"
+              type="month"
+              max={dhakaTodayISO().slice(0, 7)}
+              defaultValue={payment.month}
+              required
+            />
+          </FormField>
           <FormField label={t("amount")} htmlFor={`editRentAmount-${payment.id}`} required>
             <Input
               id={`editRentAmount-${payment.id}`}

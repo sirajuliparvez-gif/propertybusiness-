@@ -1,6 +1,6 @@
 "use server";
 
-import { dhakaNow } from "@/lib/dhaka-time";
+import { dhakaNow, dhakaTodayISO } from "@/lib/dhaka-time";
 import { revalidatePath } from "next/cache";
 import { getLocale } from "next-intl/server";
 import { prisma } from "@/lib/prisma";
@@ -8,7 +8,7 @@ import { redirect } from "@/i18n/navigation";
 import { computeServiceChargeAmount } from "@/lib/service-charge";
 import { buildRentLedger, overdueEntries, totalOverdue, RENT_DUE_DAY } from "@/lib/rent-ledger";
 import { applyRentInstallment, isRentPaymentSettled } from "@/lib/payment-progress";
-import { resolvePaymentMonth } from "@/lib/payment-month";
+import { isPaymentMonth, paymentMonthDueDate, resolvePaymentMonth } from "@/lib/payment-month";
 import { localizedMutationPaths } from "@/lib/localized-revalidation";
 
 function str(formData: FormData, key: string) {
@@ -27,11 +27,19 @@ export type RentPaymentEditErrorCode =
   | "notFound"
   | "notEditable"
   | "invalidAmount"
-  | "amountExceedsDue";
+  | "amountExceedsDue"
+  | "invalidBillingMonth"
+  | "monthAlreadyExists";
 
 export type RentPaymentEditResult =
   | { ok: true }
   | { ok: false; error: RentPaymentEditErrorCode };
+
+export type RentPaymentDeleteErrorCode = "missingFields" | "notFound" | "notEditable";
+
+export type RentPaymentDeleteResult =
+  | { ok: true }
+  | { ok: false; error: RentPaymentDeleteErrorCode };
 
 // Corrects one directly-recorded rent payment while keeping its monthly due
 // row and cash-flow transaction in sync. Installments and downpayment
@@ -43,9 +51,13 @@ export async function updateTenantRentPayment(formData: FormData): Promise<RentP
   const tenantLeaseId = str(formData, "tenantLeaseId");
   const amountRaw = str(formData, "amount");
   const dateRaw = str(formData, "date");
+  const billingMonth = str(formData, "billingMonth");
   const returnTo = str(formData, "returnTo") ?? (tenantLeaseId ? `/tenants/${tenantLeaseId}` : "/rent");
-  if (!rentPaymentId || !tenantLeaseId || !amountRaw || !dateRaw) {
+  if (!rentPaymentId || !tenantLeaseId || !amountRaw || !dateRaw || !billingMonth) {
     return { ok: false, error: "missingFields" };
+  }
+  if (!isPaymentMonth(billingMonth) || billingMonth > dhakaTodayISO().slice(0, 7)) {
+    return { ok: false, error: "invalidBillingMonth" };
   }
 
   const amount = Number(amountRaw);
@@ -67,6 +79,7 @@ export async function updateTenantRentPayment(formData: FormData): Promise<RentP
     const payment = await tx.rentPayment.findFirst({
       where: { id: rentPaymentId, tenantLeaseId },
       select: {
+        month: true,
         dueAmount: true,
         transactions: { select: { id: true } },
         downpaymentAdjustments: { select: { id: true }, take: 1 },
@@ -77,16 +90,63 @@ export async function updateTenantRentPayment(formData: FormData): Promise<RentP
       return "notEditable" as const;
     }
     if (amount > Number(payment.dueAmount)) return "amountExceedsDue" as const;
+    if (billingMonth !== payment.month) {
+      const targetMonthPayment = await tx.rentPayment.findUnique({
+        where: { tenantLeaseId_month: { tenantLeaseId, month: billingMonth } },
+        select: { id: true },
+      });
+      if (targetMonthPayment) return "monthAlreadyExists" as const;
+    }
 
     const status = amount >= Number(payment.dueAmount) ? "PAID" : "PARTIAL";
     await tx.rentPayment.update({
       where: { id: rentPaymentId },
-      data: { paidAmount: amount, paidAt: paidDate, status },
+      data: {
+        month: billingMonth,
+        dueDate: paymentMonthDueDate(billingMonth, RENT_DUE_DAY),
+        paidAmount: amount,
+        paidAt: paidDate,
+        status,
+      },
     });
     await tx.transaction.update({
       where: { id: payment.transactions[0].id },
       data: { amount, date: paidDate, method },
     });
+    return null;
+  });
+  if (problem) return { ok: false, error: problem };
+
+  revalidateLocalizedPath(locale, returnTo);
+  redirect({ href: returnTo, locale });
+  return { ok: true };
+}
+
+// Removes one mistaken, directly-recorded payment together with its matching
+// cash-flow entry. Installments and downpayment adjustments retain their audit
+// history and cannot be deleted from the tenant payment-history row.
+export async function deleteTenantRentPayment(formData: FormData): Promise<RentPaymentDeleteResult> {
+  const locale = await getLocale();
+  const rentPaymentId = str(formData, "rentPaymentId");
+  const tenantLeaseId = str(formData, "tenantLeaseId");
+  const returnTo = str(formData, "returnTo") ?? (tenantLeaseId ? `/tenants/${tenantLeaseId}` : "/rent");
+  if (!rentPaymentId || !tenantLeaseId) return { ok: false, error: "missingFields" };
+
+  const problem = await prisma.$transaction(async (tx) => {
+    const payment = await tx.rentPayment.findFirst({
+      where: { id: rentPaymentId, tenantLeaseId },
+      select: {
+        transactions: { select: { id: true } },
+        downpaymentAdjustments: { select: { id: true }, take: 1 },
+      },
+    });
+    if (!payment) return "notFound" as const;
+    if (payment.transactions.length !== 1 || payment.downpaymentAdjustments.length > 0) {
+      return "notEditable" as const;
+    }
+
+    await tx.transaction.delete({ where: { id: payment.transactions[0].id } });
+    await tx.rentPayment.delete({ where: { id: rentPaymentId } });
     return null;
   });
   if (problem) return { ok: false, error: problem };

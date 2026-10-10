@@ -6,7 +6,7 @@ import {
   applyUtilityBillInstallment,
   isRentPaymentSettled,
 } from "@/lib/payment-progress";
-import { previousPaymentMonth, resolvePaymentMonth } from "@/lib/payment-month";
+import { paymentMonthDueDate, previousPaymentMonth, resolvePaymentMonth } from "@/lib/payment-month";
 import { localizedMutationPaths } from "@/lib/localized-revalidation";
 import { reportingMonthKey } from "@/lib/reporting-period";
 
@@ -27,14 +27,21 @@ test("the previous-month shortcut handles year boundaries", () => {
   assert.equal(previousPaymentMonth("2026-01"), "2025-12");
 });
 
+test("moving a payment to another billing month recalculates its due date", () => {
+  const dueDate = paymentMonthDueDate("2026-09", 10);
+  assert.equal(dueDate.getFullYear(), 2026);
+  assert.equal(dueDate.getMonth(), 8);
+  assert.equal(dueDate.getDate(), 10);
+});
+
 test("a repeated submission for a fully paid rent month is treated as settled", () => {
   assert.equal(isRentPaymentSettled(15_000, 15_000), true);
   assert.equal(isRentPaymentSettled(15_000, 10_000), false);
 });
 
-test("rent mutations invalidate both the return page and localized dashboard", () => {
+test("rent mutations invalidate the return page, rent collection, dashboard, and reports", () => {
   assert.deepEqual(localizedMutationPaths("bn", "/rent"), ["/bn/rent", "/bn", "/bn/reports"]);
-  assert.deepEqual(localizedMutationPaths("en", "/"), ["/en", "/en/reports"]);
+  assert.deepEqual(localizedMutationPaths("en", "/"), ["/en", "/en/rent", "/en/reports"]);
 });
 
 test("reports attribute late rent payments to their billing month", () => {

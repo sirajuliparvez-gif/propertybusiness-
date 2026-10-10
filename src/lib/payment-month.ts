@@ -11,6 +11,12 @@ export function previousPaymentMonth(month: string) {
   return `${previous.getFullYear()}-${String(previous.getMonth() + 1).padStart(2, "0")}`;
 }
 
+export function paymentMonthDueDate(month: string, dueDay: number) {
+  if (!isPaymentMonth(month)) throw new Error("Invalid billing month");
+  const [year, monthNumber] = month.split("-").map(Number);
+  return new Date(year, monthNumber - 1, dueDay);
+}
+
 // The month a payment settles is independent from the day the money arrived.
 // Keep the payment-date fallback so older callers/forms remain compatible.
 export function resolvePaymentMonth(billingMonth: string | null | undefined, paymentDate: string) {

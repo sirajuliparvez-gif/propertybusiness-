@@ -23,6 +23,7 @@ import { RecordTenantRentPaymentDialog } from "@/components/properties/record-te
 import { VacateTenantDialog } from "@/components/properties/vacate-tenant-dialog";
 import { EditTenantDialog } from "@/components/properties/edit-tenant-dialog";
 import { EditRentPaymentDialog } from "@/components/properties/edit-rent-payment-dialog";
+import { DeleteRentPaymentButton } from "@/components/properties/delete-rent-payment-button";
 import { AddUtilityBillDialog } from "@/components/properties/add-utility-bill-dialog";
 import { UtilityBillsTable } from "@/components/properties/utility-bills-table";
 import { MobileUtilityBillsList } from "@/components/mobile/mobile-utility-bills-list";
@@ -447,18 +448,26 @@ export default async function TenantProfilePage({
                       <div className="mt-1 flex items-center justify-end gap-2">
                         <StatusPill status={rentPillStatus(p.status, p.pastDue)} labels={rentStatusLabels} />
                         {p.editable && p.transactionAmount != null && p.transactionDate ? (
-                          <EditRentPaymentDialog
-                            payment={{
-                              id: p.id,
-                              month: p.month,
-                              amount: p.transactionAmount,
-                              dueAmount: p.dueAmount,
-                              date: p.transactionDate,
-                              method: p.transactionMethod,
-                            }}
-                            tenantLeaseId={tenant.id}
-                            returnTo={`/tenants/${tenant.id}`}
-                          />
+                          <>
+                            <EditRentPaymentDialog
+                              payment={{
+                                id: p.id,
+                                month: p.month,
+                                amount: p.transactionAmount,
+                                dueAmount: p.dueAmount,
+                                date: p.transactionDate,
+                                method: p.transactionMethod,
+                              }}
+                              tenantLeaseId={tenant.id}
+                              returnTo={`/tenants/${tenant.id}`}
+                            />
+                            <DeleteRentPaymentButton
+                              paymentId={p.id}
+                              month={p.month}
+                              tenantLeaseId={tenant.id}
+                              returnTo={`/tenants/${tenant.id}`}
+                            />
+                          </>
                         ) : null}
                       </div>
                     </div>
@@ -502,18 +511,26 @@ export default async function TenantProfilePage({
                     </TableCell>
                     <TableCell className="text-right">
                       {p.editable && p.transactionAmount != null && p.transactionDate ? (
-                        <EditRentPaymentDialog
-                          payment={{
-                            id: p.id,
-                            month: p.month,
-                            amount: p.transactionAmount,
-                            dueAmount: p.dueAmount,
-                            date: p.transactionDate,
-                            method: p.transactionMethod,
-                          }}
-                          tenantLeaseId={tenant.id}
-                          returnTo={`/tenants/${tenant.id}`}
-                        />
+                        <div className="flex items-center justify-end gap-1">
+                          <EditRentPaymentDialog
+                            payment={{
+                              id: p.id,
+                              month: p.month,
+                              amount: p.transactionAmount,
+                              dueAmount: p.dueAmount,
+                              date: p.transactionDate,
+                              method: p.transactionMethod,
+                            }}
+                            tenantLeaseId={tenant.id}
+                            returnTo={`/tenants/${tenant.id}`}
+                          />
+                          <DeleteRentPaymentButton
+                            paymentId={p.id}
+                            month={p.month}
+                            tenantLeaseId={tenant.id}
+                            returnTo={`/tenants/${tenant.id}`}
+                          />
+                        </div>
                       ) : null}
                     </TableCell>
                   </TableRow>
