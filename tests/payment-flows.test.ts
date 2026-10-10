@@ -8,6 +8,7 @@ import {
 } from "@/lib/payment-progress";
 import { resolvePaymentMonth } from "@/lib/payment-month";
 import { localizedMutationPaths } from "@/lib/localized-revalidation";
+import { reportingMonthKey } from "@/lib/reporting-period";
 
 test("rent payment can settle September when money arrives in October", () => {
   assert.equal(resolvePaymentMonth("2026-09", "2026-10-03"), "2026-09");
@@ -27,8 +28,27 @@ test("a repeated submission for a fully paid rent month is treated as settled", 
 });
 
 test("rent mutations invalidate both the return page and localized dashboard", () => {
-  assert.deepEqual(localizedMutationPaths("bn", "/rent"), ["/bn/rent", "/bn"]);
-  assert.deepEqual(localizedMutationPaths("en", "/"), ["/en"]);
+  assert.deepEqual(localizedMutationPaths("bn", "/rent"), ["/bn/rent", "/bn", "/bn/reports"]);
+  assert.deepEqual(localizedMutationPaths("en", "/"), ["/en", "/en/reports"]);
+});
+
+test("reports attribute late rent payments to their billing month", () => {
+  assert.equal(
+    reportingMonthKey({
+      transactionType: "RENT_RECEIVED_FROM_TENANT",
+      transactionDate: new Date(2026, 9, 10),
+      rentPaymentMonth: "2026-09",
+    }),
+    "2026-09"
+  );
+  assert.equal(
+    reportingMonthKey({
+      transactionType: "MAINTENANCE_EXPENSE",
+      transactionDate: new Date(2026, 9, 10),
+      rentPaymentMonth: null,
+    }),
+    "2026-10"
+  );
 });
 
 test("rent can be paid in two installments", () => {

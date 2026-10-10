@@ -1,6 +1,7 @@
 import { dhakaNow } from "@/lib/dhaka-time";
 import { prisma } from "@/lib/prisma";
 import { INCOME_TYPES } from "@/lib/finance-types";
+import { reportingMonthKey } from "@/lib/reporting-period";
 
 function monthKey(d: Date) {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
@@ -67,6 +68,7 @@ export async function getReportsData() {
         amount: true,
         date: true,
         propertyId: true,
+        rentPayment: { select: { month: true } },
         property: { select: { name: true, type: true } },
       },
     }),
@@ -89,7 +91,14 @@ export async function getReportsData() {
   const byPropertyMonth = new Map<string, Map<string, Bucket>>();
 
   for (const t of transactions) {
-    const key = monthKey(t.date);
+    // Tenant rent belongs to the bill it settles (for example September rent
+    // paid in October updates September's report). Other cash-flow entries
+    // continue to use their actual transaction date.
+    const key = reportingMonthKey({
+      transactionType: t.type,
+      transactionDate: t.date,
+      rentPaymentMonth: t.rentPayment?.month,
+    });
     const bucket = byMonth.get(key);
     if (!bucket) continue; // outside the 6-month window (shouldn't happen given the query filter)
     const amount = Number(t.amount);

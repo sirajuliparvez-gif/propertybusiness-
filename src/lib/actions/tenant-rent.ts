@@ -342,17 +342,11 @@ function addMonthsToMonthStr(monthStr: string, offset: number) {
 
 // A tenant sometimes pays several months of rent in one go (any number of
 // months, not just round numbers — 1, 7, 9, whatever they hand over)
-// instead of monthly. Reports/dashboards bucket income by
-// Transaction.date (cash-basis, see reports-data.ts), not by the month a
-// RentPayment logically covers — so a single lump Transaction dated today
-// would correctly show the full amount as this month's income, but every
-// future month's RentPayment would still read as its own separate row with
-// no Transaction of its own. Instead we create one RentPayment PER covered
-// month (so each month's due/paid status is individually correct and
-// vacancy/overdue logic keeps working), each with its OWN Transaction — all
-// dated on the same real payment date, so the full advance amount lands in
-// the month it was actually received, matching how every other cash-basis
-// figure in this app already behaves. What the company later pays the
+// instead of monthly. We create one RentPayment PER covered month so each
+// month's due/paid status and report bucket stay individually correct. Each
+// also has its own Transaction dated on the real payment date: the dashboard
+// remains cash-basis while reports attribute tenant rent to RentPayment.month.
+// What the company later pays the
 // property owner (OwnerRentPayment) is a fully independent monthly ledger
 // already decoupled from this — lump-sum-in, monthly-out (or vice versa)
 // just falls out naturally with no extra code.
