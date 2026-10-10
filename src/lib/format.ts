@@ -17,9 +17,9 @@ export function formatTaka(amount: number | string): string {
 // AND matches what "due on the 10th" actually means to someone in Dhaka.
 const BUSINESS_TIMEZONE = "Asia/Dhaka";
 
-export function formatDate(date: Date | string): string {
+export function formatDate(date: Date | string, locale = "en"): string {
   const d = typeof date === "string" ? new Date(date) : date;
-  return d.toLocaleDateString("en-US", {
+  return d.toLocaleDateString(locale === "bn" ? "bn-BD" : "en-US", {
     day: "numeric",
     month: "short",
     year: "numeric",
@@ -30,11 +30,19 @@ export function formatDate(date: Date | string): string {
 // "2026-08" -> "August 2026" — used by both the invoice page (server) and
 // its month-select dropdown (client), so it lives in a plain module rather
 // than being re-exported from either side's own file.
-export function monthLabel(monthKey: string): string {
+export function monthLabel(monthKey: string, locale = "en"): string {
   const [year, month] = monthKey.split("-").map(Number);
-  return new Date(year, month - 1, 1).toLocaleDateString("en-US", {
+  return new Date(year, month - 1, 1).toLocaleDateString(locale === "bn" ? "bn-BD" : "en-US", {
     month: "long",
     year: "numeric",
+    timeZone: BUSINESS_TIMEZONE,
+  });
+}
+
+export function shortMonthLabel(monthKey: string, locale = "en"): string {
+  const [year, month] = monthKey.split("-").map(Number);
+  return new Date(year, month - 1, 1).toLocaleDateString(locale === "bn" ? "bn-BD" : "en-US", {
+    month: "short",
     timeZone: BUSINESS_TIMEZONE,
   });
 }

@@ -14,7 +14,7 @@ import { cn } from "@/lib/utils";
 import type { RentCollectionData } from "@/lib/tenants-data";
 import { RentMonthSelect } from "@/components/properties/rent-month-select";
 
-type Filter = "all" | "paid" | "overdue";
+type Filter = "pending" | "all" | "paid" | "overdue";
 
 export function MobileRentList({
   payments,
@@ -26,7 +26,7 @@ export function MobileRentList({
   availableMonths,
 }: RentCollectionData) {
   const t = useTranslations("Properties");
-  const [filter, setFilter] = useState<Filter>("all");
+  const [filter, setFilter] = useState<Filter>("pending");
   const [query, setQuery] = useState("");
 
   const rentStatusLabels = {
@@ -40,6 +40,7 @@ export function MobileRentList({
   const counts = useMemo(
     () => ({
       all: payments.length,
+      pending: payments.filter((p) => !isRentSettled(p.rentStatus, p.overdueAmount)).length,
       paid: payments.filter((p) => isRentSettled(p.rentStatus, p.overdueAmount)).length,
       overdue: payments.filter((p) => p.pastDueAmount > 0).length,
     }),
@@ -48,7 +49,9 @@ export function MobileRentList({
 
   const filtered = useMemo(() => {
     const byStatus =
-      filter === "paid"
+      filter === "pending"
+        ? payments.filter((p) => !isRentSettled(p.rentStatus, p.overdueAmount))
+        : filter === "paid"
         ? payments.filter((p) => isRentSettled(p.rentStatus, p.overdueAmount))
         : filter === "overdue"
           ? payments.filter((p) => p.pastDueAmount > 0)
@@ -61,9 +64,10 @@ export function MobileRentList({
   }, [payments, filter, query]);
 
   const filters: { key: Filter; label: string }[] = [
+    { key: "pending", label: t("filterCollectionPending") },
     { key: "all", label: t("filterAll") },
     { key: "paid", label: t("filterPaid") },
-    { key: "overdue", label: t("filterOverdue") },
+    { key: "overdue", label: t("filterPastDue") },
   ];
 
   return (
@@ -100,7 +104,7 @@ export function MobileRentList({
               <p className="font-mono text-sm font-bold tabular-nums text-destructive">
                 {formatTaka(totalRemaining)}
               </p>
-              <p className="text-[10px] leading-tight text-muted-foreground">{t("remaining")}</p>
+              <p className="text-[10px] leading-tight text-muted-foreground">{t("collectionPendingAmount")}</p>
             </div>
           </div>
         </CardContent>
@@ -114,6 +118,7 @@ export function MobileRentList({
           value={query}
           onChange={(e) => setQuery(e.target.value)}
           placeholder={t("rentSearchPlaceholder")}
+          aria-label={t("rentSearchLabel")}
         />
       </InputGroup>
 
@@ -123,6 +128,7 @@ export function MobileRentList({
             key={f.key}
             type="button"
             onClick={() => setFilter(f.key)}
+            aria-pressed={filter === f.key}
             className={cn(
               "rounded-full border px-3 py-1 text-xs font-medium transition-colors",
               filter === f.key
@@ -140,20 +146,26 @@ export function MobileRentList({
       ) : (
         <Card className="overflow-hidden p-0">
           <ul className="divide-y">
-            {filtered.map((p) => (
+            {filtered.map((p) => {
+              const settled = isRentSettled(p.rentStatus, p.overdueAmount);
+              return (
               <li key={p.id} className={cn("flex items-stretch", p.pastDueAmount > 0 ? "bg-destructive/5" : undefined)}>
                 <div className="min-w-0 flex-1">
                 <RecordTenantRentPaymentDialog
                   propertyId={p.propertyId}
                   tenantLeaseId={p.id}
+                  tenantName={p.tenantName}
+                  propertyName={p.propertyName}
+                  unitLabel={p.unitLabel}
                   monthlyRentAmount={p.monthlyRentAmount}
                   currentDownpaymentBalance={p.currentDownpaymentBalance}
                   serviceChargeType={p.serviceChargeType}
                   serviceChargeValue={p.serviceChargeValue}
                   overdueMonths={p.overdueMonths}
-                  monthSettled={isRentSettled(p.rentStatus, p.overdueAmount)}
-                  returnTo="/rent"
+                  monthSettled={settled}
+                  returnTo={`/rent?month=${selectedMonth}`}
                   variant="row"
+                  triggerLabel={settled ? t("advanceRentPayment") : t("collectRent")}
                   rowContent={
                     <>
                       <InitialAvatar name={p.tenantName} />
@@ -168,6 +180,9 @@ export function MobileRentList({
                           {formatTaka(p.monthlyRentAmount + p.serviceChargeAmount)}
                         </p>
                         <StatusPill status={rentPillStatus(p.rentStatus, p.rentPastDue)} labels={rentStatusLabels} />
+                        <p className="mt-0.5 text-[10px] text-muted-foreground">
+                          {settled ? t("advanceRentPayment") : t("collectRent")}
+                        </p>
                         {p.pastDueMonthsCount > 1 ? (
                           <p className="text-xs font-medium text-destructive">
                             {t("monthsOverdueCount", { count: p.pastDueMonthsCount })}
@@ -187,7 +202,8 @@ export function MobileRentList({
                   <span className="sr-only">{t("invoiceLabel")}</span>
                 </Link>
               </li>
-            ))}
+              );
+            })}
           </ul>
         </Card>
       )}

@@ -301,6 +301,9 @@ export function TenantsTable({
                           <RecordTenantRentPaymentDialog
                             propertyId={tn.propertyId}
                             tenantLeaseId={tn.id}
+                            tenantName={tn.tenantName}
+                            propertyName={tn.propertyName}
+                            unitLabel={tn.unitLabel}
                             monthlyRentAmount={tn.monthlyRentAmount}
                             currentDownpaymentBalance={tn.currentDownpaymentBalance}
                             serviceChargeType={tn.serviceChargeType}
@@ -309,6 +312,11 @@ export function TenantsTable({
                             monthSettled={isRentSettled(tn.rentStatus, tn.overdueAmount)}
                             returnTo={showPropertyColumn ? "/tenants" : undefined}
                             iconOnly
+                            triggerLabel={
+                              isRentSettled(tn.rentStatus, tn.overdueAmount)
+                                ? t("advanceRentPayment")
+                                : t("collectRent")
+                            }
                           />
                           <VacateTenantDialog
                             leaseId={tn.id}

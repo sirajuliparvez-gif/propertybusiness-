@@ -5,6 +5,7 @@ import { MobileTopBar } from "@/components/mobile/mobile-top-bar";
 import { MobileTabBar } from "@/components/mobile/mobile-tab-bar";
 import { getActionRequiredData, toNotificationList } from "@/lib/dashboard-data";
 import { requireCurrentUser } from "@/lib/auth/session";
+import { RentActionFeedback } from "@/components/properties/rent-action-feedback";
 
 export default async function DashboardLayout({
   children,
@@ -17,6 +18,7 @@ export default async function DashboardLayout({
 
   return (
     <SidebarProvider>
+      <RentActionFeedback />
       <div className="print:hidden">
         <AppSidebar />
       </div>

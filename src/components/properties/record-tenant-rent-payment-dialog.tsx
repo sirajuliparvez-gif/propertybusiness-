@@ -2,7 +2,7 @@
 
 import { dhakaTodayISO } from "@/lib/dhaka-time";
 import { useState, useTransition } from "react";
-import { useTranslations } from "next-intl";
+import { useLocale, useTranslations } from "next-intl";
 import { Loader2, Wallet } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -24,7 +24,7 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 import { FormField } from "@/components/properties/form-field";
-import { formatTaka, formatDate } from "@/lib/format";
+import { formatTaka, formatDate, monthLabel } from "@/lib/format";
 import {
   recordTenantRentPayment,
   recordAdvanceRentPayment,
@@ -47,6 +47,9 @@ export type OverdueMonth = {
 export function RecordTenantRentPaymentDialog({
   propertyId,
   tenantLeaseId,
+  tenantName,
+  propertyName,
+  unitLabel,
   monthlyRentAmount,
   currentDownpaymentBalance,
   serviceChargeType = null,
@@ -62,6 +65,9 @@ export function RecordTenantRentPaymentDialog({
 }: {
   propertyId: string;
   tenantLeaseId: string;
+  tenantName?: string;
+  propertyName?: string;
+  unitLabel?: string;
   monthlyRentAmount: number;
   currentDownpaymentBalance: number;
   serviceChargeType?: "FLAT" | "PERCENTAGE" | null;
@@ -90,6 +96,7 @@ export function RecordTenantRentPaymentDialog({
   triggerLabel?: string;
 }) {
   const t = useTranslations("Properties");
+  const locale = useLocale();
   const [isPending, startTransition] = useTransition();
   const todayValue = dhakaTodayISO();
   const [mode, setMode] = useState<Mode>(initialBillingMonth ? "cash" : monthSettled ? "advance" : "cash");
@@ -105,6 +112,20 @@ export function RecordTenantRentPaymentDialog({
   const totalOverdueAmount = overdueMonths.reduce((sum, m) => sum + m.gap, 0);
   const [overdueAmount, setOverdueAmount] = useState(String(totalOverdueAmount || ""));
   const advanceTotal = dueAmount * (Number(monthsCount) || 0);
+  const actionMonth = mode === "advance" ? startMonth : billingMonth;
+  const actionAmount =
+    mode === "advance" ? advanceTotal : mode === "overdue" ? Number(overdueAmount) : Number(amount);
+  const dialogTitle =
+    mode === "advance" ? t("advanceRentPayment") : mode === "overdue" ? t("settleOverdue") : t("collectRent");
+  const submitLabel =
+    mode === "advance"
+      ? t("recordAdvanceRentAction", { count: Number(monthsCount) || 0, amount: formatTaka(actionAmount || 0) })
+      : mode === "overdue"
+        ? t("recordOverdueRentAction", { amount: formatTaka(actionAmount || 0) })
+        : t("recordRentAction", {
+            month: monthLabel(actionMonth, locale),
+            amount: formatTaka(actionAmount || 0),
+          });
 
   function handleModeChange(next: Mode) {
     setMode(next);
@@ -122,6 +143,7 @@ export function RecordTenantRentPaymentDialog({
           variant === "row" ? (
             <button
               type="button"
+              aria-label={triggerLabel ?? t("collectRent")}
               className="flex w-full items-center gap-3 px-4 py-3 text-left transition-colors active:bg-muted/60"
             />
           ) : (
@@ -149,8 +171,21 @@ export function RecordTenantRentPaymentDialog({
       </DialogTrigger>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>{t("collectRent")}</DialogTitle>
+          <DialogTitle>{dialogTitle}</DialogTitle>
         </DialogHeader>
+        {tenantName ? (
+          <div className="rounded-lg bg-muted/60 px-3 py-2.5 text-sm">
+            <p className="font-semibold">{tenantName}</p>
+            <p className="text-xs text-muted-foreground">
+              {[propertyName, unitLabel ? t("unitWithValue", { unit: unitLabel }) : null]
+                .filter(Boolean)
+                .join(" · ")}
+            </p>
+            <p className="mt-1 text-xs font-medium text-foreground">
+              {mode === "overdue" ? t("settleOverdue") : monthLabel(actionMonth, locale)} · {formatTaka(actionAmount || 0)}
+            </p>
+          </div>
+        ) : null}
         <form
           action={(formData: FormData) =>
             startTransition(() =>
@@ -183,9 +218,11 @@ export function RecordTenantRentPaymentDialog({
                 <TabsTrigger value="advance" className="flex-1 text-xs">
                   {t("advanceRentPayment")}
                 </TabsTrigger>
-                <TabsTrigger value="downpaymentAdjustment" className="flex-1 text-xs">
-                  {t("adjustFromDownpayment")}
-                </TabsTrigger>
+                {currentDownpaymentBalance > 0 ? (
+                  <TabsTrigger value="downpaymentAdjustment" className="flex-1 text-xs">
+                    {t("adjustFromDownpayment")}
+                  </TabsTrigger>
+                ) : null}
               </TabsList>
             </Tabs>
           </FormField>
@@ -219,7 +256,7 @@ export function RecordTenantRentPaymentDialog({
               <ul className="flex max-h-32 flex-col gap-1 overflow-y-auto rounded-lg border p-2">
                 {overdueMonths.map((m) => (
                   <li key={m.month} className="flex items-center justify-between text-xs">
-                    <span className="font-mono text-muted-foreground">{formatDate(new Date(`${m.month}-01`))}</span>
+                    <span className="font-mono text-muted-foreground">{formatDate(new Date(`${m.month}-01`), locale)}</span>
                     <span className="font-mono font-medium tabular-nums text-destructive">
                       {formatTaka(m.gap)}
                     </span>
@@ -316,7 +353,7 @@ export function RecordTenantRentPaymentDialog({
           )}
 
           <FormField label={t("paymentDate")} htmlFor="rentPaymentDate" required>
-            <Input id="rentPaymentDate" name="date" type="date" defaultValue={todayValue} required />
+            <Input id="rentPaymentDate" name="date" type="date" max={todayValue} defaultValue={todayValue} required />
           </FormField>
 
           {mode !== "downpaymentAdjustment" ? (
@@ -360,7 +397,7 @@ export function RecordTenantRentPaymentDialog({
             </DialogClose>
             <Button type="submit" disabled={isPending}>
               {isPending ? <Loader2 className="size-4 animate-spin" /> : null}
-              {t("save")}
+              {submitLabel}
             </Button>
           </DialogFooter>
         </form>

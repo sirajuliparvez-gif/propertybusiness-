@@ -43,7 +43,7 @@ export default async function RentCollectionPage({
           tone="success"
         />
         <StatTile
-          label={t("remaining")}
+          label={t("collectionPendingAmount")}
           value={formatTaka(totalRemaining)}
           icon={AlertTriangle}
           tone={totalRemaining > 0 ? "destructive" : "default"}
@@ -56,7 +56,7 @@ export default async function RentCollectionPage({
         />
       </div>
 
-      <RentCollectionTable payments={payments} />
+      <RentCollectionTable payments={payments} selectedMonth={rentCollection.selectedMonth} />
     </div>
     </>
   );

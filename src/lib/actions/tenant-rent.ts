@@ -10,6 +10,7 @@ import { buildRentLedger, overdueEntries, totalOverdue, RENT_DUE_DAY } from "@/l
 import { applyRentInstallment, isRentPaymentSettled } from "@/lib/payment-progress";
 import { isPaymentMonth, paymentMonthDueDate, resolvePaymentMonth } from "@/lib/payment-month";
 import { localizedMutationPaths } from "@/lib/localized-revalidation";
+import { withRentActionFeedback } from "@/lib/rent-action-feedback";
 
 function str(formData: FormData, key: string) {
   const v = formData.get(key);
@@ -118,7 +119,7 @@ export async function updateTenantRentPayment(formData: FormData): Promise<RentP
   if (problem) return { ok: false, error: problem };
 
   revalidateLocalizedPath(locale, returnTo);
-  redirect({ href: returnTo, locale });
+  redirect({ href: withRentActionFeedback(returnTo, "updated", { month: billingMonth, amount }), locale });
   return { ok: true };
 }
 
@@ -132,10 +133,11 @@ export async function deleteTenantRentPayment(formData: FormData): Promise<RentP
   const returnTo = str(formData, "returnTo") ?? (tenantLeaseId ? `/tenants/${tenantLeaseId}` : "/rent");
   if (!rentPaymentId || !tenantLeaseId) return { ok: false, error: "missingFields" };
 
-  const problem = await prisma.$transaction(async (tx) => {
+  const result = await prisma.$transaction(async (tx) => {
     const payment = await tx.rentPayment.findFirst({
       where: { id: rentPaymentId, tenantLeaseId },
       select: {
+        month: true,
         transactions: { select: { id: true } },
         downpaymentAdjustments: { select: { id: true }, take: 1 },
       },
@@ -147,12 +149,12 @@ export async function deleteTenantRentPayment(formData: FormData): Promise<RentP
 
     await tx.transaction.delete({ where: { id: payment.transactions[0].id } });
     await tx.rentPayment.delete({ where: { id: rentPaymentId } });
-    return null;
+    return { month: payment.month };
   });
-  if (problem) return { ok: false, error: problem };
+  if (typeof result === "string") return { ok: false, error: result };
 
   revalidateLocalizedPath(locale, returnTo);
-  redirect({ href: returnTo, locale });
+  redirect({ href: withRentActionFeedback(returnTo, "deleted", { month: result.month }), locale });
   return { ok: true };
 }
 
@@ -207,7 +209,7 @@ export async function recordTenantRentPayment(formData: FormData) {
   const dueAmount = Number(lease.monthlyRentAmount) + serviceChargeAmount;
   const [monthYear, monthNumber] = month.split("-").map(Number);
 
-  await prisma.$transaction(async (tx) => {
+  const recorded = await prisma.$transaction(async (tx) => {
     // A second payment toward the same month ADDS to what's already paid (and
     // a fully settled month refuses more) — overwriting paidAmount while still
     // writing a fresh Transaction double-counted income and left the rent row
@@ -220,7 +222,7 @@ export async function recordTenantRentPayment(formData: FormData) {
     // A stale/double-submitted form must not crash after the first request
     // already committed the payment. Treat it as an idempotent no-op; no
     // second Transaction or downpayment adjustment is written.
-    if (existing && isRentPaymentSettled(Number(existing.dueAmount), alreadyPaid)) return;
+    if (existing && isRentPaymentSettled(Number(existing.dueAmount), alreadyPaid)) return false;
     const { totalPaid, status } = applyRentInstallment({
       dueAmount,
       alreadyPaid,
@@ -271,13 +273,17 @@ export async function recordTenantRentPayment(formData: FormData) {
         },
       });
     }
+    return true;
   });
 
   // Reachable from both the per-property page and the cross-property global
   // Tenants page — each redirects back to wherever it was submitted from.
   const returnTo = str(formData, "returnTo") ?? `/properties/${propertyId}`;
   revalidateLocalizedPath(locale, returnTo);
-  redirect({ href: returnTo, locale });
+  redirect({
+    href: withRentActionFeedback(returnTo, recorded ? "recorded" : "alreadyPaid", { month, amount }),
+    locale,
+  });
 }
 
 // Settles a tenant's back rent in one go — a lump sum applied oldest-month
@@ -298,6 +304,7 @@ export async function recordOverdueRentPayment(formData: FormData) {
   const amountStr = str(formData, "amount");
   if (!dateStr || !amountStr) throw new Error("Missing required payment fields");
   let remaining = Number(amountStr);
+  const paymentAmount = remaining;
   if (!(remaining > 0)) throw new Error("Amount must be greater than zero");
   const paidDate = new Date(dateStr);
 
@@ -391,7 +398,7 @@ export async function recordOverdueRentPayment(formData: FormData) {
 
   const returnTo = str(formData, "returnTo") ?? `/properties/${propertyId}`;
   revalidateLocalizedPath(locale, returnTo);
-  redirect({ href: returnTo, locale });
+  redirect({ href: withRentActionFeedback(returnTo, "overdue", { amount: paymentAmount }), locale });
 }
 
 function addMonthsToMonthStr(monthStr: string, offset: number) {
@@ -452,7 +459,8 @@ export async function recordAdvanceRentPayment(formData: FormData) {
   const dueAmount = rentAmount + serviceChargeAmount;
   const months = Array.from({ length: monthsCount }, (_, i) => addMonthsToMonthStr(startMonth, i));
 
-  await prisma.$transaction(async (tx) => {
+  const recordedAmount = await prisma.$transaction(async (tx) => {
+    let totalRecorded = 0;
     for (const month of months) {
       const [year, monthIndex] = month.split("-").map(Number);
       const monthDueDate = new Date(year, monthIndex - 1, RENT_DUE_DAY);
@@ -493,10 +501,15 @@ export async function recordAdvanceRentPayment(formData: FormData) {
           notes: str(formData, "notes"),
         },
       });
+      totalRecorded += payNow;
     }
+    return totalRecorded;
   });
 
   const returnTo = str(formData, "returnTo") ?? `/properties/${propertyId}`;
   revalidateLocalizedPath(locale, returnTo);
-  redirect({ href: returnTo, locale });
+  redirect({
+    href: withRentActionFeedback(returnTo, "advance", { amount: recordedAmount, count: monthsCount }),
+    locale,
+  });
 }

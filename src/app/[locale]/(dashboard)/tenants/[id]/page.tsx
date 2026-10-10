@@ -1,5 +1,5 @@
 import { notFound } from "next/navigation";
-import { getTranslations } from "next-intl/server";
+import { getLocale, getTranslations } from "next-intl/server";
 import {
   ArrowLeft,
   Phone,
@@ -10,6 +10,7 @@ import {
   Clock,
   FileText,
   Printer,
+  History,
 } from "lucide-react";
 import { Link } from "@/i18n/navigation";
 import { Button } from "@/components/ui/button";
@@ -28,7 +29,7 @@ import { AddUtilityBillDialog } from "@/components/properties/add-utility-bill-d
 import { UtilityBillsTable } from "@/components/properties/utility-bills-table";
 import { MobileUtilityBillsList } from "@/components/mobile/mobile-utility-bills-list";
 import { getTenantProfile } from "@/lib/tenants-data";
-import { formatTaka, formatDate } from "@/lib/format";
+import { formatTaka, formatDate, monthLabel } from "@/lib/format";
 import { paymentMethodLabel } from "@/lib/payment-method";
 import { dhakaTodayISO } from "@/lib/dhaka-time";
 import { previousPaymentMonth } from "@/lib/payment-month";
@@ -40,11 +41,27 @@ export default async function TenantProfilePage({
 }) {
   const { id } = await params;
   const t = await getTranslations("Properties");
+  const locale = await getLocale();
   const tenant = await getTenantProfile(id);
   if (!tenant) notFound();
 
   const isFormer = tenant.leaseStatus !== "ACTIVE";
+  const currentMonth = dhakaTodayISO().slice(0, 7);
   const previousMonth = previousPaymentMonth(dhakaTodayISO().slice(0, 7));
+  const previousPayment = tenant.payments.find((payment) => payment.month === previousMonth);
+  const currentPayment = tenant.payments.find((payment) => payment.month === currentMonth);
+  const previousMonthSettled = previousPayment
+    ? isRentSettled(previousPayment.status, Math.max(0, previousPayment.dueAmount - previousPayment.paidAmount))
+    : false;
+  const currentMonthSettled = currentPayment
+    ? isRentSettled(currentPayment.status, Math.max(0, currentPayment.dueAmount - currentPayment.paidAmount))
+    : false;
+  const hasDownpaymentHistory =
+    tenant.initialDownpaymentAmount > 0 ||
+    tenant.currentDownpaymentBalance > 0 ||
+    tenant.downpaymentAdjustments.length > 0;
+  const onTimeMonths =
+    tenant.onTimeRate != null ? Math.round((tenant.onTimeRate / 100) * tenant.trackedMonths) : 0;
   const rentStatusLabels = {
     PAID: t("paid"),
     PARTIAL: t("pending"),
@@ -57,7 +74,13 @@ export default async function TenantProfilePage({
   return (
     <div className="flex min-w-0 flex-1 flex-col gap-4">
       <div className="flex items-center gap-2">
-        <Button variant="ghost" size="icon-sm" render={<Link href="/tenants" />} nativeButton={false}>
+        <Button
+          variant="ghost"
+          size="icon-sm"
+          aria-label={t("backToTenants")}
+          render={<Link href="/tenants" />}
+          nativeButton={false}
+        >
           <ArrowLeft className="size-4" />
         </Button>
         <span className="text-sm text-muted-foreground">
@@ -122,42 +145,49 @@ export default async function TenantProfilePage({
           />
           {!isFormer ? (
             <>
+              {previousMonthSettled ? (
+                <Button variant="outline" size="sm" render={<a href="#payment-history" />} nativeButton={false}>
+                  <History className="size-3.5" />
+                  {t("viewPreviousMonthPayment")}
+                </Button>
+              ) : (
+                <RecordTenantRentPaymentDialog
+                  propertyId={tenant.propertyId}
+                  tenantLeaseId={tenant.id}
+                  tenantName={tenant.tenantName}
+                  propertyName={tenant.propertyName}
+                  unitLabel={tenant.unitLabel}
+                  monthlyRentAmount={tenant.monthlyRentAmount}
+                  currentDownpaymentBalance={tenant.currentDownpaymentBalance}
+                  serviceChargeType={tenant.serviceChargeType}
+                  serviceChargeValue={tenant.serviceChargeValue}
+                  overdueMonths={tenant.overdueMonths}
+                  returnTo={`/tenants/${tenant.id}`}
+                  initialBillingMonth={previousMonth}
+                  triggerLabel={t("addPreviousMonthRent")}
+                />
+              )}
               <RecordTenantRentPaymentDialog
                 propertyId={tenant.propertyId}
                 tenantLeaseId={tenant.id}
-                monthlyRentAmount={tenant.monthlyRentAmount}
-                currentDownpaymentBalance={tenant.currentDownpaymentBalance}
-                serviceChargeType={tenant.serviceChargeType}
-                serviceChargeValue={tenant.serviceChargeValue}
-                overdueMonths={tenant.overdueMonths}
-                returnTo={`/tenants/${tenant.id}`}
-                initialBillingMonth={previousMonth}
-                triggerLabel={t("addPreviousMonthRent")}
-              />
-              <RecordTenantRentPaymentDialog
-                propertyId={tenant.propertyId}
-                tenantLeaseId={tenant.id}
-                monthlyRentAmount={tenant.monthlyRentAmount}
-                currentDownpaymentBalance={tenant.currentDownpaymentBalance}
-                serviceChargeType={tenant.serviceChargeType}
-                serviceChargeValue={tenant.serviceChargeValue}
-                overdueMonths={tenant.overdueMonths}
-                monthSettled={isRentSettled(tenant.rentStatus, tenant.remaining)}
-                returnTo={`/tenants/${tenant.id}`}
-              />
-              <VacateTenantDialog
-                leaseId={tenant.id}
-                propertyId={tenant.propertyId}
                 tenantName={tenant.tenantName}
+                propertyName={tenant.propertyName}
+                unitLabel={tenant.unitLabel}
+                monthlyRentAmount={tenant.monthlyRentAmount}
                 currentDownpaymentBalance={tenant.currentDownpaymentBalance}
-                returnTo="/tenants"
+                serviceChargeType={tenant.serviceChargeType}
+                serviceChargeValue={tenant.serviceChargeValue}
+                overdueMonths={tenant.overdueMonths}
+                monthSettled={currentMonthSettled}
+                returnTo={`/tenants/${tenant.id}`}
+                triggerLabel={currentMonthSettled ? t("advanceRentPayment") : t("collectRent")}
               />
             </>
           ) : null}
         </div>
       </div>
 
-      <div className="grid grid-cols-2 gap-3 sm:gap-4 md:grid-cols-4">
+      <div className={`grid grid-cols-2 gap-3 sm:gap-4 ${hasDownpaymentHistory ? "md:grid-cols-4" : "md:grid-cols-3"}`}>
         <StatTile
           label={t("leaseMonthlyRent")}
           value={formatTaka(tenant.monthlyRentAmount + tenant.serviceChargeAmount)}
@@ -172,18 +202,24 @@ export default async function TenantProfilePage({
           tone="success"
           hint={`${tenant.payments.length} ${t("entries")}`}
         />
-        <StatTile
-          label={t("downpaymentBalance")}
-          value={formatTaka(tenant.currentDownpaymentBalance)}
-          icon={TrendingUp}
-          tone="violet"
-        />
+        {hasDownpaymentHistory ? (
+          <StatTile
+            label={t("downpaymentBalance")}
+            value={formatTaka(tenant.currentDownpaymentBalance)}
+            icon={TrendingUp}
+            tone="violet"
+          />
+        ) : null}
         <StatTile
           label={t("onTimeRate")}
           value={tenant.onTimeRate != null ? `${tenant.onTimeRate}%` : "—"}
           icon={Clock}
           tone={tenant.onTimeRate == null || tenant.onTimeRate >= 80 ? "teal" : "warning"}
-          hint={t("monthsTrackedHint", { count: tenant.trackedMonths })}
+          hint={
+            tenant.onTimeRate != null
+              ? t("onTimeMonthsSummary", { onTime: onTimeMonths, total: tenant.trackedMonths })
+              : t("monthsTrackedHint", { count: tenant.trackedMonths })
+          }
         />
       </div>
 
@@ -215,7 +251,7 @@ export default async function TenantProfilePage({
             </div>
             <div className="flex items-center justify-between">
               <span className="text-muted-foreground">{t("leaseStarted")}</span>
-              <span className="font-mono font-medium tabular-nums">{formatDate(tenant.startDate)}</span>
+              <span className="font-mono font-medium tabular-nums">{formatDate(tenant.startDate, locale)}</span>
             </div>
             <div className="flex items-center justify-between">
               <span className="text-muted-foreground">{t("duration")}</span>
@@ -226,7 +262,18 @@ export default async function TenantProfilePage({
             {isFormer && tenant.movedOutAt ? (
               <div className="flex items-center justify-between">
                 <span className="text-muted-foreground">{t("vacatedOn")}</span>
-                <span className="font-mono font-medium tabular-nums">{formatDate(tenant.movedOutAt)}</span>
+                <span className="font-mono font-medium tabular-nums">{formatDate(tenant.movedOutAt, locale)}</span>
+              </div>
+            ) : null}
+            {!isFormer ? (
+              <div className="mt-3 border-t pt-3">
+                <VacateTenantDialog
+                  leaseId={tenant.id}
+                  propertyId={tenant.propertyId}
+                  tenantName={tenant.tenantName}
+                  currentDownpaymentBalance={tenant.currentDownpaymentBalance}
+                  returnTo="/tenants"
+                />
               </div>
             ) : null}
           </CardContent>
@@ -237,7 +284,14 @@ export default async function TenantProfilePage({
             <CardTitle className="text-base">{t("paymentSummary")}</CardTitle>
           </CardHeader>
           <CardContent className="flex flex-col gap-4">
-            <div className="h-2 w-full overflow-hidden rounded-full bg-muted">
+            <div
+              className="h-2 w-full overflow-hidden rounded-full bg-muted"
+              role="progressbar"
+              aria-label={t("paymentProgressLabel")}
+              aria-valuemin={0}
+              aria-valuemax={100}
+              aria-valuenow={progressPct}
+            >
               <div className="h-full rounded-full bg-success" style={{ width: `${progressPct}%` }} />
             </div>
             <div className="grid grid-cols-3 gap-3 text-sm">
@@ -272,7 +326,7 @@ export default async function TenantProfilePage({
         </Card>
       </div>
 
-      <Card>
+      {hasDownpaymentHistory ? <Card>
         <CardHeader>
           <CardTitle className="text-base">{t("downpaymentDetailsSection")}</CardTitle>
         </CardHeader>
@@ -308,9 +362,9 @@ export default async function TenantProfilePage({
                 {tenant.downpaymentAdjustments.map((a) => (
                   <div key={a.id} className="flex items-center justify-between gap-2 rounded-lg bg-muted/40 px-3 py-2 text-sm">
                     <div className="min-w-0">
-                      <p className="font-mono text-xs">{a.month}</p>
+                      <p className="text-xs">{monthLabel(a.month, locale)}</p>
                       <p className="truncate text-xs text-muted-foreground">
-                        {formatDate(a.createdAt)}
+                        {formatDate(a.createdAt, locale)}
                         {a.reason ? ` · ${a.reason}` : ""}
                       </p>
                     </div>
@@ -333,9 +387,9 @@ export default async function TenantProfilePage({
                 <TableBody>
                   {tenant.downpaymentAdjustments.map((a) => (
                     <TableRow key={a.id}>
-                      <TableCell className="font-mono">{a.month}</TableCell>
+                      <TableCell>{monthLabel(a.month, locale)}</TableCell>
                       <TableCell className="font-mono text-muted-foreground">
-                        {formatDate(a.createdAt)}
+                        {formatDate(a.createdAt, locale)}
                       </TableCell>
                       <TableCell className="text-right font-mono tabular-nums text-warning">
                         {formatTaka(a.amountAdjusted)}
@@ -350,7 +404,7 @@ export default async function TenantProfilePage({
             )}
           </div>
         </CardContent>
-      </Card>
+      </Card> : null}
 
       {tenant.tenantDocuments.length > 0 || tenant.leaseDocuments.length > 0 ? (
         <Card>
@@ -392,7 +446,7 @@ export default async function TenantProfilePage({
         </Card>
       ) : null}
 
-      <Card>
+      <Card id="payment-history" className="scroll-mt-20">
         <CardHeader className="flex-row items-center justify-between space-y-0">
           <CardTitle className="text-base">{t("utilityBillsSection")}</CardTitle>
           {!isFormer ? (
@@ -431,14 +485,14 @@ export default async function TenantProfilePage({
                     className={`flex items-center gap-3 px-4 py-3 ${p.pastDue ? "bg-destructive/5" : ""}`}
                   >
                     <div className="min-w-0 flex-1">
-                      <p className="font-mono text-sm font-medium">{p.month}</p>
+                      <p className="text-sm font-medium">{monthLabel(p.month, locale)}</p>
                       <p className="truncate text-xs text-muted-foreground">
                         {p.isVirtual
                           ? t("noRecordYet")
                           : p.status === "ADJUSTED_FROM_DOWNPAYMENT"
                             ? t("adjustFromDownpayment")
                             : paymentMethodLabel(t, p.method)}
-                        {p.paidAt ? ` · ${formatDate(p.paidAt)}` : ""}
+                        {p.paidAt ? ` · ${formatDate(p.paidAt, locale)}` : ""}
                       </p>
                     </div>
                     <div className="shrink-0 text-right">
@@ -490,7 +544,7 @@ export default async function TenantProfilePage({
               <TableBody>
                 {tenant.payments.map((p) => (
                   <TableRow key={p.id} className={p.isVirtual ? "bg-destructive/5" : undefined}>
-                    <TableCell className="font-mono">{p.month}</TableCell>
+                    <TableCell>{monthLabel(p.month, locale)}</TableCell>
                     <TableCell className="text-right font-mono tabular-nums">
                       {formatTaka(p.paidAmount)}
                     </TableCell>
@@ -504,7 +558,7 @@ export default async function TenantProfilePage({
                       )}
                     </TableCell>
                     <TableCell className="font-mono text-muted-foreground">
-                      {p.paidAt ? formatDate(p.paidAt) : "—"}
+                      {p.paidAt ? formatDate(p.paidAt, locale) : "—"}
                     </TableCell>
                     <TableCell>
                       <StatusPill status={rentPillStatus(p.status, p.pastDue)} labels={rentStatusLabels} />

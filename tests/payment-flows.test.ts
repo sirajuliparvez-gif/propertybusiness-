@@ -9,6 +9,7 @@ import {
 import { paymentMonthDueDate, previousPaymentMonth, resolvePaymentMonth } from "@/lib/payment-month";
 import { localizedMutationPaths } from "@/lib/localized-revalidation";
 import { reportingMonthKey } from "@/lib/reporting-period";
+import { withRentActionFeedback } from "@/lib/rent-action-feedback";
 
 test("rent payment can settle September when money arrives in October", () => {
   assert.equal(resolvePaymentMonth("2026-09", "2026-10-03"), "2026-09");
@@ -60,6 +61,13 @@ test("dashboard and reports attribute late rent payments to their billing month"
       rentPaymentMonth: null,
     }),
     "2026-10"
+  );
+});
+
+test("rent feedback keeps the selected collection month in the return URL", () => {
+  assert.equal(
+    withRentActionFeedback("/rent?month=2026-09", "recorded", { month: "2026-09", amount: 15_000 }),
+    "/rent?month=2026-09&rentResult=recorded&rentMonth=2026-09&rentAmount=15000"
   );
 });
 

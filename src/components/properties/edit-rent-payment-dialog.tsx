@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { useTranslations } from "next-intl";
+import { useLocale, useTranslations } from "next-intl";
 import { FilePenLine, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -23,6 +23,7 @@ import {
 } from "@/components/ui/dialog";
 import { FormField } from "@/components/properties/form-field";
 import { dhakaISO, dhakaTodayISO } from "@/lib/dhaka-time";
+import { monthLabel } from "@/lib/format";
 import {
   updateTenantRentPayment,
   type RentPaymentEditErrorCode,
@@ -47,6 +48,7 @@ export function EditRentPaymentDialog({
   returnTo: string;
 }) {
   const t = useTranslations("Properties");
+  const locale = useLocale();
   const [open, setOpen] = useState(false);
   const [isPending, startTransition] = useTransition();
   const [method, setMethod] = useState<PaymentMethod | "NONE">(payment.method ?? "NONE");
@@ -104,7 +106,7 @@ export function EditRentPaymentDialog({
           <input type="hidden" name="method" value={method} />
 
           <p className="text-sm text-muted-foreground sm:col-span-2">
-            {t("editRentPaymentHint", { month: payment.month })}
+            {t("editRentPaymentHint", { month: monthLabel(payment.month, locale) })}
           </p>
           <FormField label={t("billingMonth")} htmlFor={`editRentMonth-${payment.id}`} required>
             <Input

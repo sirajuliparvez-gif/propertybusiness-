@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { useTranslations } from "next-intl";
+import { useLocale, useTranslations } from "next-intl";
 import { Loader2, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -18,6 +18,7 @@ import {
   deleteTenantRentPayment,
   type RentPaymentDeleteErrorCode,
 } from "@/lib/actions/tenant-rent";
+import { monthLabel } from "@/lib/format";
 
 export function DeleteRentPaymentButton({
   paymentId,
@@ -31,6 +32,7 @@ export function DeleteRentPaymentButton({
   returnTo: string;
 }) {
   const t = useTranslations("Properties");
+  const locale = useLocale();
   const [open, setOpen] = useState(false);
   const [isPending, startTransition] = useTransition();
   const [error, setError] = useState<RentPaymentDeleteErrorCode | null>(null);
@@ -65,7 +67,7 @@ export function DeleteRentPaymentButton({
       <DialogContent>
         <DialogHeader>
           <DialogTitle>{t("confirmDeleteRentPaymentTitle")}</DialogTitle>
-          <DialogDescription>{t("confirmDeleteRentPaymentDesc", { month })}</DialogDescription>
+          <DialogDescription>{t("confirmDeleteRentPaymentDesc", { month: monthLabel(month, locale) })}</DialogDescription>
         </DialogHeader>
         <form
           action={(formData: FormData) =>
