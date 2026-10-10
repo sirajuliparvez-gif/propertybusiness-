@@ -17,6 +17,29 @@ export function paymentMonthDueDate(month: string, dueDay: number) {
   return new Date(year, monthNumber - 1, dueDay);
 }
 
+export function paymentMonthRange(startMonth: string, endMonth: string, maxMonths = 36) {
+  if (!isPaymentMonth(startMonth) || !isPaymentMonth(endMonth)) {
+    throw new Error("Invalid billing month range");
+  }
+  if (!Number.isInteger(maxMonths) || maxMonths < 1) {
+    throw new Error("Invalid maximum month count");
+  }
+
+  const [startYear, startNumber] = startMonth.split("-").map(Number);
+  const [endYear, endNumber] = endMonth.split("-").map(Number);
+  const startIndex = startYear * 12 + startNumber - 1;
+  const endIndex = endYear * 12 + endNumber - 1;
+  const count = endIndex - startIndex + 1;
+  if (count < 1 || count > maxMonths) throw new Error("Invalid billing month range");
+
+  return Array.from({ length: count }, (_, offset) => {
+    const index = startIndex + offset;
+    const year = Math.floor(index / 12);
+    const month = (index % 12) + 1;
+    return `${year}-${String(month).padStart(2, "0")}`;
+  });
+}
+
 // The month a payment settles is independent from the day the money arrived.
 // Keep the payment-date fallback so older callers/forms remain compatible.
 export function resolvePaymentMonth(billingMonth: string | null | undefined, paymentDate: string) {

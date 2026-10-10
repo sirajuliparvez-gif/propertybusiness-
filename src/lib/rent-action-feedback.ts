@@ -3,6 +3,8 @@ export type RentActionResult =
   | "alreadyPaid"
   | "advance"
   | "overdue"
+  | "arrearsAdded"
+  | "arrearsAlreadyExists"
   | "updated"
   | "deleted";
 

@@ -6,7 +6,7 @@ import {
   applyUtilityBillInstallment,
   isRentPaymentSettled,
 } from "@/lib/payment-progress";
-import { paymentMonthDueDate, previousPaymentMonth, resolvePaymentMonth } from "@/lib/payment-month";
+import { paymentMonthDueDate, paymentMonthRange, previousPaymentMonth, resolvePaymentMonth } from "@/lib/payment-month";
 import { localizedMutationPaths } from "@/lib/localized-revalidation";
 import { reportingMonthKey } from "@/lib/reporting-period";
 import { withRentActionFeedback } from "@/lib/rent-action-feedback";
@@ -26,6 +26,15 @@ test("invalid billing months are rejected", () => {
 test("the previous-month shortcut handles year boundaries", () => {
   assert.equal(previousPaymentMonth("2026-10"), "2026-09");
   assert.equal(previousPaymentMonth("2026-01"), "2025-12");
+});
+
+test("historical arrears ranges include every month across year boundaries", () => {
+  assert.deepEqual(paymentMonthRange("2025-11", "2026-02"), ["2025-11", "2025-12", "2026-01", "2026-02"]);
+});
+
+test("historical arrears ranges reject reversed and excessive ranges", () => {
+  assert.throws(() => paymentMonthRange("2026-02", "2026-01"), /Invalid billing month range/);
+  assert.throws(() => paymentMonthRange("2023-01", "2026-02"), /Invalid billing month range/);
 });
 
 test("moving a payment to another billing month recalculates its due date", () => {

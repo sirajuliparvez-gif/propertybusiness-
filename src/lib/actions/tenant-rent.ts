@@ -1,6 +1,6 @@
 "use server";
 
-import { dhakaNow, dhakaTodayISO } from "@/lib/dhaka-time";
+import { dhakaISO, dhakaNow, dhakaTodayISO } from "@/lib/dhaka-time";
 import { revalidatePath } from "next/cache";
 import { getLocale } from "next-intl/server";
 import { prisma } from "@/lib/prisma";
@@ -8,7 +8,7 @@ import { redirect } from "@/i18n/navigation";
 import { computeServiceChargeAmount } from "@/lib/service-charge";
 import { buildRentLedger, overdueEntries, totalOverdue, RENT_DUE_DAY } from "@/lib/rent-ledger";
 import { applyRentInstallment, isRentPaymentSettled } from "@/lib/payment-progress";
-import { isPaymentMonth, paymentMonthDueDate, resolvePaymentMonth } from "@/lib/payment-month";
+import { isPaymentMonth, paymentMonthDueDate, paymentMonthRange, resolvePaymentMonth } from "@/lib/payment-month";
 import { localizedMutationPaths } from "@/lib/localized-revalidation";
 import { withRentActionFeedback } from "@/lib/rent-action-feedback";
 
@@ -41,6 +41,87 @@ export type RentPaymentDeleteErrorCode = "missingFields" | "notFound" | "notEdit
 export type RentPaymentDeleteResult =
   | { ok: true }
   | { ok: false; error: RentPaymentDeleteErrorCode };
+
+export type RentArrearsCreateErrorCode =
+  | "missingFields"
+  | "invalidRange"
+  | "currentOrFutureMonth"
+  | "beforeLeaseStart"
+  | "notFound";
+
+export type RentArrearsCreateResult =
+  | { ok: true }
+  | { ok: false; error: RentArrearsCreateErrorCode };
+
+// Adds explicit UNPAID rows for historical months that predate the ledger
+// cutover. Existing rows are never changed, so a paid/partial month cannot be
+// accidentally reset. Once created, the normal overdue-payment flow can take
+// one lump sum and apply it oldest-first across the selected months.
+export async function createHistoricalRentArrears(formData: FormData): Promise<RentArrearsCreateResult> {
+  const locale = await getLocale();
+  const tenantLeaseId = str(formData, "tenantLeaseId");
+  const startMonth = str(formData, "startMonth");
+  const endMonth = str(formData, "endMonth");
+  const returnTo = str(formData, "returnTo") ?? (tenantLeaseId ? `/tenants/${tenantLeaseId}` : "/tenants");
+  if (!tenantLeaseId || !startMonth || !endMonth) return { ok: false, error: "missingFields" };
+
+  let months: string[];
+  try {
+    months = paymentMonthRange(startMonth, endMonth, 36);
+  } catch {
+    return { ok: false, error: "invalidRange" };
+  }
+
+  const currentMonth = dhakaTodayISO().slice(0, 7);
+  if (endMonth >= currentMonth) return { ok: false, error: "currentOrFutureMonth" };
+
+  const lease = await prisma.tenantLease.findUnique({ where: { id: tenantLeaseId } });
+  if (!lease) return { ok: false, error: "notFound" };
+  const leaseStartMonth = dhakaISO(lease.startDate).slice(0, 7);
+  if (startMonth < leaseStartMonth) return { ok: false, error: "beforeLeaseStart" };
+
+  const existing = await prisma.rentPayment.findMany({
+    where: { tenantLeaseId, month: { in: months } },
+    select: { month: true },
+  });
+  const existingMonths = new Set(existing.map((payment) => payment.month));
+  const missingMonths = months.filter((month) => !existingMonths.has(month));
+  if (missingMonths.length === 0) {
+    revalidateLocalizedPath(locale, returnTo);
+    redirect({ href: withRentActionFeedback(returnTo, "arrearsAlreadyExists"), locale });
+    return { ok: true };
+  }
+
+  const rentAmount = Number(lease.monthlyRentAmount);
+  const serviceChargeAmount = computeServiceChargeAmount(
+    rentAmount,
+    lease.serviceChargeType,
+    lease.serviceChargeValue != null ? Number(lease.serviceChargeValue) : null
+  );
+  const dueAmount = rentAmount + serviceChargeAmount;
+  await prisma.rentPayment.createMany({
+    data: missingMonths.map((month) => ({
+      tenantLeaseId,
+      month,
+      dueDate: paymentMonthDueDate(month, RENT_DUE_DAY),
+      dueAmount,
+      paidAmount: 0,
+      status: "UNPAID" as const,
+      paidAt: null,
+    })),
+    skipDuplicates: true,
+  });
+
+  revalidateLocalizedPath(locale, returnTo);
+  redirect({
+    href: withRentActionFeedback(returnTo, "arrearsAdded", {
+      count: missingMonths.length,
+      amount: dueAmount * missingMonths.length,
+    }),
+    locale,
+  });
+  return { ok: true };
+}
 
 // Corrects one directly-recorded rent payment while keeping its monthly due
 // row and cash-flow transaction in sync. Installments and downpayment

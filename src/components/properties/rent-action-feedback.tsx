@@ -13,6 +13,8 @@ const RESULTS = new Set<RentActionResult>([
   "alreadyPaid",
   "advance",
   "overdue",
+  "arrearsAdded",
+  "arrearsAlreadyExists",
   "updated",
   "deleted",
 ]);
@@ -42,11 +44,17 @@ export function RentActionFeedback() {
             ? t("rentFeedbackAdvance", { count, amount: amountText })
             : resultValue === "overdue"
               ? t("rentFeedbackOverdue", { amount: amountText })
+              : resultValue === "arrearsAdded"
+                ? t("rentFeedbackArrearsAdded", { count, amount: amountText })
+                : resultValue === "arrearsAlreadyExists"
+                  ? t("rentFeedbackArrearsAlreadyExists")
               : resultValue === "updated"
                 ? t("rentFeedbackUpdated", { month: monthText })
                 : t("rentFeedbackDeleted", { month: monthText });
 
-    if (resultValue === "alreadyPaid") toast.info(message, { id: "rent-action-feedback" });
+    if (resultValue === "alreadyPaid" || resultValue === "arrearsAlreadyExists") {
+      toast.info(message, { id: "rent-action-feedback" });
+    }
     else toast.success(message, { id: "rent-action-feedback" });
 
     const cleaned = new URLSearchParams(searchParams.toString());

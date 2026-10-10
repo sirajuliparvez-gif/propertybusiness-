@@ -25,13 +25,14 @@ import { VacateTenantDialog } from "@/components/properties/vacate-tenant-dialog
 import { EditTenantDialog } from "@/components/properties/edit-tenant-dialog";
 import { EditRentPaymentDialog } from "@/components/properties/edit-rent-payment-dialog";
 import { DeleteRentPaymentButton } from "@/components/properties/delete-rent-payment-button";
+import { AddRentArrearsDialog } from "@/components/properties/add-rent-arrears-dialog";
 import { AddUtilityBillDialog } from "@/components/properties/add-utility-bill-dialog";
 import { UtilityBillsTable } from "@/components/properties/utility-bills-table";
 import { MobileUtilityBillsList } from "@/components/mobile/mobile-utility-bills-list";
 import { getTenantProfile } from "@/lib/tenants-data";
 import { formatTaka, formatDate, monthLabel } from "@/lib/format";
 import { paymentMethodLabel } from "@/lib/payment-method";
-import { dhakaTodayISO } from "@/lib/dhaka-time";
+import { dhakaISO, dhakaTodayISO } from "@/lib/dhaka-time";
 import { previousPaymentMonth } from "@/lib/payment-month";
 
 export default async function TenantProfilePage({
@@ -48,6 +49,7 @@ export default async function TenantProfilePage({
   const isFormer = tenant.leaseStatus !== "ACTIVE";
   const currentMonth = dhakaTodayISO().slice(0, 7);
   const previousMonth = previousPaymentMonth(dhakaTodayISO().slice(0, 7));
+  const leaseStartMonth = dhakaISO(tenant.startDate).slice(0, 7);
   const previousPayment = tenant.payments.find((payment) => payment.month === previousMonth);
   const currentPayment = tenant.payments.find((payment) => payment.month === currentMonth);
   const previousMonthSettled = previousPayment
@@ -150,23 +152,15 @@ export default async function TenantProfilePage({
                   <History className="size-3.5" />
                   {t("viewPreviousMonthPayment")}
                 </Button>
-              ) : (
-                <RecordTenantRentPaymentDialog
-                  propertyId={tenant.propertyId}
+              ) : null}
+              {leaseStartMonth <= previousMonth ? (
+                <AddRentArrearsDialog
                   tenantLeaseId={tenant.id}
-                  tenantName={tenant.tenantName}
-                  propertyName={tenant.propertyName}
-                  unitLabel={tenant.unitLabel}
-                  monthlyRentAmount={tenant.monthlyRentAmount}
-                  currentDownpaymentBalance={tenant.currentDownpaymentBalance}
-                  serviceChargeType={tenant.serviceChargeType}
-                  serviceChargeValue={tenant.serviceChargeValue}
-                  overdueMonths={tenant.overdueMonths}
+                  monthlyDueAmount={tenant.monthlyRentAmount + tenant.serviceChargeAmount}
+                  leaseStartMonth={leaseStartMonth}
                   returnTo={`/tenants/${tenant.id}`}
-                  initialBillingMonth={previousMonth}
-                  triggerLabel={t("addPreviousMonthRent")}
                 />
-              )}
+              ) : null}
               <RecordTenantRentPaymentDialog
                 propertyId={tenant.propertyId}
                 tenantLeaseId={tenant.id}
