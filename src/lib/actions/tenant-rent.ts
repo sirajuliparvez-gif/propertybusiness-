@@ -8,6 +8,7 @@ import { redirect } from "@/i18n/navigation";
 import { computeServiceChargeAmount } from "@/lib/service-charge";
 import { buildRentLedger, overdueEntries, totalOverdue, RENT_DUE_DAY } from "@/lib/rent-ledger";
 import { applyRentInstallment } from "@/lib/payment-progress";
+import { resolvePaymentMonth } from "@/lib/payment-month";
 
 function str(formData: FormData, key: string) {
   const v = formData.get(key);
@@ -94,7 +95,7 @@ export async function updateTenantRentPayment(formData: FormData): Promise<RentP
   return { ok: true };
 }
 
-// Records this month's rent as collected from a tenant — either as a normal
+// Records rent for the explicitly selected billing month — either as a normal
 // cash/mobile-banking payment (creates an INCOMING Transaction), or as an
 // adjustment against the tenant's own downpayment/advance balance (creates a
 // DownpaymentAdjustment ledger row and decrements TenantLease.currentDownpaymentBalance
@@ -112,7 +113,7 @@ export async function recordTenantRentPayment(formData: FormData) {
   const amountStr = str(formData, "amount");
   if (!dateStr || !amountStr) throw new Error("Missing required payment fields");
   const amount = Number(amountStr);
-  const month = dateStr.slice(0, 7);
+  const month = resolvePaymentMonth(str(formData, "billingMonth"), dateStr);
   const paidDate = new Date(dateStr);
   const mode = formData.get("mode") === "downpaymentAdjustment" ? "downpaymentAdjustment" : "cash";
 

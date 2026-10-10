@@ -561,6 +561,8 @@
 
     "recordRentPayment": "Record Rent Payment",
     "paymentDate": "Payment Date",
+    "billingMonth": "Billing Month",
+    "billingMonthHint": "Select the month this rent settles; the date the money was received can be different.",
     "rentPaymentHistory": "Rent Payment History",
     "noRentPayments": "No rent payments recorded yet.",
     "endLease": "End Lease",

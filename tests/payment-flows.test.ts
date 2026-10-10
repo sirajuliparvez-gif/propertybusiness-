@@ -2,6 +2,19 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import { applyRentInstallment, applyUtilityBillInstallment } from "@/lib/payment-progress";
+import { resolvePaymentMonth } from "@/lib/payment-month";
+
+test("rent payment can settle September when money arrives in October", () => {
+  assert.equal(resolvePaymentMonth("2026-09", "2026-10-03"), "2026-09");
+});
+
+test("older payment forms still fall back to the payment date month", () => {
+  assert.equal(resolvePaymentMonth(null, "2026-10-03"), "2026-10");
+});
+
+test("invalid billing months are rejected", () => {
+  assert.throws(() => resolvePaymentMonth("2026-13", "2026-10-03"), /Invalid billing month/);
+});
 
 test("rent can be paid in two installments", () => {
   const first = applyRentInstallment({

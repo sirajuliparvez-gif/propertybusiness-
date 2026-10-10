@@ -68,8 +68,9 @@ export function RecordTenantRentPaymentDialog({
   // RentPayment rows AND months nobody ever recorded (see rent-ledger.ts).
   // Powers the "Settle Overdue" tab's breakdown and its oldest-first payoff.
   overdueMonths?: OverdueMonth[];
-  // This month is already fully paid — a second cash/downpayment payment for
-  // it would double-count, so only overdue/advance payments are offered.
+  // This month is already fully paid. Advance remains the initial mode, but
+  // cash/downpayment stay available because the user can select an older
+  // billing month; the server still refuses duplicates for the chosen month.
   monthSettled?: boolean;
   returnTo?: string;
   // Table rows need the button to just be an icon (hover reveals the label
@@ -86,18 +87,19 @@ export function RecordTenantRentPaymentDialog({
 }) {
   const t = useTranslations("Properties");
   const [isPending, startTransition] = useTransition();
+  const todayValue = dhakaTodayISO();
   const [mode, setMode] = useState<Mode>(monthSettled ? "advance" : "cash");
   const [method, setMethod] = useState("NONE");
+  const [billingMonth, setBillingMonth] = useState(todayValue.slice(0, 7));
   const serviceChargeAmount = computeServiceChargeAmount(monthlyRentAmount, serviceChargeType, serviceChargeValue);
   // "Rent due" is rent + service charge bundled as one figure — see the
   // matching note in actions/tenant-rent.ts.
   const dueAmount = monthlyRentAmount + serviceChargeAmount;
   const [amount, setAmount] = useState(String(dueAmount || ""));
-  const [startMonth, setStartMonth] = useState(dhakaTodayISO().slice(0, 7));
+  const [startMonth, setStartMonth] = useState(todayValue.slice(0, 7));
   const [monthsCount, setMonthsCount] = useState("3");
   const totalOverdueAmount = overdueMonths.reduce((sum, m) => sum + m.gap, 0);
   const [overdueAmount, setOverdueAmount] = useState(String(totalOverdueAmount || ""));
-  const todayValue = dhakaTodayISO();
   const advanceTotal = dueAmount * (Number(monthsCount) || 0);
 
   function handleModeChange(next: Mode) {
@@ -162,11 +164,9 @@ export function RecordTenantRentPaymentDialog({
           <FormField label={t("paymentMode")} htmlFor="rentPaymentModeTabs">
             <Tabs value={mode} onValueChange={(v) => handleModeChange(v as Mode)}>
               <TabsList className="h-8 w-full flex-wrap">
-                {monthSettled ? null : (
-                  <TabsTrigger value="cash" className="flex-1 text-xs">
-                    {t("cashPayment")}
-                  </TabsTrigger>
-                )}
+                <TabsTrigger value="cash" className="flex-1 text-xs">
+                  {t("cashPayment")}
+                </TabsTrigger>
                 {overdueMonths.length > 0 ? (
                   <TabsTrigger value="overdue" className="flex-1 text-xs">
                     {t("settleOverdue")}
@@ -175,11 +175,9 @@ export function RecordTenantRentPaymentDialog({
                 <TabsTrigger value="advance" className="flex-1 text-xs">
                   {t("advanceRentPayment")}
                 </TabsTrigger>
-                {monthSettled ? null : (
-                  <TabsTrigger value="downpaymentAdjustment" className="flex-1 text-xs">
-                    {t("adjustFromDownpayment")}
-                  </TabsTrigger>
-                )}
+                <TabsTrigger value="downpaymentAdjustment" className="flex-1 text-xs">
+                  {t("adjustFromDownpayment")}
+                </TabsTrigger>
               </TabsList>
             </Tabs>
           </FormField>
@@ -188,6 +186,21 @@ export function RecordTenantRentPaymentDialog({
             <p className="text-xs text-muted-foreground">
               {t("availableDownpaymentBalance")}: {formatTaka(currentDownpaymentBalance)}
             </p>
+          ) : null}
+
+          {mode === "cash" || mode === "downpaymentAdjustment" ? (
+            <FormField label={t("billingMonth")} htmlFor="rentBillingMonth" required>
+              <Input
+                id="rentBillingMonth"
+                name="billingMonth"
+                type="month"
+                max={todayValue.slice(0, 7)}
+                required
+                value={billingMonth}
+                onChange={(e) => setBillingMonth(e.target.value)}
+              />
+              <p className="mt-1 text-xs text-muted-foreground">{t("billingMonthHint")}</p>
+            </FormField>
           ) : null}
 
           {mode === "overdue" ? (
