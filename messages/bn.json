@@ -85,6 +85,7 @@
     "noActivity": "এখনো কোনো কার্যক্রম নেই।",
     "actionRequired": "গুরুত্বপূর্ণ কাজ",
     "financialAnalytics": "আর্থিক বিশ্লেষণ",
+    "financialAnalyticsChartLabel": "{range} আয়, খরচ ও নেট টাকার চার্ট",
     "propertyPerformance": "প্রপার্টি পারফরম্যান্স",
     "rentDue": "ভাড়া বকেয়া",
     "utilityDueTab": "ইউটিলিটি বকেয়া",

@@ -44,7 +44,7 @@ test("rent mutations invalidate the return page, rent collection, dashboard, and
   assert.deepEqual(localizedMutationPaths("en", "/"), ["/en", "/en/rent", "/en/reports"]);
 });
 
-test("reports attribute late rent payments to their billing month", () => {
+test("dashboard and reports attribute late rent payments to their billing month", () => {
   assert.equal(
     reportingMonthKey({
       transactionType: "RENT_RECEIVED_FROM_TENANT",

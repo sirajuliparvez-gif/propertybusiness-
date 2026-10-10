@@ -85,6 +85,7 @@
     "noActivity": "No activity yet.",
     "actionRequired": "Action Required",
     "financialAnalytics": "Financial Analytics",
+    "financialAnalyticsChartLabel": "{range} income, expense, and net chart",
     "propertyPerformance": "Property Performance",
     "rentDue": "Rent Due",
     "utilityDueTab": "Utility Due",

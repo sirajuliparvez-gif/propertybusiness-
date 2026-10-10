@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { useTranslations } from "next-intl";
+import { useLocale, useTranslations } from "next-intl";
 import {
   Bar,
   ComposedChart,
@@ -15,7 +15,7 @@ import {
 import { BarChart3 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { formatTaka } from "@/lib/format";
+import { formatTaka, shortMonthLabel } from "@/lib/format";
 import { cn } from "@/lib/utils";
 
 type Point = { month?: string; year?: string; income: number; expense: number; net: number };
@@ -81,6 +81,7 @@ export function IncomeExpenseChart({
   yearly: Point[];
 }) {
   const t = useTranslations("Dashboard");
+  const locale = useLocale();
   const [range, setRange] = useState<"monthly" | "yearly">("monthly");
   const data = range === "monthly" ? monthly : yearly;
   const xKey = range === "monthly" ? "month" : "year";
@@ -106,12 +107,23 @@ export function IncomeExpenseChart({
         </Tabs>
       </CardHeader>
       <CardContent>
-        <div className="h-72 w-full">
+        <div
+          className="h-72 w-full"
+          role="img"
+          aria-label={t("financialAnalyticsChartLabel", { range: t(range) })}
+        >
           <ResponsiveContainer width="100%" height="100%">
             <ComposedChart data={data} barGap={2} margin={{ left: -12, top: 8, right: 8 }}>
               <CartesianGrid vertical={false} stroke="var(--border)" />
               <XAxis
                 dataKey={xKey}
+                tickFormatter={(value) =>
+                  range === "monthly"
+                    ? shortMonthLabel(String(value), locale)
+                    : new Intl.NumberFormat(locale === "bn" ? "bn-BD" : "en-US", { useGrouping: false }).format(
+                        Number(value)
+                      )
+                }
                 tickLine={false}
                 axisLine={false}
                 fontSize={11}
