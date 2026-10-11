@@ -168,6 +168,26 @@
     background: #fff !important;
     color: #000 !important;
   }
+
+  /* Invoice colours must not inherit the active screen theme. In dark mode
+     the normal muted/border tokens are intentionally pale, which makes them
+     disappear on the white paper background. Keep these overrides scoped to
+     printable invoices so the on-screen palette is unchanged. */
+  [data-testid="invoice"] {
+    --foreground: #000;
+    --card-foreground: #000;
+    --muted-foreground: #333;
+    --border: #555;
+    --input: #555;
+    --primary: #123f78;
+    --destructive: #7f1d1d;
+    --success: #14532d;
+    background: #fff !important;
+    color: #000 !important;
+    color-scheme: light;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
 }
 
 /* Rent and utility invoices print as two copies on one A4 sheet — the tenant
