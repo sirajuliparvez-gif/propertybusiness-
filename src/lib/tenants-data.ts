@@ -1,5 +1,5 @@
 import { cache } from "react";
-import { dhakaNow } from "@/lib/dhaka-time";
+import { dhakaISO, dhakaNow } from "@/lib/dhaka-time";
 import { prisma } from "@/lib/prisma";
 import { computeServiceChargeAmount } from "@/lib/service-charge";
 import { attachElectricityConsumption, latestElectricityReadingByUnit } from "@/lib/electricity-consumption";
@@ -15,6 +15,7 @@ import {
 } from "@/lib/rent-ledger";
 import { splitUtilityBillTransactions } from "@/lib/utility-bill-split";
 import { isPaymentMonth } from "@/lib/payment-month";
+import { numericRentRates, rentTermsDueAmount, resolveRentTermsForMonth } from "@/lib/rent-terms";
 
 function monthRange(now: Date) {
   return {
@@ -60,6 +61,7 @@ export const getAllTenantsData = cache(async function getAllTenantsData() {
                     currentDownpaymentBalance: true,
                     serviceChargeType: true,
                     serviceChargeValue: true,
+                    rentRates: { orderBy: { effectiveMonth: "asc" } },
                     startDate: true,
                     movedOutAt: true,
                     endDate: true,
@@ -125,17 +127,24 @@ export const getAllTenantsData = cache(async function getAllTenantsData() {
           // ledger up to "now" for a vacated tenant would invent phantom
           // overdue months for the period after they were gone.
           const asOf = tl.status === "ACTIVE" ? dhakaNow() : (tl.movedOutAt ?? tl.endDate ?? dhakaNow());
+          const fallbackTerms = {
+            monthlyRentAmount: Number(tl.monthlyRentAmount),
+            serviceChargeType: tl.serviceChargeType,
+            serviceChargeValue: tl.serviceChargeValue != null ? Number(tl.serviceChargeValue) : null,
+          };
+          const rentRates = numericRentRates(tl.rentRates);
+          const currentTerms = resolveRentTermsForMonth(fallbackTerms, rentRates, dhakaISO(now).slice(0, 7));
           const serviceChargeAmount = computeServiceChargeAmount(
-            Number(tl.monthlyRentAmount),
-            tl.serviceChargeType,
-            tl.serviceChargeValue != null ? Number(tl.serviceChargeValue) : null
+            currentTerms.monthlyRentAmount,
+            currentTerms.serviceChargeType,
+            currentTerms.serviceChargeValue
           );
           // "Rent due" is rent + service charge bundled as one figure — the
           // ledger (and everything derived from it: overdue amount, PAID/
           // UNPAID status) tracks that combined total, not rent alone.
           const ledger = buildRentLedger(
             tl.startDate,
-            Number(tl.monthlyRentAmount) + serviceChargeAmount,
+            (month) => rentTermsDueAmount(resolveRentTermsForMonth(fallbackTerms, rentRates, month)),
             tl.rentPayments.map((rp) => ({
               id: rp.id,
               month: rp.month,
@@ -163,15 +172,21 @@ export const getAllTenantsData = cache(async function getAllTenantsData() {
             propertyId: p.id,
             propertyName: p.name,
             unitLabel: u.label,
-            monthlyRentAmount: Number(tl.monthlyRentAmount),
+            monthlyRentAmount: currentTerms.monthlyRentAmount,
             currentDownpaymentBalance: Number(tl.currentDownpaymentBalance),
-            serviceChargeType: tl.serviceChargeType,
-            serviceChargeValue: tl.serviceChargeValue != null ? Number(tl.serviceChargeValue) : null,
+            serviceChargeType: currentTerms.serviceChargeType,
+            serviceChargeValue: currentTerms.serviceChargeValue,
             serviceChargeAmount,
+            rentRates,
             leaseStatus: tl.status,
             rentStatus: tl.status === "ACTIVE" ? (currentEntry?.status ?? null) : null,
             overdueAmount,
             overdueMonths: tl.status === "ACTIVE" ? overdue : [],
+            paymentProgress: ledger.map((entry) => ({
+              month: entry.month,
+              dueAmount: entry.dueAmount,
+              paidAmount: entry.paidAmount,
+            })),
             pastDueAmount,
             pastDueMonthsCount: tl.status === "ACTIVE" ? pastDueEntries(ledger).length : 0,
             rentPastDue: tl.status === "ACTIVE" && (currentEntry?.pastDue ?? false),
@@ -356,6 +371,7 @@ export async function getTenantProfile(leaseId: string) {
             _count: { select: { transactions: true, downpaymentAdjustments: true } },
           },
         },
+        rentRates: { orderBy: { effectiveMonth: "asc" } },
         documents: { orderBy: { uploadedAt: "desc" } },
         downpaymentAdjustments: {
           orderBy: { createdAt: "desc" },
@@ -420,16 +436,23 @@ export async function getTenantProfile(leaseId: string) {
   // still renting, not all the way to today.
   const ledgerAsOf =
     lease.status === "ACTIVE" ? dhakaNow() : (lease.movedOutAt ?? lease.endDate ?? dhakaNow());
+  const fallbackTerms = {
+    monthlyRentAmount: Number(lease.monthlyRentAmount),
+    serviceChargeType: lease.serviceChargeType,
+    serviceChargeValue: lease.serviceChargeValue != null ? Number(lease.serviceChargeValue) : null,
+  };
+  const rentRates = numericRentRates(lease.rentRates);
+  const currentTerms = resolveRentTermsForMonth(fallbackTerms, rentRates, dhakaISO(dhakaNow()).slice(0, 7));
   const leaseServiceChargeAmount = computeServiceChargeAmount(
-    Number(lease.monthlyRentAmount),
-    lease.serviceChargeType,
-    lease.serviceChargeValue != null ? Number(lease.serviceChargeValue) : null
+    currentTerms.monthlyRentAmount,
+    currentTerms.serviceChargeType,
+    currentTerms.serviceChargeValue
   );
   // "Rent due" is rent + service charge bundled as one figure — see the
   // matching note in getAllTenantsData above.
   const ledger = buildRentLedger(
     lease.startDate,
-    Number(lease.monthlyRentAmount) + leaseServiceChargeAmount,
+    (month) => rentTermsDueAmount(resolveRentTermsForMonth(fallbackTerms, rentRates, month)),
     lease.rentPayments.map((rp) => ({
       id: rp.id,
       month: rp.month,
@@ -535,15 +558,26 @@ export async function getTenantProfile(leaseId: string) {
     endDate: lease.endDate,
     movedOutAt: lease.movedOutAt,
     durationMonths,
-    monthlyRentAmount: Number(lease.monthlyRentAmount),
+    monthlyRentAmount: currentTerms.monthlyRentAmount,
+    configuredMonthlyRentAmount: Number(lease.monthlyRentAmount),
+    latestRentEffectiveMonth: lease.rentRates.at(-1)?.effectiveMonth ?? null,
     initialDownpaymentAmount: Number(lease.initialDownpaymentAmount),
     currentDownpaymentBalance: Number(lease.currentDownpaymentBalance),
-    serviceChargeType: lease.serviceChargeType,
-    serviceChargeValue: lease.serviceChargeValue != null ? Number(lease.serviceChargeValue) : null,
+    serviceChargeType: currentTerms.serviceChargeType,
+    serviceChargeValue: currentTerms.serviceChargeValue,
+    configuredServiceChargeType: lease.serviceChargeType,
+    configuredServiceChargeValue:
+      lease.serviceChargeValue != null ? Number(lease.serviceChargeValue) : null,
     serviceChargeAmount: leaseServiceChargeAmount,
     notes: lease.notes,
     payments,
     overdueMonths,
+    paymentProgress: ledger.map((entry) => ({
+      month: entry.month,
+      dueAmount: entry.dueAmount,
+      paidAmount: entry.paidAmount,
+    })),
+    rentRates,
     rentPastDue: lease.status === "ACTIVE" && (ledger[ledger.length - 1]?.pastDue ?? false),
     trackedMonths: tracked.length,
     totalDue,

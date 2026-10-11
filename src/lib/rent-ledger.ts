@@ -82,7 +82,7 @@ const MAX_MONTHS = 600;
 
 export function buildRentLedger<M = string | null>(
   leaseStartDate: Date,
-  monthlyRentAmount: number,
+  monthlyRentAmount: number | ((month: string) => number),
   existingPayments: ExistingRentPaymentRow<M>[],
   asOf: Date = dhakaNow(),
   dueDay = 1
@@ -132,14 +132,15 @@ export function buildRentLedger<M = string | null>(
       // No real row for this month, and it's the current month or later —
       // synthesize the usual UNPAID placeholder.
       const [y, m] = cursor.split("-").map(Number);
+      const dueAmount = typeof monthlyRentAmount === "function" ? monthlyRentAmount(cursor) : monthlyRentAmount;
       entries.push({
         month: cursor,
         dueDate: new Date(y, m - 1, dueDay),
-        dueAmount: monthlyRentAmount,
+        dueAmount,
         paidAmount: 0,
         status: "UNPAID",
-        gap: Math.max(0, monthlyRentAmount),
-        pastDue: monthlyRentAmount > 0 && isMonthPastDue(cursor, dueDay, today),
+        gap: Math.max(0, dueAmount),
+        pastDue: dueAmount > 0 && isMonthPastDue(cursor, dueDay, today),
         rentPaymentId: null,
         paidAt: null,
         method: null,

@@ -4,9 +4,13 @@ import { prisma } from "@/lib/prisma";
 import { isIncomeType, isExpenseType } from "@/lib/finance-types";
 import { getAllTenantsData } from "@/lib/tenants-data";
 import { getAllStaffData } from "@/lib/employees-data";
-import { computeServiceChargeAmount } from "@/lib/service-charge";
 import { isMonthPastDue, RENT_DUE_DAY, SALARY_DUE_DAY } from "@/lib/rent-ledger";
 import { reportingMonthKey } from "@/lib/reporting-period";
+import {
+  numericRentRates,
+  rentTermsDueAmount,
+  resolveRentTermsForMonth,
+} from "@/lib/rent-terms";
 
 const DAYS_AHEAD = 7; // "expiring/due soon" window
 
@@ -215,6 +219,7 @@ export const getActionRequiredData = cache(async function getActionRequiredData(
           include: {
             tenant: { select: { name: true } },
             unit: { include: { unitType: { include: { property: { select: { name: true } } } } } },
+            rentRates: { orderBy: { effectiveMonth: "asc" } },
           },
         })
       : Promise.resolve([]),
@@ -264,19 +269,22 @@ export const getActionRequiredData = cache(async function getActionRequiredData(
       overdue: isMonthPastDue(r.month, RENT_DUE_DAY, now),
     })),
       ...unrecordedRent.map((l) => {
-        const rent = Number(l.monthlyRentAmount);
+        const terms = resolveRentTermsForMonth(
+          {
+            monthlyRentAmount: Number(l.monthlyRentAmount),
+            serviceChargeType: l.serviceChargeType,
+            serviceChargeValue:
+              l.serviceChargeValue != null ? Number(l.serviceChargeValue) : null,
+          },
+          numericRentRates(l.rentRates),
+          currentMonth
+        );
         return {
           id: `lease-${l.id}`,
           tenantName: l.tenant.name,
           propertyName: l.unit.unitType.property.name,
           unitLabel: l.unit.label,
-          amount:
-            rent +
-            computeServiceChargeAmount(
-              rent,
-              l.serviceChargeType,
-              l.serviceChargeValue != null ? Number(l.serviceChargeValue) : null
-            ),
+          amount: rentTermsDueAmount(terms),
           dueDate: new Date(now.getFullYear(), now.getMonth(), RENT_DUE_DAY),
           overdue: true,
         };

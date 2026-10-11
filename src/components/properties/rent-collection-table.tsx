@@ -291,9 +291,12 @@ export function RentCollectionTable({
                         currentDownpaymentBalance={p.currentDownpaymentBalance}
                         serviceChargeType={p.serviceChargeType}
                         serviceChargeValue={p.serviceChargeValue}
+                        rentRates={p.rentRates}
+                        paymentProgress={p.paymentProgress}
                         overdueMonths={p.overdueMonths}
                         monthSettled={settled}
                         returnTo={`/rent?month=${selectedMonth}`}
+                        initialBillingMonth={selectedMonth}
                         iconOnly
                         triggerLabel={settled ? t("advanceRentPayment") : t("collectRent")}
                       />

@@ -5,12 +5,24 @@ import { revalidatePath } from "next/cache";
 import { getLocale } from "next-intl/server";
 import { prisma } from "@/lib/prisma";
 import { redirect } from "@/i18n/navigation";
-import { computeServiceChargeAmount } from "@/lib/service-charge";
 import { buildRentLedger, overdueEntries, totalOverdue, RENT_DUE_DAY } from "@/lib/rent-ledger";
 import { applyRentInstallment, isRentPaymentSettled } from "@/lib/payment-progress";
 import { isPaymentMonth, paymentMonthDueDate, paymentMonthRange, resolvePaymentMonth } from "@/lib/payment-month";
 import { localizedMutationPaths } from "@/lib/localized-revalidation";
 import { withRentActionFeedback } from "@/lib/rent-action-feedback";
+import { numericRentRates, rentTermsDueAmount, resolveRentTermsForMonth } from "@/lib/rent-terms";
+
+function leaseFallbackTerms(lease: {
+  monthlyRentAmount: unknown;
+  serviceChargeType: "FLAT" | "PERCENTAGE" | null;
+  serviceChargeValue: unknown;
+}) {
+  return {
+    monthlyRentAmount: Number(lease.monthlyRentAmount),
+    serviceChargeType: lease.serviceChargeType,
+    serviceChargeValue: lease.serviceChargeValue == null ? null : Number(lease.serviceChargeValue),
+  };
+}
 
 function str(formData: FormData, key: string) {
   const v = formData.get(key);
@@ -75,7 +87,10 @@ export async function createHistoricalRentArrears(formData: FormData): Promise<R
   const currentMonth = dhakaTodayISO().slice(0, 7);
   if (endMonth >= currentMonth) return { ok: false, error: "currentOrFutureMonth" };
 
-  const lease = await prisma.tenantLease.findUnique({ where: { id: tenantLeaseId } });
+  const lease = await prisma.tenantLease.findUnique({
+    where: { id: tenantLeaseId },
+    include: { rentRates: { orderBy: { effectiveMonth: "asc" } } },
+  });
   if (!lease) return { ok: false, error: "notFound" };
   const leaseStartMonth = dhakaISO(lease.startDate).slice(0, 7);
   if (startMonth < leaseStartMonth) return { ok: false, error: "beforeLeaseStart" };
@@ -92,19 +107,13 @@ export async function createHistoricalRentArrears(formData: FormData): Promise<R
     return { ok: true };
   }
 
-  const rentAmount = Number(lease.monthlyRentAmount);
-  const serviceChargeAmount = computeServiceChargeAmount(
-    rentAmount,
-    lease.serviceChargeType,
-    lease.serviceChargeValue != null ? Number(lease.serviceChargeValue) : null
-  );
-  const dueAmount = rentAmount + serviceChargeAmount;
+  const rates = numericRentRates(lease.rentRates);
   await prisma.rentPayment.createMany({
     data: missingMonths.map((month) => ({
       tenantLeaseId,
       month,
       dueDate: paymentMonthDueDate(month, RENT_DUE_DAY),
-      dueAmount,
+      dueAmount: rentTermsDueAmount(resolveRentTermsForMonth(leaseFallbackTerms(lease), rates, month)),
       paidAmount: 0,
       status: "UNPAID" as const,
       paidAt: null,
@@ -116,7 +125,10 @@ export async function createHistoricalRentArrears(formData: FormData): Promise<R
   redirect({
     href: withRentActionFeedback(returnTo, "arrearsAdded", {
       count: missingMonths.length,
-      amount: dueAmount * missingMonths.length,
+      amount: missingMonths.reduce(
+        (sum, month) => sum + rentTermsDueAmount(resolveRentTermsForMonth(leaseFallbackTerms(lease), rates, month)),
+        0
+      ),
     }),
     locale,
   });
@@ -272,7 +284,10 @@ export async function recordTenantRentPayment(formData: FormData) {
       ? methodRaw
       : null;
 
-  const lease = await prisma.tenantLease.findUnique({ where: { id: tenantLeaseId } });
+  const lease = await prisma.tenantLease.findUnique({
+    where: { id: tenantLeaseId },
+    include: { rentRates: { orderBy: { effectiveMonth: "asc" } } },
+  });
   if (!lease) throw new Error("Tenant lease not found");
 
   if (mode === "downpaymentAdjustment" && amount > Number(lease.currentDownpaymentBalance)) {
@@ -282,12 +297,8 @@ export async function recordTenantRentPayment(formData: FormData) {
   // "Rent due" is rent + service charge bundled as one figure — one
   // RentPayment row, one collection action, one Transaction, regardless of
   // how it's settled (cash or downpayment adjustment).
-  const serviceChargeAmount = computeServiceChargeAmount(
-    Number(lease.monthlyRentAmount),
-    lease.serviceChargeType,
-    lease.serviceChargeValue != null ? Number(lease.serviceChargeValue) : null
-  );
-  const dueAmount = Number(lease.monthlyRentAmount) + serviceChargeAmount;
+  const rates = numericRentRates(lease.rentRates);
+  const dueAmount = rentTermsDueAmount(resolveRentTermsForMonth(leaseFallbackTerms(lease), rates, month));
   const [monthYear, monthNumber] = month.split("-").map(Number);
 
   const recorded = await prisma.$transaction(async (tx) => {
@@ -304,8 +315,9 @@ export async function recordTenantRentPayment(formData: FormData) {
     // already committed the payment. Treat it as an idempotent no-op; no
     // second Transaction or downpayment adjustment is written.
     if (existing && isRentPaymentSettled(Number(existing.dueAmount), alreadyPaid)) return false;
+    const monthDueAmount = existing ? Number(existing.dueAmount) : dueAmount;
     const { totalPaid, status } = applyRentInstallment({
-      dueAmount,
+      dueAmount: monthDueAmount,
       alreadyPaid,
       paymentAmount: amount,
       adjustedFromDownpayment: mode === "downpaymentAdjustment",
@@ -313,7 +325,7 @@ export async function recordTenantRentPayment(formData: FormData) {
 
     const rentPayment = await tx.rentPayment.upsert({
       where: { tenantLeaseId_month: { tenantLeaseId, month } },
-      update: { dueAmount, paidAmount: totalPaid, status, paidAt: paidDate },
+      update: { paidAmount: totalPaid, status, paidAt: paidDate },
       create: {
         tenantLeaseId,
         month,
@@ -400,7 +412,10 @@ export async function recordOverdueRentPayment(formData: FormData) {
       ? methodRaw
       : null;
 
-  const lease = await prisma.tenantLease.findUnique({ where: { id: tenantLeaseId } });
+  const lease = await prisma.tenantLease.findUnique({
+    where: { id: tenantLeaseId },
+    include: { rentRates: { orderBy: { effectiveMonth: "asc" } } },
+  });
   if (!lease) throw new Error("Tenant lease not found");
 
   const existingPayments = await prisma.rentPayment.findMany({
@@ -408,16 +423,13 @@ export async function recordOverdueRentPayment(formData: FormData) {
     select: { id: true, month: true, dueDate: true, dueAmount: true, paidAmount: true, status: true, paidAt: true },
   });
   const asOf = lease.status === "ACTIVE" ? dhakaNow() : (lease.movedOutAt ?? lease.endDate ?? dhakaNow());
-  const overdueServiceChargeAmount = computeServiceChargeAmount(
-    Number(lease.monthlyRentAmount),
-    lease.serviceChargeType,
-    lease.serviceChargeValue != null ? Number(lease.serviceChargeValue) : null
-  );
+  const overdueRates = numericRentRates(lease.rentRates);
   // "Rent due" is rent + service charge bundled as one figure — see the
   // matching note in recordTenantRentPayment above.
   const ledger = buildRentLedger(
     lease.startDate,
-    Number(lease.monthlyRentAmount) + overdueServiceChargeAmount,
+    (month) =>
+      rentTermsDueAmount(resolveRentTermsForMonth(leaseFallbackTerms(lease), overdueRates, month)),
     existingPayments.map((rp) => ({
       id: rp.id,
       month: rp.month,
@@ -526,23 +538,21 @@ export async function recordAdvanceRentPayment(formData: FormData) {
       ? methodRaw
       : null;
 
-  const lease = await prisma.tenantLease.findUnique({ where: { id: tenantLeaseId } });
+  const lease = await prisma.tenantLease.findUnique({
+    where: { id: tenantLeaseId },
+    include: { rentRates: { orderBy: { effectiveMonth: "asc" } } },
+  });
   if (!lease) throw new Error("Tenant lease not found");
 
-  const rentAmount = Number(lease.monthlyRentAmount);
-  const serviceChargeAmount = computeServiceChargeAmount(
-    rentAmount,
-    lease.serviceChargeType,
-    lease.serviceChargeValue != null ? Number(lease.serviceChargeValue) : null
-  );
-  // "Rent due" is rent + service charge bundled as one figure — see the
-  // matching note in recordTenantRentPayment above.
-  const dueAmount = rentAmount + serviceChargeAmount;
+  const advanceRates = numericRentRates(lease.rentRates);
   const months = Array.from({ length: monthsCount }, (_, i) => addMonthsToMonthStr(startMonth, i));
 
   const recordedAmount = await prisma.$transaction(async (tx) => {
     let totalRecorded = 0;
     for (const month of months) {
+      const configuredDueAmount = rentTermsDueAmount(
+        resolveRentTermsForMonth(leaseFallbackTerms(lease), advanceRates, month)
+      );
       const [year, monthIndex] = month.split("-").map(Number);
       const monthDueDate = new Date(year, monthIndex - 1, RENT_DUE_DAY);
 
@@ -550,8 +560,9 @@ export async function recordAdvanceRentPayment(formData: FormData) {
       // re-collecting the full amount would double-count the income.
       const existing = await tx.rentPayment.findUnique({
         where: { tenantLeaseId_month: { tenantLeaseId, month } },
-        select: { paidAmount: true },
+        select: { paidAmount: true, dueAmount: true },
       });
+      const dueAmount = existing ? Number(existing.dueAmount) : configuredDueAmount;
       const payNow = dueAmount - (existing ? Number(existing.paidAmount) : 0);
       if (payNow <= 0) continue;
 

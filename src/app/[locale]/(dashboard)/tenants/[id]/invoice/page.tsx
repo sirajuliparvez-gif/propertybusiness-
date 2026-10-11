@@ -7,7 +7,6 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { getTenantProfile } from "@/lib/tenants-data";
-import { computeServiceChargeAmount } from "@/lib/service-charge";
 import { formatTaka, formatDate, monthLabel } from "@/lib/format";
 import { paymentMethodLabel } from "@/lib/payment-method";
 import { isMonthPastDue, LEDGER_START_MONTH, RENT_DUE_DAY } from "@/lib/rent-ledger";
@@ -15,6 +14,7 @@ import { cn } from "@/lib/utils";
 import { InvoiceHeader } from "@/components/invoice-header";
 import { InvoiceMonthSelect } from "@/components/properties/invoice-month-select";
 import { InvoicePrintButton } from "@/components/properties/invoice-print-button";
+import { rentTermsDueAmount, resolveRentTermsForMonth } from "@/lib/rent-terms";
 
 function currentMonthKey() {
   const now = dhakaNow();
@@ -69,13 +69,17 @@ export default async function TenantInvoicePage({
   const payment = tenant.payments.find((p) => p.month === selectedMonth) ?? null;
   // Rent is only tracked from LEDGER_START_MONTH on; an earlier month with no record has no rent to show.
   const rentTracked = payment != null || selectedMonth >= LEDGER_START_MONTH;
-  const serviceChargeAmount = computeServiceChargeAmount(
-    tenant.monthlyRentAmount,
-    tenant.serviceChargeType,
-    tenant.serviceChargeValue
+  const selectedTerms = resolveRentTermsForMonth(
+    {
+      monthlyRentAmount: tenant.monthlyRentAmount,
+      serviceChargeType: tenant.serviceChargeType,
+      serviceChargeValue: tenant.serviceChargeValue,
+    },
+    tenant.rentRates,
+    selectedMonth
   );
   // A month that has never had a payment recorded still has a real due amount (this lease's standing rent).
-  const rentDue = rentTracked ? (payment?.dueAmount ?? tenant.monthlyRentAmount + serviceChargeAmount) : 0;
+  const rentDue = rentTracked ? (payment?.dueAmount ?? rentTermsDueAmount(selectedTerms)) : 0;
   const rentPaid = rentTracked ? (payment?.paidAmount ?? 0) : 0;
   const rentRemaining = Math.max(0, rentDue - rentPaid);
   const rentStatus = payment?.status ?? "UNPAID";

@@ -9,6 +9,13 @@ export function applyRentInstallment({
   paymentAmount: number;
   adjustedFromDownpayment?: boolean;
 }) {
+  if (!Number.isFinite(paymentAmount) || paymentAmount <= 0) {
+    throw new Error("Payment amount must be greater than zero");
+  }
+  const remaining = Math.max(0, dueAmount - alreadyPaid);
+  if (paymentAmount > remaining) {
+    throw new Error("Payment amount exceeds remaining rent");
+  }
   const totalPaid = alreadyPaid + paymentAmount;
   const status =
     totalPaid >= dueAmount

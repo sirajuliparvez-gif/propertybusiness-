@@ -25,6 +25,8 @@ import {
 import { FormField } from "@/components/properties/form-field";
 import { DocumentUploadField } from "@/components/properties/document-upload-field";
 import { updateTenantLease } from "@/lib/actions/tenants";
+import { dhakaTodayISO } from "@/lib/dhaka-time";
+import { nextPaymentMonth } from "@/lib/payment-month";
 
 export function EditTenantDialog({
   leaseId,
@@ -36,6 +38,7 @@ export function EditTenantDialog({
   nidNumber,
   businessRegistrationNumber,
   monthlyRentAmount,
+  rentEffectiveMonth,
   initialDownpaymentAmount,
   currentDownpaymentBalance,
   serviceChargeType: initialServiceChargeType,
@@ -52,6 +55,7 @@ export function EditTenantDialog({
   nidNumber: string | null;
   businessRegistrationNumber: string | null;
   monthlyRentAmount: number;
+  rentEffectiveMonth?: string | null;
   initialDownpaymentAmount: number;
   currentDownpaymentBalance: number;
   serviceChargeType: "FLAT" | "PERCENTAGE" | null;
@@ -66,6 +70,7 @@ export function EditTenantDialog({
   const [serviceChargeValueInput, setServiceChargeValueInput] = useState(
     serviceChargeValue != null ? String(serviceChargeValue) : ""
   );
+  const earliestRentEffectiveMonth = nextPaymentMonth(dhakaTodayISO().slice(0, 7));
 
   return (
     <Dialog>
@@ -157,6 +162,17 @@ export function EditTenantDialog({
               required
               defaultValue={monthlyRentAmount}
             />
+          </FormField>
+          <FormField label={t("rentEffectiveMonth")} htmlFor="editTenantRentEffectiveMonth" required>
+            <Input
+              id="editTenantRentEffectiveMonth"
+              name="rentEffectiveMonth"
+              type="month"
+              min={earliestRentEffectiveMonth}
+              defaultValue={rentEffectiveMonth ?? earliestRentEffectiveMonth}
+              required
+            />
+            <p className="mt-1 text-xs text-muted-foreground">{t("rentEffectiveMonthHint")}</p>
           </FormField>
           <FormField label={t("initialDownpayment")} htmlFor="editTenantInitialDownpayment">
             <Input

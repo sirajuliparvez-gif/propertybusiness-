@@ -319,6 +319,8 @@
     "nidNumber": "এনআইডি নম্বর",
     "businessRegistrationNumber": "প্রতিষ্ঠানের নিবন্ধন নম্বর",
     "leaseMonthlyRent": "মাসিক ভাড়া",
+    "rentEffectiveMonth": "নতুন ভাড়া শুরু হবে",
+    "rentEffectiveMonthHint": "আগের ও আংশিক পরিশোধের মাসে পুরোনো ভাড়া থাকবে। এই ভবিষ্যৎ মাস থেকে নতুন ভাড়া ধরা হবে।",
     "leaseDownpayment": "অগ্রিম/ডাউনপেমেন্ট",
     "serviceChargeTypeLabel": "সার্ভিস চার্জ (ঐচ্ছিক)",
     "serviceChargeNone": "নেই",

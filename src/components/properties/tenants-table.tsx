@@ -308,6 +308,8 @@ export function TenantsTable({
                             currentDownpaymentBalance={tn.currentDownpaymentBalance}
                             serviceChargeType={tn.serviceChargeType}
                             serviceChargeValue={tn.serviceChargeValue}
+                            rentRates={tn.rentRates}
+                            paymentProgress={tn.paymentProgress}
                             overdueMonths={tn.overdueMonths}
                             monthSettled={isRentSettled(tn.rentStatus, tn.overdueAmount)}
                             returnTo={showPropertyColumn ? "/tenants" : undefined}

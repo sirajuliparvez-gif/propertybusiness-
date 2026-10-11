@@ -400,11 +400,11 @@ model Tenant {
 }
 
 model TenantLease {
-  id                        String            @id @default(cuid())
+  id                        String             @id @default(cuid())
   unitId                    String
-  unit                      Unit              @relation(fields: [unitId], references: [id])
+  unit                      Unit               @relation(fields: [unitId], references: [id])
   tenantId                  String
-  tenant                    Tenant            @relation(fields: [tenantId], references: [id])
+  tenant                    Tenant             @relation(fields: [tenantId], references: [id])
   // Optional: some tenants aren't asked for an advance at all. Null means no
   // advance was ever collected — not the same as 0, though the app treats
   // both the same way (nothing to adjust rent against, nothing to refund).
@@ -421,15 +421,16 @@ model TenantLease {
   serviceChargeValue        Decimal?
   startDate                 DateTime
   endDate                   DateTime?
-  status                    TenantLeaseStatus @default(ACTIVE)
+  status                    TenantLeaseStatus  @default(ACTIVE)
   movedOutAt                DateTime?
   notes                     String?
-  createdAt                 DateTime          @default(now())
+  createdAt                 DateTime           @default(now())
   importBatchId             String?
-  importBatch               ImportBatch?      @relation(fields: [importBatchId], references: [id])
+  importBatch               ImportBatch?       @relation(fields: [importBatchId], references: [id])
 
   documents              Document[]
   rentPayments           RentPayment[]
+  rentRates              TenantRentRate[]
   downpaymentAdjustments DownpaymentAdjustment[]
   transactions           Transaction[]
   utilityBills           UtilityBill[]
@@ -437,6 +438,23 @@ model TenantLease {
   @@index([unitId])
   @@index([tenantId])
   @@index([status])
+}
+
+// Effective-dated rent terms. TenantLease keeps the latest configured values
+// for backwards compatibility, while every billing-month calculation resolves
+// through this history so a future increase never rewrites an older bill.
+model TenantRentRate {
+  id                 String             @id @default(cuid())
+  tenantLeaseId      String
+  tenantLease        TenantLease        @relation(fields: [tenantLeaseId], references: [id])
+  effectiveMonth     String // YYYY-MM
+  monthlyRentAmount  Decimal
+  serviceChargeType  ServiceChargeType?
+  serviceChargeValue Decimal?
+  createdAt          DateTime           @default(now())
+
+  @@unique([tenantLeaseId, effectiveMonth])
+  @@index([tenantLeaseId, effectiveMonth])
 }
 
 // Company policy: rent (and utility bills) are officially due on the 10th of

@@ -1,4 +1,4 @@
-import { dhakaNow } from "@/lib/dhaka-time";
+import { dhakaISO, dhakaNow } from "@/lib/dhaka-time";
 import { prisma } from "@/lib/prisma";
 import { isIncomeType } from "@/lib/finance-types";
 import { computeServiceChargeAmount } from "@/lib/service-charge";
@@ -14,6 +14,11 @@ import {
 } from "@/lib/rent-ledger";
 import { splitUtilityBillTransactions } from "@/lib/utility-bill-split";
 import { fromLedgerStatus } from "@/lib/employees-data";
+import {
+  numericRentRates,
+  rentTermsDueAmount,
+  resolveRentTermsForMonth,
+} from "@/lib/rent-terms";
 
 // Utility bills get their own dedicated feature/flow (see the "ইউটিলিটি বিল"
 // nav item) rather than living in this generic property-level expense list —
@@ -59,7 +64,12 @@ export async function getPropertiesList() {
               ownerRentAmount: true,
               tenantLeases: {
                 where: { status: "ACTIVE" },
-                select: { monthlyRentAmount: true, serviceChargeType: true, serviceChargeValue: true },
+                select: {
+                  monthlyRentAmount: true,
+                  serviceChargeType: true,
+                  serviceChargeValue: true,
+                  rentRates: { orderBy: { effectiveMonth: "asc" } },
+                },
               },
               // All bookings (not status-filtered) — derived in JS below into
               // both "currently occupied" (CHECKED_IN) and "this month's
@@ -90,6 +100,7 @@ export async function getPropertiesList() {
     }),
   ]);
   const displayIdByPropertyId = new Map(idOrder.map((p, i) => [p.id, `P-${String(i + 1).padStart(3, "0")}`]));
+  const currentMonth = dhakaISO(now).slice(0, 7);
 
   return properties.map((p) => {
     // Real Unit rows, not UnitType.unitCount — that field is a manually-set
@@ -119,13 +130,17 @@ export async function getPropertiesList() {
       (sum, u) =>
         sum +
         u.tenantLeases.reduce((s, tl) => {
-          const rent = Number(tl.monthlyRentAmount);
-          const serviceCharge = computeServiceChargeAmount(
-            rent,
-            tl.serviceChargeType,
-            tl.serviceChargeValue != null ? Number(tl.serviceChargeValue) : null
+          const terms = resolveRentTermsForMonth(
+            {
+              monthlyRentAmount: Number(tl.monthlyRentAmount),
+              serviceChargeType: tl.serviceChargeType,
+              serviceChargeValue:
+                tl.serviceChargeValue != null ? Number(tl.serviceChargeValue) : null,
+            },
+            numericRentRates(tl.rentRates),
+            currentMonth
           );
-          return s + rent + serviceCharge;
+          return s + rentTermsDueAmount(terms);
         }, 0),
       0
     );
@@ -251,6 +266,7 @@ export async function getPropertyDetail(id: string) {
                   startDate: true,
                   endDate: true,
                   movedOutAt: true,
+                  rentRates: { orderBy: { effectiveMonth: "asc" } },
                   tenant: { select: { name: true, contactInfo: true } },
                   // Full history, not just the latest month — the active
                   // lease's overdueAmount below needs every row to sum
@@ -408,19 +424,33 @@ export async function getPropertyDetail(id: string) {
           u.tenantLeases.find((tl) => tl.status !== "ACTIVE") ?? null;
         const activeGuestStay = u.guestStays.find((g) => g.status === "CHECKED_IN") ?? null;
 
-        const activeLeaseServiceChargeAmount = activeLease
-          ? computeServiceChargeAmount(
-              Number(activeLease.monthlyRentAmount),
-              activeLease.serviceChargeType,
-              activeLease.serviceChargeValue != null ? Number(activeLease.serviceChargeValue) : null
+        const activeLeaseFallback = activeLease
+          ? {
+              monthlyRentAmount: Number(activeLease.monthlyRentAmount),
+              serviceChargeType: activeLease.serviceChargeType,
+              serviceChargeValue:
+                activeLease.serviceChargeValue != null
+                  ? Number(activeLease.serviceChargeValue)
+                  : null,
+            }
+          : null;
+        const activeLeaseRates = activeLease ? numericRentRates(activeLease.rentRates) : [];
+        const activeLeaseTerms = activeLeaseFallback
+          ? resolveRentTermsForMonth(
+              activeLeaseFallback,
+              activeLeaseRates,
+              dhakaISO(dhakaNow()).slice(0, 7)
             )
-          : 0;
+          : null;
         // "Rent due" is rent + service charge bundled as one figure — see
         // the matching note in getAllTenantsData (tenants-data.ts).
         const activeLeaseLedger = activeLease
           ? buildRentLedger(
               activeLease.startDate,
-              Number(activeLease.monthlyRentAmount) + activeLeaseServiceChargeAmount,
+              (month) =>
+                rentTermsDueAmount(
+                  resolveRentTermsForMonth(activeLeaseFallback!, activeLeaseRates, month)
+                ),
               activeLease.rentPayments.map((rp) => ({
                 id: rp.id,
                 month: rp.month,
@@ -440,7 +470,7 @@ export async function getPropertyDetail(id: string) {
           ? {
               leaseId: activeLease.id,
               name: activeLease.tenant.name,
-              monthlyRentAmount: Number(activeLease.monthlyRentAmount) + activeLeaseServiceChargeAmount,
+              monthlyRentAmount: rentTermsDueAmount(activeLeaseTerms!),
               downpaymentAmount: Number(activeLease.initialDownpaymentAmount),
               currentDownpaymentBalance: Number(activeLease.currentDownpaymentBalance),
               startDate: activeLease.startDate,
@@ -572,14 +602,31 @@ export async function getPropertyDetail(id: string) {
     ut.units.flatMap((u) =>
       u.tenantLeases.map((tl) => {
         const asOf = tl.status === "ACTIVE" ? dhakaNow() : (tl.movedOutAt ?? tl.endDate ?? dhakaNow());
-        const monthlyRentAmount = Number(tl.monthlyRentAmount);
-        const serviceChargeValue = tl.serviceChargeValue != null ? Number(tl.serviceChargeValue) : null;
-        const serviceChargeAmount = computeServiceChargeAmount(monthlyRentAmount, tl.serviceChargeType, serviceChargeValue);
+        const fallbackTerms = {
+          monthlyRentAmount: Number(tl.monthlyRentAmount),
+          serviceChargeType: tl.serviceChargeType,
+          serviceChargeValue:
+            tl.serviceChargeValue != null ? Number(tl.serviceChargeValue) : null,
+        };
+        const rentRates = numericRentRates(tl.rentRates);
+        const currentTerms = resolveRentTermsForMonth(
+          fallbackTerms,
+          rentRates,
+          dhakaISO(asOf).slice(0, 7)
+        );
+        const monthlyRentAmount = currentTerms.monthlyRentAmount;
+        const serviceChargeValue = currentTerms.serviceChargeValue;
+        const serviceChargeAmount = computeServiceChargeAmount(
+          monthlyRentAmount,
+          currentTerms.serviceChargeType,
+          serviceChargeValue
+        );
         // "Rent due" is rent + service charge bundled as one figure — see
         // the matching note in getAllTenantsData (tenants-data.ts).
         const ledger = buildRentLedger(
           tl.startDate,
-          monthlyRentAmount + serviceChargeAmount,
+          (month) =>
+            rentTermsDueAmount(resolveRentTermsForMonth(fallbackTerms, rentRates, month)),
           tl.rentPayments.map((rp) => ({
             id: rp.id,
             month: rp.month,
@@ -606,9 +653,15 @@ export async function getPropertyDetail(id: string) {
           unitLabel: u.label,
           monthlyRentAmount,
           currentDownpaymentBalance: Number(tl.currentDownpaymentBalance),
-          serviceChargeType: tl.serviceChargeType,
+          serviceChargeType: currentTerms.serviceChargeType,
           serviceChargeValue,
           serviceChargeAmount,
+          rentRates,
+          paymentProgress: tl.rentPayments.map((rp) => ({
+            month: rp.month,
+            dueAmount: Number(rp.dueAmount),
+            paidAmount: Number(rp.paidAmount),
+          })),
           leaseStatus: tl.status,
           rentStatus: tl.status === "ACTIVE" ? (currentEntry?.status ?? null) : null,
           overdueAmount,

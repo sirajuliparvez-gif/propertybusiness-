@@ -137,11 +137,12 @@ export default async function TenantProfilePage({
             tenantType={tenant.tenantType}
             nidNumber={tenant.nidNumber}
             businessRegistrationNumber={tenant.businessRegistrationNumber}
-            monthlyRentAmount={tenant.monthlyRentAmount}
+            monthlyRentAmount={tenant.configuredMonthlyRentAmount}
+            rentEffectiveMonth={tenant.latestRentEffectiveMonth}
             initialDownpaymentAmount={tenant.initialDownpaymentAmount}
             currentDownpaymentBalance={tenant.currentDownpaymentBalance}
-            serviceChargeType={tenant.serviceChargeType}
-            serviceChargeValue={tenant.serviceChargeValue}
+            serviceChargeType={tenant.configuredServiceChargeType}
+            serviceChargeValue={tenant.configuredServiceChargeValue}
             notes={tenant.notes}
             returnTo={`/tenants/${tenant.id}`}
           />
@@ -171,6 +172,8 @@ export default async function TenantProfilePage({
                 currentDownpaymentBalance={tenant.currentDownpaymentBalance}
                 serviceChargeType={tenant.serviceChargeType}
                 serviceChargeValue={tenant.serviceChargeValue}
+                rentRates={tenant.rentRates}
+                paymentProgress={tenant.paymentProgress}
                 overdueMonths={tenant.overdueMonths}
                 monthSettled={currentMonthSettled}
                 returnTo={`/tenants/${tenant.id}`}

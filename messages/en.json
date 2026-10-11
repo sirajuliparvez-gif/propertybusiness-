@@ -319,6 +319,8 @@
     "nidNumber": "NID Number",
     "businessRegistrationNumber": "Business Registration Number",
     "leaseMonthlyRent": "Monthly Rent",
+    "rentEffectiveMonth": "New rent starts from",
+    "rentEffectiveMonthHint": "Existing and partially paid months keep their original rent. Changes start from this future month.",
     "leaseDownpayment": "Downpayment",
     "serviceChargeTypeLabel": "Service Charge (optional)",
     "serviceChargeNone": "None",

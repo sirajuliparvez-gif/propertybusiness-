@@ -31,6 +31,7 @@ import {
   recordOverdueRentPayment,
 } from "@/lib/actions/tenant-rent";
 import { computeServiceChargeAmount } from "@/lib/service-charge";
+import { rentTermsDueAmount, resolveRentTermsForMonth, type EffectiveRentTerms } from "@/lib/rent-terms";
 
 type Mode = "cash" | "downpaymentAdjustment" | "advance" | "overdue";
 const ADVANCE_MONTH_PRESETS = [3, 6, 12];
@@ -54,6 +55,8 @@ export function RecordTenantRentPaymentDialog({
   currentDownpaymentBalance,
   serviceChargeType = null,
   serviceChargeValue = null,
+  rentRates = [],
+  paymentProgress = [],
   overdueMonths = [],
   monthSettled = false,
   returnTo,
@@ -72,6 +75,8 @@ export function RecordTenantRentPaymentDialog({
   currentDownpaymentBalance: number;
   serviceChargeType?: "FLAT" | "PERCENTAGE" | null;
   serviceChargeValue?: number | null;
+  rentRates?: EffectiveRentTerms[];
+  paymentProgress?: { month: string; dueAmount: number; paidAmount: number }[];
   // Every month this lease still owes something for, oldest first — real
   // RentPayment rows AND months nobody ever recorded (see rent-ledger.ts).
   // Powers the "Settle Overdue" tab's breakdown and its oldest-first payoff.
@@ -102,16 +107,33 @@ export function RecordTenantRentPaymentDialog({
   const [mode, setMode] = useState<Mode>(initialBillingMonth ? "cash" : monthSettled ? "advance" : "cash");
   const [method, setMethod] = useState("NONE");
   const [billingMonth, setBillingMonth] = useState(initialBillingMonth ?? todayValue.slice(0, 7));
-  const serviceChargeAmount = computeServiceChargeAmount(monthlyRentAmount, serviceChargeType, serviceChargeValue);
+  const fallbackTerms = { monthlyRentAmount, serviceChargeType, serviceChargeValue };
+  const termsForMonth = (month: string) => resolveRentTermsForMonth(fallbackTerms, rentRates, month);
+  const dueForMonth = (month: string) => rentTermsDueAmount(termsForMonth(month));
+  const selectedTerms = termsForMonth(billingMonth);
+  const serviceChargeAmount = computeServiceChargeAmount(
+    selectedTerms.monthlyRentAmount,
+    selectedTerms.serviceChargeType,
+    selectedTerms.serviceChargeValue
+  );
   // "Rent due" is rent + service charge bundled as one figure — see the
   // matching note in actions/tenant-rent.ts.
-  const dueAmount = monthlyRentAmount + serviceChargeAmount;
-  const [amount, setAmount] = useState(String(dueAmount || ""));
+  const dueAmount = dueForMonth(billingMonth);
+  const remainingForMonth = (month: string) => {
+    const recorded = paymentProgress.find((payment) => payment.month === month);
+    return recorded ? Math.max(0, recorded.dueAmount - recorded.paidAmount) : dueForMonth(month);
+  };
+  const [amount, setAmount] = useState(String(remainingForMonth(billingMonth) || ""));
   const [startMonth, setStartMonth] = useState(todayValue.slice(0, 7));
   const [monthsCount, setMonthsCount] = useState("3");
   const totalOverdueAmount = overdueMonths.reduce((sum, m) => sum + m.gap, 0);
   const [overdueAmount, setOverdueAmount] = useState(String(totalOverdueAmount || ""));
-  const advanceTotal = dueAmount * (Number(monthsCount) || 0);
+  const advanceTotal = Array.from({ length: Number(monthsCount) || 0 }, (_, index) => {
+    const [year, monthNumber] = startMonth.split("-").map(Number);
+    const date = new Date(year, monthNumber - 1 + index, 1);
+    const month = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`;
+    return remainingForMonth(month);
+  }).reduce((sum, value) => sum + value, 0);
   const actionMonth = mode === "advance" ? startMonth : billingMonth;
   const actionAmount =
     mode === "advance" ? advanceTotal : mode === "overdue" ? Number(overdueAmount) : Number(amount);
@@ -132,7 +154,7 @@ export function RecordTenantRentPaymentDialog({
     setAmount(
       next === "downpaymentAdjustment"
         ? String(Math.min(dueAmount, currentDownpaymentBalance))
-        : String(dueAmount || "")
+        : String(remainingForMonth(billingMonth) || "")
     );
   }
 
@@ -242,7 +264,10 @@ export function RecordTenantRentPaymentDialog({
                 max={todayValue.slice(0, 7)}
                 required
                 value={billingMonth}
-                onChange={(e) => setBillingMonth(e.target.value)}
+                onChange={(e) => {
+                  setBillingMonth(e.target.value);
+                  setAmount(String(remainingForMonth(e.target.value) || ""));
+                }}
               />
               <p className="mt-1 text-xs text-muted-foreground">{t("billingMonthHint")}</p>
             </FormField>
@@ -335,7 +360,11 @@ export function RecordTenantRentPaymentDialog({
                 type="number"
                 step="any"
                 min={0}
-                max={mode === "downpaymentAdjustment" ? currentDownpaymentBalance : undefined}
+                max={
+                  mode === "downpaymentAdjustment"
+                    ? Math.min(currentDownpaymentBalance, remainingForMonth(billingMonth))
+                    : remainingForMonth(billingMonth)
+                }
                 required
                 value={amount}
                 onChange={(e) => setAmount(e.target.value)}
@@ -343,7 +372,7 @@ export function RecordTenantRentPaymentDialog({
               {serviceChargeAmount > 0 ? (
                 <p className="mt-1 text-xs text-muted-foreground">
                   {t("serviceChargeBundledHint", {
-                    rent: formatTaka(monthlyRentAmount),
+                    rent: formatTaka(selectedTerms.monthlyRentAmount),
                     service: formatTaka(serviceChargeAmount),
                     total: formatTaka(dueAmount),
                   })}

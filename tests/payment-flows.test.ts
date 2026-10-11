@@ -6,10 +6,18 @@ import {
   applyUtilityBillInstallment,
   isRentPaymentSettled,
 } from "@/lib/payment-progress";
-import { paymentMonthDueDate, paymentMonthRange, previousPaymentMonth, resolvePaymentMonth } from "@/lib/payment-month";
+import {
+  nextPaymentMonth,
+  paymentMonthDueDate,
+  paymentMonthRange,
+  previousPaymentMonth,
+  resolvePaymentMonth,
+} from "@/lib/payment-month";
 import { localizedMutationPaths } from "@/lib/localized-revalidation";
 import { reportingMonthKey } from "@/lib/reporting-period";
 import { withRentActionFeedback } from "@/lib/rent-action-feedback";
+import { rentTermsDueAmount, resolveRentTermsForMonth } from "@/lib/rent-terms";
+import { buildRentLedger } from "@/lib/rent-ledger";
 
 test("rent payment can settle September when money arrives in October", () => {
   assert.equal(resolvePaymentMonth("2026-09", "2026-10-03"), "2026-09");
@@ -26,6 +34,11 @@ test("invalid billing months are rejected", () => {
 test("the previous-month shortcut handles year boundaries", () => {
   assert.equal(previousPaymentMonth("2026-10"), "2026-09");
   assert.equal(previousPaymentMonth("2026-01"), "2025-12");
+});
+
+test("the next-month shortcut handles year boundaries", () => {
+  assert.equal(nextPaymentMonth("2026-10"), "2026-11");
+  assert.equal(nextPaymentMonth("2026-12"), "2027-01");
 });
 
 test("historical arrears ranges include every month across year boundaries", () => {
@@ -94,6 +107,64 @@ test("rent can be paid in two installments", () => {
     paymentAmount: 12_000,
   });
   assert.deepEqual(second, { totalPaid: 20_000, status: "PAID" });
+});
+
+test("rent installments cannot exceed the remaining balance", () => {
+  assert.throws(
+    () =>
+      applyRentInstallment({
+        dueAmount: 20_000,
+        alreadyPaid: 8_000,
+        paymentAmount: 12_001,
+      }),
+    /exceeds remaining rent/
+  );
+});
+
+test("rent increases take effect only from their configured month", () => {
+  const fallback = {
+    monthlyRentAmount: 20_000,
+    serviceChargeType: null,
+    serviceChargeValue: null,
+  } as const;
+  const rates = [
+    { ...fallback, effectiveMonth: "2026-01" },
+    { ...fallback, effectiveMonth: "2026-11", monthlyRentAmount: 22_000 },
+  ];
+
+  assert.equal(rentTermsDueAmount(resolveRentTermsForMonth(fallback, rates, "2026-10")), 20_000);
+  assert.equal(rentTermsDueAmount(resolveRentTermsForMonth(fallback, rates, "2026-11")), 22_000);
+});
+
+test("a recorded partial bill keeps its original due after a later rent increase", () => {
+  const fallback = {
+    monthlyRentAmount: 22_000,
+    serviceChargeType: null,
+    serviceChargeValue: null,
+  } as const;
+  const rates = [
+    { ...fallback, effectiveMonth: "2026-01", monthlyRentAmount: 20_000 },
+    { ...fallback, effectiveMonth: "2026-11" },
+  ];
+  const ledger = buildRentLedger(
+    new Date(2026, 0, 1),
+    (month) => rentTermsDueAmount(resolveRentTermsForMonth(fallback, rates, month)),
+    [
+      {
+        id: "october",
+        month: "2026-10",
+        dueDate: new Date(2026, 9, 10),
+        dueAmount: 20_000,
+        paidAmount: 8_000,
+        status: "PARTIAL",
+        paidAt: new Date(2026, 9, 8),
+      },
+    ],
+    new Date(2026, 10, 11)
+  );
+
+  assert.equal(ledger.find((entry) => entry.month === "2026-10")?.dueAmount, 20_000);
+  assert.equal(ledger.find((entry) => entry.month === "2026-11")?.dueAmount, 22_000);
 });
 
 test("utility bill can be paid in two installments", () => {
