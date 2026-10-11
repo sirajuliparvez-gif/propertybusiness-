@@ -91,14 +91,14 @@ pages.append('''<section class="page cover">
     <h2>প্রপার্টি, ভাড়া ও হিসাব ব্যবস্থাপনা সফটওয়্যার</h2>
     <p>বাস্তব স্ক্রিনশট, ক্লিক হাইলাইট এবং ধাপে ধাপে নির্দেশনা</p>
   </div>
-  <div class="cover-meta"><span>সংস্করণ ১.১</span><span>অক্টোবর ২০২৬</span></div>
+  <div class="cover-meta"><span>সংস্করণ ১.৩ · প্রিন্ট-ফ্রেন্ডলি</span><span>অক্টোবর ২০২৬</span></div>
 </section>''')
 
 page("শুরু করার আগে", "দ্রুত পরিচিতি", '''
 <div class="rule-grid">
   <article><b>কমলা বক্স + নম্বর</b><p>যে জায়গায় ক্লিক করতে হবে সেটি কমলা বর্ডার ও ধাপ নম্বর দিয়ে দেখানো হয়েছে।</p></article>
   <article><b>ভাড়ার শেষ তারিখ</b><p>প্রতি মাসের ১০ তারিখ পর্যন্ত পরিশোধের সময়। ১০ তারিখ পার হলে অপরিশোধিত বিল <strong>বকেয়া</strong> হবে; সম্পূর্ণ পরিশোধে <strong>পরিশোধিত</strong>।</p></article>
-  <article><b>আংশিক পরিশোধ</b><p>কম টাকা দিলে বাকি অংশ আলাদা থাকবে। পরবর্তী ধাপে আবার টাকা যোগ করে পুরো বিল শেষ করা যাবে।</p></article>
+  <article><b>কিস্তিতে ভাড়া</b><p>কম টাকা দিলে স্ট্যাটাস <strong>পেন্ডিং</strong> থাকবে। পরেরবার একই মাস খুললে শুধু অবশিষ্ট টাকা নিজে থেকে বসবে।</p></article>
   <article><b>একাধিক ইউনিট</b><p>এক টেন্যান্টের একাধিক ইউনিট একসাথে থাকলে ভাড়ার বিল সম্মিলিতভাবে আদায় ও ইনভয়েস করা যায়।</p></article>
   <article><b>পেমেন্ট মাধ্যম</b><p>ক্যাশ, বিকাশ, নগদ, ব্যাংক ট্রান্সফার, <strong>ব্যাংক চেক</strong> এবং অন্যান্য।</p></article>
   <article><b>আগের মাসের বকেয়া</b><p><strong>বিলের মাস</strong> আলাদা করে নির্বাচন করুন। টাকা যে দিনে পেয়েছেন সেটি <strong>পরিশোধের তারিখ</strong>-এ দিন।</p></article>
@@ -147,39 +147,55 @@ page("আগের মাসের বকেয়া পরিশোধ", "ধা�
   <div class="feature-copy">
     <div class="scenario"><small>উদাহরণ</small><h2>সেপ্টেম্বরের ভাড়া<br>অক্টোবরে পাওয়া গেছে</h2><p><b>বিলের মাস:</b> September 2026<br><b>পরিশোধের তারিখ:</b> October 10, 2026</p></div>
     <div class="feature-steps"><p><i>1</i> <b>বিলের মাস</b> হিসেবে সেপ্টেম্বর বাছুন।</p><p><i>2</i> প্রাপ্ত টাকার পরিমাণ লিখুন।</p><p><i>3</i> টাকা পাওয়ার প্রকৃত তারিখ দিন।</p><p><i>4</i> মাধ্যম বেছে নিয়ে সংরক্ষণ করুন।</p></div>
-    <div class="note"><b>মনে রাখুন:</b> অক্টোবরের ভাড়া আগে থেকেই পরিশোধিত হলেও নগদ পরিশোধ tab খুলে সেপ্টেম্বর বা আরও আগের মাস নির্বাচন করা যাবে। একই মাসের duplicate payment system গ্রহণ করবে না।</div>
+    <div class="note"><b>মনে রাখুন:</b> অক্টোবরের ভাড়া আগে থেকেই পরিশোধিত হলেও নগদ পরিশোধ tab খুলে সেপ্টেম্বর বা আরও আগের মাস নির্বাচন করা যাবে। কোনো মাসের ভাড়া আংশিক পরিশোধ হলে বাকি টাকা পরে কিস্তিতে নেওয়া যাবে; পুরো ভাড়া পরিশোধ হয়ে গেলে ওই মাসে অতিরিক্ত টাকা system গ্রহণ করবে না।</div>
   </div>
 </div>
 ''', 8, "billing-page")
 
-page("ভুল পেমেন্ট সংশোধন", "ধাপ ৭", f'''
+page("কিস্তিতে ভাড়া নিন", "ধাপ ৭ · নতুন ফিচার", f'''
+<div class="split feature-shot"><div class="shot"><img src="{img('rent-installment-dialog.png')}"></div><div class="feature-copy">
+  <div class="scenario"><small>বাস্তব উদাহরণ</small><h2>মোট ভাড়া ৳১৬,০০০<br>আগে দেওয়া ৳৯,০০০</h2><p>সিস্টেম সেপ্টেম্বর মাসের অবশিষ্ট <b>৳৭,০০০</b> নিজে থেকে দেখাচ্ছে।</p></div>
+  <div class="feature-steps"><p><i>1</i> <b>সরাসরি পেমেন্ট</b> রাখুন।</p><p><i>2</i> আগের আংশিক বিলের <b>মাস</b> বাছুন।</p><p><i>3</i> অবশিষ্ট টাকা মিলিয়ে নিন—বেশি টাকা নেওয়া যাবে না।</p><p><i>4</i> মাধ্যম বেছে নিয়ে নীল বাটনে ক্লিক করুন।</p></div>
+  <div class="note"><b>ফলাফল:</b> প্রথম কিস্তির পরে স্ট্যাটাস <b>পেন্ডিং</b>; মোট টাকা পূর্ণ হলে <b>পরিশোধিত</b>। প্রতিটি কিস্তির আলাদা লেনদেন রেকর্ড থাকবে, কিন্তু মাসের মোট বিল একটিই থাকবে।</div>
+</div></div>
+''', 9, "dense")
+
+page("ভাড়া বাড়ানোর কার্যকর মাস", "ধাপ ৮ · নতুন ফিচার", f'''
+<div class="split feature-shot"><div class="shot"><img src="{img('rent-increase-dialog.png')}"></div><div class="feature-copy">
+  <div class="scenario"><small>নিরাপদ rent update</small><h2>পুরোনো বিল বদলাবে না</h2><p>নতুন ভাড়া কেবল নির্বাচিত ভবিষ্যৎ মাস থেকে invoice, বকেয়া ও রিপোর্টে ধরা হবে।</p></div>
+  <div class="feature-steps"><p><i>1</i> টেন্যান্ট প্রোফাইলে <b>সম্পাদনা</b> খুলে নতুন মাসিক ভাড়া লিখুন।</p><p><i>2</i> <b>নতুন ভাড়া শুরু হবে</b> ঘরে কার্যকর মাস বাছুন।</p><p><i>3</i> আগে তৈরি বা আংশিক পরিশোধিত মাস পুরোনো ভাড়াতেই থাকবে।</p><p><i>4</i> সব তথ্য মিলিয়ে <b>সংরক্ষণ করুন</b>।</p></div>
+  <div class="warning"><b>উদাহরণ:</b> অক্টোবরের ভাড়া ৳১৫,০০০ এবং নতুন ভাড়া নভেম্বর থেকে ৳১৭,০০০ হলে অক্টোবরের বিল/বাকি ৳১৫,০০০-ই থাকবে। নভেম্বর থেকে ৳১৭,০০০ হিসাব হবে।</div>
+</div></div>
+''', 10, "dense")
+
+page("ভুল পেমেন্ট সংশোধন", "ধাপ ৯", f'''
 <div class="split focused"><div><div class="shot"><img src="{img('payment-history-crop.png')}"></div><p class="caption"><i>1</i> টেন্যান্ট প্রোফাইলের পেমেন্ট ইতিহাসে যান। <i>2</i> পেন্সিল আইকন ক্লিক করুন।</p></div><div><div class="shot"><img src="{img('edit-payment-crop.png')}"></div><p class="caption"><i>3</i> টাকা, তারিখ বা মাধ্যম ঠিক করুন। <i>4</i> পরিবর্তন সংরক্ষণ করুন।</p></div></div>
 <div class="warning">অডিট নিরাপত্তা: কিস্তি/ডাউনপেমেন্টের সাথে যুক্ত সমন্বয় সরাসরি বদলানো নাও যেতে পারে। সে ক্ষেত্রে মূল লেনদেন ও বাকি হিসাব যাচাই করে অনুমোদিত পদ্ধতি ব্যবহার করুন।</div>
-''', 9)
-
-page("ইনভয়েস প্রিন্ট বা PDF", "ধাপ ৮", f'''
-<div class="shot invoice"><img src="{img('rent-invoice.png')}"></div>
-<div class="steps"><span><i>1</i> উপরে <b>প্রিন্ট / ডাউনলোড</b> ক্লিক করুন।</span><span><i>2</i> ভাড়ার ইনভয়েসে দুই কপি থাকে—অফিস কপি ও গ্রাহক কপি। প্রিন্টের আগে মাস, ইউনিট, টাকা, তারিখ ও মাধ্যম যাচাই করুন।</span></div>
-''', 10)
-
-page("ইউটিলিটি বিল", "ধাপ ৯", f'''
-<div class="shot"><img src="{img('utility-bills.png')}"></div>
-<div class="steps three"><span><i>1</i> <b>ইউটিলিটি বিল</b> খুলুন।</span><span><i>2</i> <b>বিল যোগ করুন</b> থেকে বিদ্যুৎ/গ্যাস/পানি/অন্যান্য বিল দিন।</span><span><i>3</i> স্ট্যাটাস ও ফিল্টার দেখে পেমেন্ট, আংশিক পেমেন্ট এবং ইনভয়েস পরিচালনা করুন।</span></div>
 ''', 11)
 
-page("স্টাফ ও বেতন", "ধাপ ১০", f'''
-<div class="shot"><img src="{img('staff.png')}"></div>
-<div class="steps"><span><i>1</i> <b>স্টাফ</b> মেনু খুলুন।</span><span><i>2</i> <b>+ কর্মচারী যোগ করুন</b> থেকে নাম, পদ, ফোন ও বেতন দিন। বেতন সাধারণত মাসের ১৫ তারিখ পর্যন্ত সময়মতো; এরপর অপরিশোধিত থাকলে বকেয়া দেখাবে।</span></div>
+page("ইনভয়েস প্রিন্ট বা PDF", "ধাপ ১০", f'''
+<div class="shot invoice"><img src="{img('rent-invoice.png')}"></div>
+<div class="steps"><span><i>1</i> উপরে <b>প্রিন্ট / ডাউনলোড</b> ক্লিক করুন।</span><span><i>2</i> ভাড়ার ইনভয়েসে দুই কপি থাকে—অফিস কপি ও গ্রাহক কপি। প্রিন্টের আগে মাস, ইউনিট, টাকা, তারিখ ও মাধ্যম যাচাই করুন।</span></div>
 ''', 12)
 
-page("লেনদেন ও রিপোর্ট", "ধাপ ১১", f'''
-<div class="split"><div><div class="shot"><img src="{img('transactions.png')}"></div><p class="caption"><i>1</i> লেনদেন খুলুন। <i>2</i> কোম্পানি/অফিস খরচ যোগ করুন। <i>3</i> মালিকের উত্তোলন আলাদা রাখুন।</p></div><div><div class="shot"><img src="{img('reports.png')}"></div><p class="caption"><i>1</i> রিপোর্ট খুলুন। <i>2</i> সঠিক মাস নির্বাচন করে আয়, খরচ ও বকেয়া মিলিয়ে দেখুন।</p></div></div>
-''', 13, "dense")
+page("ইউটিলিটি বিল", "ধাপ ১১", f'''
+<div class="shot"><img src="{img('utility-bills.png')}"></div>
+<div class="steps three"><span><i>1</i> <b>ইউটিলিটি বিল</b> খুলুন।</span><span><i>2</i> <b>বিল যোগ করুন</b> থেকে বিদ্যুৎ/গ্যাস/পানি/অন্যান্য বিল দিন।</span><span><i>3</i> স্ট্যাটাস ও ফিল্টার দেখে পেমেন্ট, আংশিক পেমেন্ট এবং ইনভয়েস পরিচালনা করুন।</span></div>
+''', 13)
 
-page("ইমপোর্ট, এক্সপোর্ট ও ব্যাকআপ", "ধাপ ১২", f'''
+page("স্টাফ ও বেতন", "ধাপ ১২", f'''
+<div class="shot"><img src="{img('staff.png')}"></div>
+<div class="steps"><span><i>1</i> <b>স্টাফ</b> মেনু খুলুন।</span><span><i>2</i> <b>+ কর্মচারী যোগ করুন</b> থেকে নাম, পদ, ফোন ও বেতন দিন। বেতন সাধারণত মাসের ১৫ তারিখ পর্যন্ত সময়মতো; এরপর অপরিশোধিত থাকলে বকেয়া দেখাবে।</span></div>
+''', 14)
+
+page("লেনদেন ও রিপোর্ট", "ধাপ ১৩", f'''
+<div class="split"><div><div class="shot"><img src="{img('transactions.png')}"></div><p class="caption"><i>1</i> লেনদেন খুলুন। <i>2</i> কোম্পানি/অফিস খরচ যোগ করুন। <i>3</i> মালিকের উত্তোলন আলাদা রাখুন।</p></div><div><div class="shot"><img src="{img('reports.png')}"></div><p class="caption"><i>1</i> রিপোর্ট খুলুন। <i>2</i> সঠিক মাস নির্বাচন করে আয়, খরচ ও বকেয়া মিলিয়ে দেখুন।</p></div></div>
+''', 15, "dense")
+
+page("ইমপোর্ট, এক্সপোর্ট ও ব্যাকআপ", "ধাপ ১৪", f'''
 <div class="shot"><img src="{img('import-export.png')}"></div>
 <div class="steps three"><span><i>1</i> <b>ইমপোর্ট/এক্সপোর্ট</b> খুলুন।</span><span><i>2</i> মাস নির্বাচন করে Excel ডাউনলোড করুন—এটাই সহজ ব্যাকআপ।</span><span><i>3</i> অনুমোদিত ফাইল আপলোডের আগে কপি রাখুন; শেষে সফল/ব্যর্থ সারি যাচাই করুন।</span></div>
-''', 14)
+''', 16)
 
 page("মাসিক কাজের চেকলিস্ট", "শেষ ধাপ", '''
 <div class="check-grid">
@@ -189,7 +205,7 @@ page("মাসিক কাজের চেকলিস্ট", "শেষ ধ�
   <article><h3>মাস শেষ</h3><ul><li>রিপোর্টে আয়-খরচ মিলান</li><li>ভুল পেমেন্ট থাকলে এডিট করুন</li><li>Excel এক্সপোর্ট নিয়ে নিরাপদে সংরক্ষণ</li></ul></article>
 </div>
 <div class="support"><b>সমস্যা হলে আগে যাচাই করুন:</b> সঠিক মাস নির্বাচিত কি না, টেন্যান্টের ইউনিট ঠিক কি না, পেমেন্টের পর পেজ রিফ্রেশ হয়েছে কি না, এবং ব্রাউজারের তারিখ/সময় সঠিক কি না।</div>
-''', 15, "checklist")
+''', 17, "checklist")
 
 
 html = f'''<!doctype html><html lang="bn"><head><meta charset="utf-8"><title>রেশমি এন্টারপ্রাইজ ব্যবহার নির্দেশিকা</title><style>
@@ -234,6 +250,8 @@ i {{ display:inline-grid; place-items:center; width:20px; height:20px; border-ra
 .demo-actions span,.demo-actions b {{ padding:2.5mm 4mm; border-radius:8px; border:1px solid #ccd8d3; font-size:12px; }}
 .demo-actions b {{ background:#2867b2; color:#fff; border-color:#2867b2; }}
 .feature-copy {{ display:flex; flex-direction:column; gap:4mm; }}
+.feature-shot .shot {{ padding:2mm; }}
+.feature-shot .shot img {{ object-fit:contain; }}
 .scenario {{ background:#103b31; color:#fff; border-radius:14px; padding:7mm; }}
 .scenario small {{ color:#f5c27d; font-weight:700; letter-spacing:.12em; }}
 .scenario h2 {{ font-size:27px; margin:2mm 0 4mm; line-height:1.18; }}
@@ -256,6 +274,36 @@ i {{ display:inline-grid; place-items:center; width:20px; height:20px; border-ra
 .cover p {{ color:#dcebe6; font-size:18px; }}
 .cover-meta {{ position:absolute; left:22mm; right:22mm; bottom:18mm; display:flex; justify-content:space-between; color:#b9d0c8; font-size:13px; }}
 strong {{ color:#bd4b18; }}
+@media print {{
+  * {{ -webkit-print-color-adjust: exact; print-color-adjust: exact; }}
+  body {{ background:#fff; color:#111; }}
+  .page {{ background:#fff; color:#111; }}
+  header,footer {{ border-color:#5f6368; }}
+  footer,.brand,.demo-label,.demo-help {{ color:#2f3b37; }}
+  .kicker,.eyebrow,.rule-grid b {{ color:#7c2d12; }}
+  h1,.demo-title,.demo-field strong,.check-grid h3 {{ color:#0b2f27; }}
+  .shot,.form-demo,.rule-grid article,.check-grid article {{ border-color:#64748b; box-shadow:none; }}
+  .steps span,.caption,.feature-steps p {{ border-left-color:#92400e; }}
+  i {{ background:#fff; color:#111; border:2px solid #111; }}
+  .warning,.note,.support {{ background:#fff; border:2px solid #8a5a00; color:#332000; }}
+  .demo-tabs {{ background:#f1f1f1; border:1px solid #6b7280; }}
+  .demo-tabs b {{ color:#111; box-shadow:none; border:1px solid #6b7280; }}
+  .demo-tabs span {{ color:#333; }}
+  .demo-field {{ border-color:#6b7280; }}
+  .demo-field.highlight {{ background:#fff; border-color:#92400e; box-shadow:none; }}
+  .demo-field label {{ color:#222; }}
+  .demo-actions b {{ background:#fff; color:#111; border:2px solid #111; }}
+  .scenario {{ background:#fff; color:#111; border:2px solid #111; }}
+  .scenario small {{ color:#7c2d12; }}
+  .scenario p {{ color:#111; }}
+  .cover {{ background:#fff; color:#111; }}
+  .cover-band {{ background:#111; }}
+  .cover .logo {{ border-color:#111; }}
+  .cover h1 {{ color:#111; }}
+  .cover h2 {{ color:#4a2b10; font-weight:700; }}
+  .cover p,.cover-meta {{ color:#222; }}
+  strong {{ color:#7f1d1d; }}
+}}
 </style></head><body>{''.join(pages)}</body></html>'''
 
 (ROOT / "tmp/pdfs/user-guide.html").write_text(html, encoding="utf-8")
