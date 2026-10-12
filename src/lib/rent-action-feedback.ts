@@ -5,6 +5,7 @@ export type RentActionResult =
   | "overdue"
   | "arrearsAdded"
   | "arrearsAlreadyExists"
+  | "historicalRentCorrected"
   | "updated"
   | "deleted";
 

@@ -15,6 +15,7 @@ const RESULTS = new Set<RentActionResult>([
   "overdue",
   "arrearsAdded",
   "arrearsAlreadyExists",
+  "historicalRentCorrected",
   "updated",
   "deleted",
 ]);
@@ -48,6 +49,8 @@ export function RentActionFeedback() {
                 ? t("rentFeedbackArrearsAdded", { count, amount: amountText })
                 : resultValue === "arrearsAlreadyExists"
                   ? t("rentFeedbackArrearsAlreadyExists")
+                  : resultValue === "historicalRentCorrected"
+                    ? t("rentFeedbackHistoricalRentCorrected", { month: monthText, amount: amountText })
               : resultValue === "updated"
                 ? t("rentFeedbackUpdated", { month: monthText })
                 : t("rentFeedbackDeleted", { month: monthText });

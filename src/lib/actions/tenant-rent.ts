@@ -7,7 +7,13 @@ import { prisma } from "@/lib/prisma";
 import { redirect } from "@/i18n/navigation";
 import { buildRentLedger, overdueEntries, totalOverdue, RENT_DUE_DAY } from "@/lib/rent-ledger";
 import { applyRentInstallment, isRentPaymentSettled } from "@/lib/payment-progress";
-import { isPaymentMonth, paymentMonthDueDate, paymentMonthRange, resolvePaymentMonth } from "@/lib/payment-month";
+import {
+  isPaymentMonth,
+  paymentMonthDueDate,
+  paymentMonthRange,
+  previousPaymentMonth,
+  resolvePaymentMonth,
+} from "@/lib/payment-month";
 import { localizedMutationPaths } from "@/lib/localized-revalidation";
 import { withRentActionFeedback } from "@/lib/rent-action-feedback";
 import { numericRentRates, rentTermsDueAmount, resolveRentTermsForMonth } from "@/lib/rent-terms";
@@ -64,6 +70,170 @@ export type RentArrearsCreateErrorCode =
 export type RentArrearsCreateResult =
   | { ok: true }
   | { ok: false; error: RentArrearsCreateErrorCode };
+
+export type HistoricalRentCorrectionErrorCode =
+  | "missingFields"
+  | "invalidMonth"
+  | "beforeLeaseStart"
+  | "futureMonth"
+  | "invalidAmount"
+  | "notFound"
+  | "settledMonths";
+
+export type HistoricalRentCorrectionResult =
+  | { ok: true }
+  | { ok: false; error: HistoricalRentCorrectionErrorCode };
+
+// Repairs a rent that was accidentally configured as zero (or otherwise
+// incorrectly) from a historical month. Missing past-month rows are created,
+// while existing untouched UNPAID rows are recalculated. Any month that has
+// money or an adjustment recorded is protected and makes the whole operation
+// fail atomically so payment history can never be silently rewritten.
+export async function correctHistoricalRent(formData: FormData): Promise<HistoricalRentCorrectionResult> {
+  const locale = await getLocale();
+  const tenantLeaseId = str(formData, "tenantLeaseId");
+  const effectiveMonth = str(formData, "effectiveMonth");
+  const monthlyRentRaw = str(formData, "monthlyRentAmount");
+  const returnTo = str(formData, "returnTo") ?? (tenantLeaseId ? `/tenants/${tenantLeaseId}` : "/tenants");
+  if (!tenantLeaseId || !effectiveMonth || !monthlyRentRaw) return { ok: false, error: "missingFields" };
+  if (!isPaymentMonth(effectiveMonth)) return { ok: false, error: "invalidMonth" };
+
+  const currentMonth = dhakaTodayISO().slice(0, 7);
+  if (effectiveMonth > currentMonth) return { ok: false, error: "futureMonth" };
+  const monthlyRentAmount = Number(monthlyRentRaw);
+  if (!Number.isFinite(monthlyRentAmount) || monthlyRentAmount <= 0) {
+    return { ok: false, error: "invalidAmount" };
+  }
+
+  const result = await prisma.$transaction(async (tx) => {
+    const lease = await tx.tenantLease.findUnique({
+      where: { id: tenantLeaseId },
+      include: { rentRates: { orderBy: { effectiveMonth: "asc" } } },
+    });
+    if (!lease) return { error: "notFound" as const };
+
+    const leaseStartMonth = dhakaISO(lease.startDate).slice(0, 7);
+    if (effectiveMonth < leaseStartMonth) return { error: "beforeLeaseStart" as const };
+
+    const fallbackTerms = leaseFallbackTerms(lease);
+    const rates = numericRentRates(lease.rentRates);
+    const existingTerms = resolveRentTermsForMonth(fallbackTerms, rates, effectiveMonth);
+    const correctedTerms = { ...existingTerms, monthlyRentAmount };
+    const correctedDueAmount = rentTermsDueAmount(correctedTerms);
+    const nextRate = lease.rentRates.find((rate) => rate.effectiveMonth > effectiveMonth);
+    const affectedEndMonth = nextRate
+      ? previousPaymentMonth(nextRate.effectiveMonth)
+      : currentMonth;
+
+    const affectedPayments = await tx.rentPayment.findMany({
+      where: {
+        tenantLeaseId,
+        month: { gte: effectiveMonth, lte: affectedEndMonth },
+      },
+      select: {
+        status: true,
+        paidAmount: true,
+        transactions: { select: { id: true }, take: 1 },
+        downpaymentAdjustments: { select: { id: true }, take: 1 },
+      },
+    });
+    const hasProtectedPayment = affectedPayments.some(
+      (payment) =>
+        payment.status !== "UNPAID" ||
+        Number(payment.paidAmount) > 0 ||
+        payment.transactions.length > 0 ||
+        payment.downpaymentAdjustments.length > 0
+    );
+    if (hasProtectedPayment) return { error: "settledMonths" as const };
+
+    const hasEarlierRate = lease.rentRates.some((rate) => rate.effectiveMonth < effectiveMonth);
+    if (effectiveMonth > leaseStartMonth && !hasEarlierRate) {
+      await tx.tenantRentRate.upsert({
+        where: { tenantLeaseId_effectiveMonth: { tenantLeaseId, effectiveMonth: leaseStartMonth } },
+        update: {},
+        create: {
+          tenantLeaseId,
+          effectiveMonth: leaseStartMonth,
+          monthlyRentAmount: lease.monthlyRentAmount,
+          serviceChargeType: lease.serviceChargeType,
+          serviceChargeValue: lease.serviceChargeValue,
+        },
+      });
+    }
+
+    await tx.tenantRentRate.upsert({
+      where: { tenantLeaseId_effectiveMonth: { tenantLeaseId, effectiveMonth } },
+      update: {
+        monthlyRentAmount: monthlyRentRaw,
+        serviceChargeType: correctedTerms.serviceChargeType,
+        serviceChargeValue: correctedTerms.serviceChargeValue,
+      },
+      create: {
+        tenantLeaseId,
+        effectiveMonth,
+        monthlyRentAmount: monthlyRentRaw,
+        serviceChargeType: correctedTerms.serviceChargeType,
+        serviceChargeValue: correctedTerms.serviceChargeValue,
+      },
+    });
+
+    await tx.rentPayment.updateMany({
+      where: {
+        tenantLeaseId,
+        month: { gte: effectiveMonth, lte: affectedEndMonth },
+      },
+      data: { dueAmount: correctedDueAmount },
+    });
+
+    const lastHistoricalMonth = previousPaymentMonth(currentMonth);
+    const historicalEndMonth = affectedEndMonth < lastHistoricalMonth ? affectedEndMonth : lastHistoricalMonth;
+    const historicalMonths =
+      effectiveMonth <= historicalEndMonth
+        ? paymentMonthRange(effectiveMonth, historicalEndMonth, 240)
+        : [];
+    if (historicalMonths.length > 0) {
+      const existingRows = await tx.rentPayment.findMany({
+        where: { tenantLeaseId, month: { in: historicalMonths } },
+        select: { month: true },
+      });
+      const existingMonths = new Set(existingRows.map((payment) => payment.month));
+      await tx.rentPayment.createMany({
+        data: historicalMonths
+          .filter((month) => !existingMonths.has(month))
+          .map((month) => ({
+            tenantLeaseId,
+            month,
+            dueDate: paymentMonthDueDate(month, RENT_DUE_DAY),
+            dueAmount: correctedDueAmount,
+            paidAmount: 0,
+            status: "UNPAID" as const,
+            paidAt: null,
+          })),
+        skipDuplicates: true,
+      });
+    }
+
+    if (!nextRate) {
+      await tx.tenantLease.update({
+        where: { id: tenantLeaseId },
+        data: { monthlyRentAmount: monthlyRentRaw },
+      });
+    }
+
+    return { correctedDueAmount };
+  });
+
+  if ("error" in result && result.error) return { ok: false, error: result.error };
+  revalidateLocalizedPath(locale, returnTo);
+  redirect({
+    href: withRentActionFeedback(returnTo, "historicalRentCorrected", {
+      month: effectiveMonth,
+      amount: monthlyRentAmount,
+    }),
+    locale,
+  });
+  return { ok: true };
+}
 
 // Adds explicit UNPAID rows for historical months that predate the ledger
 // cutover. Existing rows are never changed, so a paid/partial month cannot be

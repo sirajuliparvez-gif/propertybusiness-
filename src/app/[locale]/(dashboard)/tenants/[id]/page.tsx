@@ -26,6 +26,7 @@ import { EditTenantDialog } from "@/components/properties/edit-tenant-dialog";
 import { EditRentPaymentDialog } from "@/components/properties/edit-rent-payment-dialog";
 import { DeleteRentPaymentButton } from "@/components/properties/delete-rent-payment-button";
 import { AddRentArrearsDialog } from "@/components/properties/add-rent-arrears-dialog";
+import { CorrectHistoricalRentDialog } from "@/components/properties/correct-historical-rent-dialog";
 import { AddUtilityBillDialog } from "@/components/properties/add-utility-bill-dialog";
 import { UtilityBillsTable } from "@/components/properties/utility-bills-table";
 import { MobileUtilityBillsList } from "@/components/mobile/mobile-utility-bills-list";
@@ -162,6 +163,12 @@ export default async function TenantProfilePage({
                   returnTo={`/tenants/${tenant.id}`}
                 />
               ) : null}
+              <CorrectHistoricalRentDialog
+                tenantLeaseId={tenant.id}
+                leaseStartMonth={leaseStartMonth}
+                currentMonthlyRent={tenant.monthlyRentAmount}
+                returnTo={`/tenants/${tenant.id}`}
+              />
               <RecordTenantRentPaymentDialog
                 propertyId={tenant.propertyId}
                 tenantLeaseId={tenant.id}

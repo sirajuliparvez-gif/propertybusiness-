@@ -136,6 +136,22 @@ test("rent increases take effect only from their configured month", () => {
   assert.equal(rentTermsDueAmount(resolveRentTermsForMonth(fallback, rates, "2026-11")), 22_000);
 });
 
+test("a historical correction preserves the earlier zero-rent period", () => {
+  const latestFallback = {
+    monthlyRentAmount: 15_000,
+    serviceChargeType: null,
+    serviceChargeValue: null,
+  } as const;
+  const rates = [
+    { ...latestFallback, effectiveMonth: "2026-07", monthlyRentAmount: 0 },
+    { ...latestFallback, effectiveMonth: "2026-08" },
+  ];
+
+  assert.equal(rentTermsDueAmount(resolveRentTermsForMonth(latestFallback, rates, "2026-07")), 0);
+  assert.equal(rentTermsDueAmount(resolveRentTermsForMonth(latestFallback, rates, "2026-08")), 15_000);
+  assert.equal(rentTermsDueAmount(resolveRentTermsForMonth(latestFallback, rates, "2026-10")), 15_000);
+});
+
 test("a recorded partial bill keeps its original due after a later rent increase", () => {
   const fallback = {
     monthlyRentAmount: 22_000,
