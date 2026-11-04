@@ -30,7 +30,7 @@ export default async function MonthlyTransactionReportPage({ searchParams }: { s
   const columns = [t("date"), t("transactionReportDetails"), t("propertyLabel"), t("paymentMethod"), t("transactionReportIncoming"), t("transactionReportOutgoing"), t("transactionReportBalance")];
   return <div className="flex min-w-0 flex-col gap-5">
     <div className="flex flex-wrap items-center justify-between gap-3 print:hidden">
-      <Button variant="outline" render={<Link href="/transactions" />} nativeButton={false}><ArrowLeft className="size-4" />{t("transactionsPageTitle")}</Button>
+      <Button variant="outline" render={<Link href={`/transactions?month=${month}`} />} nativeButton={false}><ArrowLeft className="size-4" />{t("transactionsPageTitle")}</Button>
       <div className="flex flex-wrap items-center gap-2"><ReportMonthSelect month={month} months={months} basePath="/transactions/report" /><InvoicePrintButton /></div>
     </div>
     <article data-testid="invoice" className={`${styles.report} ${styles.transactionPrint}`}>

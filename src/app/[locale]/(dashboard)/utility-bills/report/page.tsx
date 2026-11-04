@@ -27,7 +27,7 @@ export default async function MonthlyUtilityReportPage({ searchParams }: { searc
   const statusLabels = { PAID: t("paid"), PARTIAL: t("utilityReportPartial"), UNPAID: t("billStatusUnpaid") };
   return <div className="flex min-w-0 flex-col gap-5">
     <div className="flex flex-wrap items-center justify-between gap-3 print:hidden">
-      <Button variant="outline" render={<Link href="/utility-bills" />} nativeButton={false}><ArrowLeft className="size-4" />{t("utilityBillsSection")}</Button>
+      <Button variant="outline" render={<Link href={`/utility-bills?month=${month}`} />} nativeButton={false}><ArrowLeft className="size-4" />{t("utilityBillsSection")}</Button>
       <div className="flex flex-wrap items-center gap-2">
         <ReportMonthSelect month={month} months={months} basePath="/utility-bills/report" />
         <InvoicePrintButton />

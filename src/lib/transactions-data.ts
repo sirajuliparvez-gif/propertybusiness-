@@ -1,19 +1,11 @@
-import { dhakaNow } from "@/lib/dhaka-time";
+import { resolveListMonth, listMonthOptions } from "@/lib/list-month";
+import { dhakaISO } from "@/lib/dhaka-time";
 import { prisma } from "@/lib/prisma";
 import { INCOME_TYPES, EXPENSE_TYPES } from "@/lib/finance-types";
 import { isDirectlyEditableTransactionType } from "@/lib/transaction-edit";
 
-function monthRange(now: Date) {
-  return {
-    monthStart: new Date(now.getFullYear(), now.getMonth(), 1),
-    monthEnd: new Date(now.getFullYear(), now.getMonth() + 1, 1),
-  };
-}
-
-export async function getAllTransactionsData() {
-  const now = dhakaNow();
-  const { monthStart, monthEnd } = monthRange(now);
-
+export async function getAllTransactionsData(requestedMonth?: string) {
+  const scope = resolveListMonth(requestedMonth);
   const transactions = await prisma.transaction.findMany({
     orderBy: { date: "desc" },
     select: {
@@ -83,11 +75,11 @@ export async function getAllTransactionsData() {
     };
   });
 
-  const thisMonth = rows.filter((r) => r.date >= monthStart && r.date < monthEnd);
-  const totalIncome = thisMonth
+  const scopedRows = scope.selectedMonth ? rows.filter((row) => row.date >= scope.start && row.date < scope.end) : rows;
+  const totalIncome = scopedRows
     .filter((r) => (INCOME_TYPES as readonly string[]).includes(r.type))
     .reduce((sum, r) => sum + r.amount, 0);
-  const totalExpense = thisMonth
+  const totalExpense = scopedRows
     .filter((r) => (EXPENSE_TYPES as readonly string[]).includes(r.type))
     .reduce((sum, r) => sum + r.amount, 0);
 
@@ -97,11 +89,14 @@ export async function getAllTransactionsData() {
   );
 
   return {
-    transactions: rows,
+    transactions: scopedRows,
+    selectedMonth: scope.selectedMonth,
+    currentMonth: scope.currentMonth,
+    availableMonths: listMonthOptions(rows.map((row) => dhakaISO(row.date).slice(0, 7)), scope.currentMonth, scope.selectedMonth),
     totalIncome,
     totalExpense,
     net: totalIncome - totalExpense,
-    entryCount: thisMonth.length,
+    entryCount: scopedRows.length,
     properties,
   };
 }

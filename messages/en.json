@@ -135,6 +135,14 @@
     "viewAll": "View all"
   },
   "Properties": {
+    "historicalPayrollViewHint": "Viewing historical payroll. Open a staff profile to record or review salary payments.",
+    "monthFilterLabel": "Month",
+    "allMonths": "All months",
+    "monthFilterLoading": "Loading selected month…",
+    "periodOperatingIncome": "Operating income",
+    "periodOperatingExpense": "Operating expenses",
+    "periodOperatingNet": "Operating net",
+    "periodStaffCount": "Staff in selected month",
     "transactionReportTitle": "Monthly transaction report",
     "transactionReportDetails": "Transaction details",
     "transactionReportIncoming": "Money in",

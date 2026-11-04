@@ -135,6 +135,14 @@
     "viewAll": "সব দেখুন"
   },
   "Properties": {
+    "historicalPayrollViewHint": "পুরোনো মাসের বেতন দেখছেন। বেতন পরিশোধের এন্ট্রি দিতে বা বিস্তারিত দেখতে স্টাফের প্রোফাইল খুলুন।",
+    "monthFilterLabel": "মাস",
+    "allMonths": "সব মাস",
+    "monthFilterLoading": "নির্বাচিত মাস লোড হচ্ছে…",
+    "periodOperatingIncome": "পরিচালন আয়",
+    "periodOperatingExpense": "পরিচালন ব্যয়",
+    "periodOperatingNet": "পরিচালন নিট হিসাব",
+    "periodStaffCount": "নির্বাচিত মাসের স্টাফ",
     "transactionReportTitle": "মাসিক লেনদেন রিপোর্ট",
     "transactionReportDetails": "লেনদেনের বিবরণ",
     "transactionReportIncoming": "টাকা এসেছে",

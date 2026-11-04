@@ -26,7 +26,7 @@ export default async function MonthlySalaryReportPage({ searchParams }: { search
   const statusLabels = { PAID: t("paid"), PARTIAL: t("utilityReportPartial"), PENDING: t("salaryReportUnpaid") };
   return <div className="flex min-w-0 flex-col gap-5">
     <div className="flex flex-wrap items-center justify-between gap-3 print:hidden">
-      <Button variant="outline" render={<Link href="/employees" />} nativeButton={false}><ArrowLeft className="size-4" />{t("staff")}</Button>
+      <Button variant="outline" render={<Link href={`/employees?month=${month}`} />} nativeButton={false}><ArrowLeft className="size-4" />{t("staff")}</Button>
       <div className="flex flex-wrap items-center gap-2">
         <ReportMonthSelect month={month} months={months} basePath="/employees/report" />
         <InvoicePrintButton />

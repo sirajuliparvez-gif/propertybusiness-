@@ -1,3 +1,6 @@
+import { resolveListMonth, listMonthOptions } from "@/lib/list-month";
+import { buildMonthlySalaryReport } from "@/lib/monthly-salary-report";
+import { paymentMonthRange } from "@/lib/payment-month";
 import { cache } from "react";
 import { dhakaNow } from "@/lib/dhaka-time";
 import { prisma } from "@/lib/prisma";
@@ -8,6 +11,8 @@ import {
   totalOverdue,
   totalPastDue,
   SALARY_DUE_DAY,
+  LEDGER_START_MONTH,
+  isMonthPastDue,
 } from "@/lib/rent-ledger";
 
 // PayrollStatus has PENDING where RentPaymentStatus has UNPAID (same
@@ -42,7 +47,8 @@ export async function getActiveProperties() {
   });
 }
 
-export const getAllStaffData = cache(async function getAllStaffData() {
+export const getAllStaffData = cache(async function getAllStaffData(requestedMonth?: string) {
+  const scope = resolveListMonth(requestedMonth);
   const now = dhakaNow();
   const { monthStart, monthEnd } = monthRange(now);
 
@@ -80,7 +86,18 @@ export const getAllStaffData = cache(async function getAllStaffData() {
     }),
   ]);
 
+  const monthlyReport = scope.selectedMonth ? buildMonthlySalaryReport(employees.map((employee) => {
+    const payment = employee.payrollRecords.find((record) => record.month === scope.selectedMonth);
+    return {
+      ...employee, propertyId: employee.property?.id ?? null, propertyName: employee.property?.name ?? null,
+      salaryAmount: Number(employee.salaryAmount),
+      payment: payment ? { dueAmount: payment.dueAmount == null ? null : Number(payment.dueAmount), amountPaid: Number(payment.amountPaid), paidAt: payment.paidAt } : null,
+    };
+  }), scope.selectedMonth) : null;
+  const monthlyById = new Map(monthlyReport?.rows.map((row) => [row.id, row]) ?? []);
+
   const staff = employees.map((e) => {
+    const monthly = monthlyById.get(e.id);
     const asOf = e.status === "ACTIVE" ? dhakaNow() : (e.terminatedAt ?? dhakaNow());
     const ledger = buildRentLedger(
       e.joinedAt,
@@ -101,7 +118,7 @@ export const getAllStaffData = cache(async function getAllStaffData() {
     const overdue = overdueEntries(ledger);
     const overdueAmount = e.status === "ACTIVE" ? totalOverdue(ledger) : 0;
     const pastDueAmount = e.status === "ACTIVE" ? totalPastDue(ledger) : 0;
-    const currentEntry = ledger[ledger.length - 1] ?? null;
+    const currentEntry = scope.selectedMonth ? ledger.find((entry) => entry.month === scope.selectedMonth) ?? null : ledger[ledger.length - 1] ?? null;
     return {
       id: e.id,
       name: e.name,
@@ -111,30 +128,37 @@ export const getAllStaffData = cache(async function getAllStaffData() {
       propertyName: e.property?.name ?? null,
       joinedAt: e.joinedAt,
       terminatedAt: e.terminatedAt,
-      salaryAmount: Number(e.salaryAmount),
+      salaryAmount: monthly?.due ?? Number(e.salaryAmount),
       status: e.status,
-      payrollStatus: e.status === "ACTIVE" ? (currentEntry ? fromLedgerStatus(currentEntry.status) : null) : null,
+      payrollStatus: scope.selectedMonth ? monthly?.status ?? null : e.status === "ACTIVE" ? (currentEntry ? fromLedgerStatus(currentEntry.status) : null) : null,
       paymentMethod: currentEntry?.method ?? null,
-      overdueAmount,
-      overdueMonths: e.status === "ACTIVE" ? overdue : [],
-      pastDueAmount,
-      pastDueMonthsCount: e.status === "ACTIVE" ? pastDueEntries(ledger).length : 0,
-      payrollPastDue: e.status === "ACTIVE" && (currentEntry?.pastDue ?? false),
+      overdueAmount: scope.selectedMonth ? monthly?.remaining ?? 0 : overdueAmount,
+      overdueMonths: scope.selectedMonth ? overdue.filter((entry) => entry.month === scope.selectedMonth) : e.status === "ACTIVE" ? overdue : [],
+      pastDueAmount: scope.selectedMonth ? (isMonthPastDue(scope.selectedMonth, SALARY_DUE_DAY, now) ? monthly?.remaining ?? 0 : 0) : pastDueAmount,
+      pastDueMonthsCount: scope.selectedMonth ? (monthly && monthly.remaining > 0 && isMonthPastDue(scope.selectedMonth, SALARY_DUE_DAY, now) ? 1 : 0) : e.status === "ACTIVE" ? pastDueEntries(ledger).length : 0,
+      payrollPastDue: scope.selectedMonth ? Boolean(monthly && monthly.remaining > 0 && isMonthPastDue(scope.selectedMonth, SALARY_DUE_DAY, now)) : e.status === "ACTIVE" && (currentEntry?.pastDue ?? false),
     };
   });
 
-  const activeStaff = staff.filter((s) => s.status === "ACTIVE");
-  const totalMonthlyPayroll = activeStaff.reduce((sum, s) => sum + s.salaryAmount, 0);
-  const totalOverduePayroll = activeStaff.reduce((sum, s) => sum + s.overdueAmount, 0);
+  const scopedStaff = scope.selectedMonth ? staff.filter((employee) => monthlyById.has(employee.id)) : staff;
+  const activeStaff = scopedStaff.filter((s) => s.status === "ACTIVE");
+  const totalMonthlyPayroll = monthlyReport?.totals.due ?? activeStaff.reduce((sum, s) => sum + s.salaryAmount, 0);
+  const totalOverduePayroll = monthlyReport?.totals.remaining ?? activeStaff.reduce((sum, s) => sum + s.overdueAmount, 0);
   const totalPastDuePayroll = activeStaff.reduce((sum, s) => sum + s.pastDueAmount, 0);
-  const paidThisMonth = Number(paidThisMonthAgg._sum.amount ?? 0);
+  const paidThisMonth = monthlyReport?.totals.paid ?? Number(paidThisMonthAgg._sum.amount ?? 0);
   const settledThisMonthCount = activeStaff.filter((s) => s.payrollStatus === "PAID").length;
-  const payrollSettledRate =
+  const payrollSettledRate = monthlyReport ? (monthlyReport.rows.length > 0 ? Math.round(monthlyReport.rows.filter((row) => row.status === "PAID").length / monthlyReport.rows.length * 100) : 0) :
     activeStaff.length > 0 ? Math.round((settledThisMonthCount / activeStaff.length) * 100) : 0;
 
   return {
-    staff,
-    totalActiveStaff: activeStaff.length,
+    staff: scopedStaff,
+    selectedMonth: scope.selectedMonth,
+    currentMonth: scope.currentMonth,
+    availableMonths: listMonthOptions([
+      ...employees.flatMap((employee) => employee.payrollRecords.map((record) => record.month)),
+      ...(scope.currentMonth >= LEDGER_START_MONTH ? paymentMonthRange(LEDGER_START_MONTH, scope.currentMonth, 600) : []),
+    ], scope.currentMonth, scope.selectedMonth),
+    totalActiveStaff: scope.selectedMonth ? scopedStaff.length : activeStaff.length,
     totalMonthlyPayroll,
     paidThisMonth,
     totalOverduePayroll,

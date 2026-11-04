@@ -21,12 +21,16 @@ type Filter = "all" | "paid" | "overdue" | "inactive" | "former";
 export function MobileStaffList({
   staff,
   propertyId,
+  selectedMonth,
+  readOnlyPayroll = false,
 }: {
   staff: PropertyDetail["staff"] | AllStaffData["staff"];
   // Set on the per-property page (single-property staff list, no per-row
   // propertyId/propertyName) so the payroll dialog still knows which
   // property it's recording against — mirrors StaffTable's own `propertyId` prop.
   propertyId?: string;
+  selectedMonth?: string;
+  readOnlyPayroll?: boolean;
 }) {
   const t = useTranslations("Properties");
   const [filter, setFilter] = useState<Filter>("all");
@@ -34,12 +38,12 @@ export function MobileStaffList({
   const payrollStatusLabels = { PAID: t("paid"), PARTIAL: t("pending"), PENDING: t("dueInPeriod"), UNPAID: t("overdueStatus") };
 
   const filtered = useMemo(() => {
-    if (filter === "paid") return staff.filter((s) => s.status === "ACTIVE" && isRentSettled(s.payrollStatus, s.overdueAmount));
-    if (filter === "overdue") return staff.filter((s) => s.status === "ACTIVE" && s.pastDueAmount > 0);
+    if (filter === "paid") return staff.filter((s) => (selectedMonth || s.status === "ACTIVE") && isRentSettled(s.payrollStatus, s.overdueAmount));
+    if (filter === "overdue") return staff.filter((s) => (selectedMonth || s.status === "ACTIVE") && s.pastDueAmount > 0);
     if (filter === "inactive") return staff.filter((s) => s.status === "INACTIVE");
     if (filter === "former") return staff.filter((s) => s.status === "TERMINATED");
     return staff;
-  }, [staff, filter]);
+  }, [staff, filter, selectedMonth]);
 
   if (staff.length === 0) {
     return <p className="py-8 text-center text-sm text-muted-foreground md:hidden">{t("noStaff")}</p>;
@@ -104,11 +108,11 @@ export function MobileStaffList({
                     <p className="font-mono text-sm font-semibold tabular-nums">
                       {formatTaka(s.salaryAmount)}
                     </p>
-                    {isTerminated ? (
+                    {isTerminated && !selectedMonth ? (
                       <Badge className="border-transparent bg-muted text-muted-foreground">
                         {t("filterFormer")}
                       </Badge>
-                    ) : isInactive ? (
+                    ) : isInactive && !selectedMonth ? (
                       <Badge className="border-transparent bg-muted text-muted-foreground">
                         {t("inactiveLabel")}
                       </Badge>
@@ -124,7 +128,7 @@ export function MobileStaffList({
                     )}
                   </div>
                 </Link>
-                {isTerminated && s.terminatedAt ? (
+                {isTerminated && !selectedMonth && s.terminatedAt ? (
                   <p className="border-t px-4 py-2 text-xs text-muted-foreground">
                     {formatDate(s.terminatedAt)}
                   </p>
@@ -134,14 +138,14 @@ export function MobileStaffList({
                       variant="outline"
                       size="icon-sm"
                       title={t("salarySlipTitle")}
-                      render={<Link href={`/employees/${s.id}/invoice`} />}
+                      render={<Link href={`/employees/${s.id}/invoice${selectedMonth ? `?month=${selectedMonth}` : ""}`} />}
                       nativeButton={false}
                       className="border-primary/40 text-primary hover:bg-primary/10"
                     >
                       <Printer className="size-3.5" />
                       <span className="sr-only">{t("salarySlipTitle")}</span>
                     </Button>
-                    {s.status === "ACTIVE" ? (
+                    {s.status === "ACTIVE" && !readOnlyPayroll ? (
                       <RecordPayrollPaymentDialog
                         propertyId={rowPropertyId}
                         employeeId={s.id}
