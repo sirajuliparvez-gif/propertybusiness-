@@ -120,6 +120,12 @@
 .transactionTable { min-width:960px; }
 .transactionDetails { min-width:200px; overflow-wrap:anywhere; }
 @media print {
+  .arrearsPrint { page:rentArrearsReport; }
+  .arrearsPrint thead { display:table-header-group; }
+  .arrearsPrint tfoot { display:table-row-group; }
+  .arrearsPrint tr { break-inside:avoid; }
+}
+@media print {
   .transactionPrint { page:monthlyTransactionReport; }
   .transactionTable { min-width:0; font-size:9px; }
   .transactionTable th,.transactionTable td { padding:7px 6px; }
