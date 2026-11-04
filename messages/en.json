@@ -135,6 +135,18 @@
     "viewAll": "View all"
   },
   "Properties": {
+    "transactionReportTitle": "Monthly transaction report",
+    "transactionReportDetails": "Transaction details",
+    "transactionReportIncoming": "Money in",
+    "transactionReportOutgoing": "Money out",
+    "transactionReportBalance": "Running ledger balance",
+    "transactionReportNet": "Net movement",
+    "transactionReportOpening": "Opening ledger balance",
+    "transactionReportClosing": "Closing ledger balance",
+    "transactionReportCount": "Transactions: {count}",
+    "transactionReportEmpty": "No transactions recorded for this month.",
+    "transactionReportBasis": "Transactions are grouped by their actual date in Bangladesh time, rather than their rent or salary billing month. All recorded movements are included: advances, refunds, utility collections and owner withdrawals.",
+    "transactionReportScope": "Opening balance is all recorded money in minus money out before this month. Closing balance = opening + this month’s money in − money out. This is a ledger balance starting from zero at the first recorded entry, not a verified cash or bank balance, and not a profit-and-loss report. Same-date entries follow their creation order.",
     "salaryReportTitle": "Monthly staff salary report",
     "salaryReportStaff": "Staff / role",
     "salaryReportOutstanding": "Salary outstanding",

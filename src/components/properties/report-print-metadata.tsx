@@ -11,7 +11,7 @@ export function ReportPrintMetadata({ initialDate, locale, dateLabel, pageLabel,
   pageLabel: string;
   title: string;
   month: string;
-  pageName?: "monthlyRentReport" | "monthlyFinancialReport" | "monthlyUtilityReport" | "monthlySalaryReport";
+  pageName?: "monthlyRentReport" | "monthlyFinancialReport" | "monthlyUtilityReport" | "monthlySalaryReport" | "monthlyTransactionReport";
 }) {
   const [printDate, setPrintDate] = useState(initialDate);
   useEffect(() => {

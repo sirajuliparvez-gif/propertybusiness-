@@ -116,3 +116,15 @@
   .salaryPrint tfoot { display:table-row-group; }
   .salaryPrint tr { break-inside:avoid; }
 }
+
+.transactionTable { min-width:960px; }
+.transactionDetails { min-width:200px; overflow-wrap:anywhere; }
+@media print {
+  .transactionPrint { page:monthlyTransactionReport; }
+  .transactionTable { min-width:0; font-size:9px; }
+  .transactionTable th,.transactionTable td { padding:7px 6px; }
+  .transactionDetails { min-width:0; width:28%; }
+  .transactionPrint thead { display:table-header-group; }
+  .transactionPrint tfoot { display:table-row-group; }
+  .transactionPrint tr { break-inside:avoid; }
+}

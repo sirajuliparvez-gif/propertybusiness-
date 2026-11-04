@@ -135,6 +135,18 @@
     "viewAll": "সব দেখুন"
   },
   "Properties": {
+    "transactionReportTitle": "মাসিক লেনদেন রিপোর্ট",
+    "transactionReportDetails": "লেনদেনের বিবরণ",
+    "transactionReportIncoming": "টাকা এসেছে",
+    "transactionReportOutgoing": "টাকা গেছে",
+    "transactionReportBalance": "চলমান লেজার ব্যালেন্স",
+    "transactionReportNet": "নিট টাকার পরিবর্তন",
+    "transactionReportOpening": "শুরুর লেজার ব্যালেন্স",
+    "transactionReportClosing": "শেষের লেজার ব্যালেন্স",
+    "transactionReportCount": "লেনদেন: {count}টি",
+    "transactionReportEmpty": "এই মাসে কোনো লেনদেন পাওয়া যায়নি।",
+    "transactionReportBasis": "বাংলাদেশ সময় অনুযায়ী লেনদেনের তারিখ ধরে মাসিক হিসাব। ভাড়া বা বেতনের বিলের মাস নয়, যেদিন টাকা এসেছে বা গেছে সেই মাসে দেখানো হয়েছে। অগ্রিম, ফেরত, ইউটিলিটি আদায় ও মালিকের উত্তোলনসহ সব রেকর্ডকৃত টাকার চলাচল অন্তর্ভুক্ত।",
+    "transactionReportScope": "শুরুর ব্যালেন্স হলো এই মাসের আগে রেকর্ডকৃত মোট টাকা আসা থেকে মোট টাকা যাওয়ার বিয়োগফল। শেষের ব্যালেন্স = শুরুর ব্যালেন্স + এই মাসে টাকা আসা − টাকা যাওয়া। এটি প্রথম রেকর্ড থেকে শূন্য ভিত্তিতে গণনা করা লেজার ব্যালেন্স; যাচাইকৃত নগদ বা ব্যাংক ব্যালেন্স নয়। এটি লাভ-ক্ষতির রিপোর্টও নয়। একই তারিখের লেনদেন এন্ট্রি তৈরির ক্রমে দেখানো হয়েছে।",
     "salaryReportTitle": "মাসিক স্টাফ বেতন রিপোর্ট",
     "salaryReportStaff": "স্টাফ / পদবি",
     "salaryReportOutstanding": "বেতন বাকি",

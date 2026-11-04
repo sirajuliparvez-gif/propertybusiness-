@@ -1,5 +1,7 @@
+import { Link } from "@/i18n/navigation";
+import { Button } from "@/components/ui/button";
 import { getTranslations } from "next-intl/server";
-import { TrendingUp, TrendingDown, Wallet, ListChecks } from "lucide-react";
+import { TrendingUp, TrendingDown, Wallet, ListChecks, FileText } from "lucide-react";
 import { getAllTransactionsData, getPropertyUnitOptions } from "@/lib/transactions-data";
 import { TransactionsTable } from "@/components/properties/transactions-table";
 import { MobileTransactionsList } from "@/components/mobile/mobile-transactions-list";
@@ -20,7 +22,8 @@ export default async function TransactionsPage() {
           <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">{t("transactionsPageTitle")}</h1>
           <p className="text-sm text-muted-foreground">{t("transactionsPageSubtitle")}</p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2">
+          <Button variant="outline" render={<Link href="/transactions/report" />} nativeButton={false}><FileText className="size-4" />{t("transactionReportTitle")}</Button>
           <AddOwnerWithdrawalDialogGlobal />
           <AddExpenseDialogGlobal properties={propertyUnitOptions} />
         </div>
