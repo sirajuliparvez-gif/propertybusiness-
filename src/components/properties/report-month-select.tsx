@@ -6,7 +6,7 @@ import { LoaderCircle } from "lucide-react";
 import { useRouter } from "@/i18n/navigation";
 import { monthLabel } from "@/lib/format";
 
-export function ReportMonthSelect({ month, months, basePath = "/rent/report", allowAll = false }: { month: string; months: string[]; basePath?: string; allowAll?: boolean }) {
+export function ReportMonthSelect({ month, months, basePath = "/rent/report", allowAll = false, label }: { month: string; months: string[]; basePath?: string; allowAll?: boolean; label?: string }) {
   const locale = useLocale();
   const t = useTranslations("Properties");
   const router = useRouter();
@@ -14,7 +14,7 @@ export function ReportMonthSelect({ month, months, basePath = "/rent/report", al
 
   return (
     <div className="flex items-center gap-2" aria-busy={pending}>
-      <label className="sr-only" htmlFor="report-month">{t(allowAll ? "monthFilterLabel" : "rentMonthFilter")}</label>
+      <label className="sr-only" htmlFor="report-month">{label ?? t(allowAll ? "monthFilterLabel" : "rentMonthFilter")}</label>
       <select
         id="report-month"
         name="month"

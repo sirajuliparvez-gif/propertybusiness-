@@ -1,6 +1,7 @@
-import { dhakaNow } from "@/lib/dhaka-time";
-import { INCOME_TYPES, EXPENSE_TYPES } from "@/lib/finance-types";
-import { getTranslations } from "next-intl/server";
+import { resolveListMonth } from "@/lib/list-month";
+import { dashboardMonthKeys } from "@/lib/dashboard-period";
+import { ReportMonthSelect } from "@/components/properties/report-month-select";
+import { getLocale, getTranslations } from "next-intl/server";
 import {
   Building2,
   Users,
@@ -16,7 +17,7 @@ import {
   History,
 } from "lucide-react";
 import { prisma } from "@/lib/prisma";
-import { formatTaka } from "@/lib/format";
+import { formatTaka, monthLabel } from "@/lib/format";
 import { StatTile } from "@/components/stat-tile";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
@@ -37,16 +38,15 @@ import { MobileDashboard } from "@/components/mobile/mobile-dashboard";
 
 export type DashboardData = Awaited<ReturnType<typeof getDashboardData>>;
 
-async function getDashboardData() {
-  const now = dhakaNow();
-  const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
-  const monthEnd = new Date(now.getFullYear(), now.getMonth() + 1, 1);
+async function getDashboardData(requestedMonth?: string) {
+  const scope = resolveListMonth(requestedMonth);
+  const selectedMonth = scope.selectedMonth ?? scope.currentMonth;
+  const monthStart = scope.start;
+  const monthEnd = scope.end;
 
   const [
     activeProperties,
     activeTenantLeases,
-    incomeAgg,
-    expenseAgg,
     utilityExpenseAgg,
     recentTransactions,
     actionRequired,
@@ -60,14 +60,6 @@ async function getDashboardData() {
   ] = await Promise.all([
     prisma.property.count({ where: { status: "ACTIVE" } }),
     prisma.tenantLease.count({ where: { status: "ACTIVE" } }),
-    prisma.transaction.aggregate({
-      _sum: { amount: true },
-      where: { type: { in: [...INCOME_TYPES] }, date: { gte: monthStart, lt: monthEnd } },
-    }),
-    prisma.transaction.aggregate({
-      _sum: { amount: true },
-      where: { type: { in: [...EXPENSE_TYPES] }, date: { gte: monthStart, lt: monthEnd } },
-    }),
     // Broken out separately so the expense stat tile can show how much of
     // this month's outgoing money was a company-absorbed utility bill
     // (penalty/loss) instead of that being invisible inside one lump sum.
@@ -77,6 +69,7 @@ async function getDashboardData() {
     }),
     prisma.transaction.findMany({
       take: 6,
+      where: { date: { gte: monthStart, lt: monthEnd } },
       orderBy: { date: "desc" },
       include: {
         property: { select: { name: true } },
@@ -84,20 +77,22 @@ async function getDashboardData() {
       },
     }),
     getActionRequiredData(),
-    getMonthlyFinancials(12),
-    getYearlyFinancials(3),
-    getPropertyPerformance(),
+    getMonthlyFinancials(12, selectedMonth),
+    getYearlyFinancials(3, selectedMonth),
+    getPropertyPerformance(selectedMonth),
     getOccupancyStats(),
     getCashFlowForecast(),
     getTotalOutstanding(),
-    getRentCollectionData(),
+    getRentCollectionData(selectedMonth),
   ]);
 
-  const income = incomeAgg._sum.amount ? Number(incomeAgg._sum.amount) : 0;
-  const expense = expenseAgg._sum.amount ? Number(expenseAgg._sum.amount) : 0;
+  const income = monthlyFinancials[monthlyFinancials.length - 1]?.income ?? 0;
+  const expense = monthlyFinancials[monthlyFinancials.length - 1]?.expense ?? 0;
   const utilityExpense = utilityExpenseAgg._sum.amount ? Number(utilityExpenseAgg._sum.amount) : 0;
 
   return {
+    selectedMonth,
+    availableMonths: [...new Set([...dashboardMonthKeys(scope.currentMonth), selectedMonth])].sort().reverse(),
     activeProperties,
     activeTenantLeases,
     vacantUnits: occupancy.totalUnits - occupancy.occupiedUnits,
@@ -118,17 +113,26 @@ async function getDashboardData() {
   };
 }
 
-export default async function DashboardPage() {
+export default async function DashboardPage({ searchParams }: { searchParams: Promise<{ month?: string }> }) {
+  const { month } = await searchParams;
+  const locale = await getLocale();
   const t = await getTranslations("Dashboard");
-  const data = await getDashboardData();
+  const data = await getDashboardData(month);
 
   return (
     <>
+    <div className="flex flex-wrap items-center justify-between gap-3">
+      <div>
+        <p className="text-sm font-medium">{t("selectedFinancialPeriod", { month: monthLabel(data.selectedMonth, locale) })}</p>
+        <p className="mt-1 max-w-3xl text-xs leading-relaxed text-muted-foreground">{t("monthScopeHint")}</p>
+      </div>
+      <ReportMonthSelect month={data.selectedMonth} months={data.availableMonths} basePath="/" label={t("dashboardMonthLabel")} />
+    </div>
     <MobileDashboard data={data} />
     <div className="hidden min-w-0 flex-1 flex-col gap-6 md:flex">
       <div>
         <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-          {t("eyebrow")}
+          {t("monthSummary")}
         </p>
         <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">
           {t("title")}
@@ -197,7 +201,7 @@ export default async function DashboardPage() {
               <span className="flex size-7 items-center justify-center rounded-lg bg-linear-to-br from-primary/25 to-primary/5 text-primary">
                 <Wallet className="size-3.5" />
               </span>
-              {t("netThisMonth")}
+              {t("netSelectedMonth")}
             </CardTitle>
           </CardHeader>
           <CardContent>
@@ -246,7 +250,7 @@ export default async function DashboardPage() {
 
       <ActionRequired data={data.actionRequired} />
 
-      <IncomeExpenseChart monthly={data.monthlyFinancials} yearly={data.yearlyFinancials} />
+      <IncomeExpenseChart key={data.selectedMonth} monthly={data.monthlyFinancials} yearly={data.yearlyFinancials} />
 
       <PropertyPerformance data={data.propertyPerformance} />
 
@@ -256,7 +260,7 @@ export default async function DashboardPage() {
             <span className="flex size-7 items-center justify-center rounded-lg bg-linear-to-br from-blue-500/25 to-blue-500/5 text-blue-600 dark:text-blue-400">
               <History className="size-3.5" />
             </span>
-            {t("recentActivity")}
+            {t("selectedMonthActivity")}
           </CardTitle>
         </CardHeader>
         <CardContent>

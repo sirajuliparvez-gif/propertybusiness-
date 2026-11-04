@@ -1,3 +1,5 @@
+import { resolveListMonth } from "@/lib/list-month";
+import { dashboardMonthKeys, dashboardFinancialBuckets } from "@/lib/dashboard-period";
 import { dhakaNow } from "@/lib/dhaka-time";
 import { cache } from "react";
 import { prisma } from "@/lib/prisma";
@@ -392,100 +394,43 @@ const TRANSACTION_TYPE_TO_CATEGORY: Record<string, string> = {
   OTHER: "other",
 };
 
-export async function getMonthlyFinancials(monthsBack = 12) {
-  const now = dhakaNow();
-  const start = new Date(now.getFullYear(), now.getMonth() - (monthsBack - 1), 1);
-  const startMonth = `${start.getFullYear()}-${String(start.getMonth() + 1).padStart(2, "0")}`;
-
+export async function getMonthlyFinancials(monthsBack = 12, requestedMonth?: string) {
+  const scope = resolveListMonth(requestedMonth);
+  const month = scope.selectedMonth ?? scope.currentMonth;
+  const months = dashboardMonthKeys(month, monthsBack);
+  const start = resolveListMonth(months[0]).start;
   const transactions = await prisma.transaction.findMany({
-    where: {
-      OR: [{ date: { gte: start } }, { rentPayment: { month: { gte: startMonth } } }],
-    },
-    select: {
-      date: true,
-      amount: true,
-      type: true,
-      rentPayment: { select: { month: true } },
-    },
+    // Later receipts can settle an earlier rent month, so the date query
+    // deliberately does not end at the selected month's calendar boundary.
+    where: { OR: [{ date: { gte: start } }, { rentPayment: { month: { gte: months[0] } } }] },
+    select: { date: true, amount: true, type: true, rentPayment: { select: { month: true } } },
   });
-
-  const buckets = new Map<string, { income: number; expense: number }>();
-  for (let i = 0; i < monthsBack; i++) {
-    const d = new Date(now.getFullYear(), now.getMonth() - (monthsBack - 1) + i, 1);
-    const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
-    buckets.set(key, { income: 0, expense: 0 });
-  }
-
-  for (const tx of transactions) {
-    const key = reportingMonthKey({
-      transactionType: tx.type,
-      transactionDate: tx.date,
-      rentPaymentMonth: tx.rentPayment?.month,
-    });
-    const bucket = buckets.get(key);
-    if (!bucket) continue;
-    if (isIncomeType(tx.type)) bucket.income += Number(tx.amount);
-    else if (isExpenseType(tx.type)) bucket.expense += Number(tx.amount);
-  }
-
-  return Array.from(buckets.entries()).map(([month, v]) => ({
-    month,
-    income: v.income,
-    expense: v.expense,
-    net: v.income - v.expense,
-  }));
+  return dashboardFinancialBuckets(transactions.map((transaction) => ({
+    ...transaction, amount: Number(transaction.amount), rentPaymentMonth: transaction.rentPayment?.month,
+  })), months);
 }
 
-export async function getYearlyFinancials(yearsBack = 3) {
-  const now = dhakaNow();
-  const start = new Date(now.getFullYear() - (yearsBack - 1), 0, 1);
-  const startMonth = `${start.getFullYear()}-01`;
-
-  const transactions = await prisma.transaction.findMany({
-    where: {
-      OR: [{ date: { gte: start } }, { rentPayment: { month: { gte: startMonth } } }],
-    },
-    select: {
-      date: true,
-      amount: true,
-      type: true,
-      rentPayment: { select: { month: true } },
-    },
-  });
-
-  const buckets = new Map<number, { income: number; expense: number }>();
-  for (let i = 0; i < yearsBack; i++) {
-    buckets.set(now.getFullYear() - (yearsBack - 1) + i, { income: 0, expense: 0 });
+export async function getYearlyFinancials(yearsBack = 3, requestedMonth?: string) {
+  const scope = resolveListMonth(requestedMonth);
+  const month = scope.selectedMonth ?? scope.currentMonth;
+  const [year, number] = month.split("-").map(Number);
+  const monthly = await getMonthlyFinancials((yearsBack - 1) * 12 + number, month);
+  const buckets = new Map(Array.from({ length: yearsBack }, (_, index) => [String(year - yearsBack + index + 1), { income: 0, expense: 0 }]));
+  for (const point of monthly) {
+    const bucket = buckets.get(point.month.slice(0, 4))!;
+    bucket.income += point.income; bucket.expense += point.expense;
   }
-
-  for (const tx of transactions) {
-    const reportingMonth = reportingMonthKey({
-      transactionType: tx.type,
-      transactionDate: tx.date,
-      rentPaymentMonth: tx.rentPayment?.month,
-    });
-    const bucket = buckets.get(Number(reportingMonth.slice(0, 4)));
-    if (!bucket) continue;
-    if (isIncomeType(tx.type)) bucket.income += Number(tx.amount);
-    else if (isExpenseType(tx.type)) bucket.expense += Number(tx.amount);
-  }
-
-  return Array.from(buckets.entries()).map(([year, v]) => ({
-    year: String(year),
-    income: v.income,
-    expense: v.expense,
-    net: v.income - v.expense,
-  }));
+  return [...buckets].map(([year, totals]) => ({ year, ...totals, net: totals.income - totals.expense }));
 }
 
-export async function getPropertyPerformance() {
+export async function getPropertyPerformance(selectedMonth?: string) {
   const properties = await prisma.property.findMany({
     where: { status: "ACTIVE" },
     select: {
       id: true,
       name: true,
       transactions: {
-        select: { type: true, direction: true, amount: true },
+        select: { type: true, direction: true, amount: true, date: true, rentPayment: { select: { month: true } } },
       },
     },
   });
@@ -496,6 +441,7 @@ export async function getPropertyPerformance() {
     const expenseByCategory: Record<string, number> = {};
 
     for (const tx of p.transactions) {
+      if (selectedMonth && reportingMonthKey({ transactionType: tx.type, transactionDate: tx.date, rentPaymentMonth: tx.rentPayment?.month }) !== selectedMonth) continue;
       const amount = Number(tx.amount);
       if (isIncomeType(tx.type)) {
         income += amount;

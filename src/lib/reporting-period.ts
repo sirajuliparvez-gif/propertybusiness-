@@ -1,3 +1,5 @@
+import { dhakaISO } from "@/lib/dhaka-time";
+
 export function reportingMonthKey({
   transactionType,
   transactionDate,
@@ -11,5 +13,5 @@ export function reportingMonthKey({
     return rentPaymentMonth!;
   }
 
-  return `${transactionDate.getFullYear()}-${String(transactionDate.getMonth() + 1).padStart(2, "0")}`;
+  return dhakaISO(transactionDate).slice(0, 7);
 }

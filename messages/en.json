@@ -70,6 +70,12 @@
     "back": "Back"
   },
   "Dashboard": {
+    "monthSummary": "Monthly summary",
+    "selectedFinancialPeriod": "Financial period: {month}",
+    "dashboardMonthLabel": "Dashboard month",
+    "netSelectedMonth": "Net for selected month",
+    "selectedMonthActivity": "Transactions in selected month",
+    "monthScopeHint": "Income, expenses, property performance and rent collection follow the selected month. Rent income follows its billing month; recent transactions follow their actual dates. Occupancy, outstanding balances, alerts and forecasts show the current live position.",
     "eyebrow": "This month's summary",
     "title": "Dashboard",
     "activeProperties": "Active Properties",
