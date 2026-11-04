@@ -74,6 +74,8 @@ async function getDashboardData(requestedMonth?: string) {
       include: {
         property: { select: { name: true } },
         recordedBy: { select: { name: true } },
+        tenantLease: { select: { tenant: { select: { name: true } }, unit: { select: { label: true } } } },
+        rentPayment: { select: { tenantLease: { select: { tenant: { select: { name: true } }, unit: { select: { label: true } } } } } },
       },
     }),
     getActionRequiredData(),
@@ -117,6 +119,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
   const { month } = await searchParams;
   const locale = await getLocale();
   const t = await getTranslations("Dashboard");
+  const tp = await getTranslations("Properties");
   const data = await getDashboardData(month);
 
   return (
@@ -270,7 +273,10 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
             </p>
           ) : (
             <ul className="divide-y">
-              {data.recentTransactions.map((tx) => (
+              {data.recentTransactions.map((tx) => {
+                const lease = tx.tenantLease ?? tx.rentPayment?.tenantLease;
+                const tenantName = lease?.tenant.name;
+                return (
                 <li
                   key={tx.id}
                   className="flex items-center justify-between gap-3 py-3"
@@ -292,10 +298,11 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
                     </div>
                     <div className="min-w-0">
                       <p className="truncate text-sm font-medium">
-                        {tx.property?.name ?? "কোম্পানি স্টাফ"}
+                        {tenantName ?? tx.property?.name ?? tp("companyStaffLabel")}
                       </p>
                       <p className="truncate text-xs text-muted-foreground">
-                        {tx.type.replaceAll("_", " ").toLowerCase()}
+                        {tenantName ? `${tx.property?.name ?? ""}${lease?.unit.label ? ` · ${lease.unit.label}` : ""} · ` : ""}
+                        {tx.type === "RENT_RECEIVED_FROM_TENANT" ? tp("transactionTypeRentReceived") : tx.type.replaceAll("_", " ").toLowerCase()}
                         {tx.recordedBy ? ` · ${t("recordedBy")} ${tx.recordedBy.name}` : ""}
                       </p>
                     </div>
@@ -304,7 +311,8 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
                     {formatTaka(Number(tx.amount))}
                   </span>
                 </li>
-              ))}
+                );
+              })}
             </ul>
           )}
         </CardContent>
