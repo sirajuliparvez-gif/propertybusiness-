@@ -1,20 +1,13 @@
-import { dhakaNow } from "@/lib/dhaka-time";
+import { resolveListMonth, listMonthOptions } from "@/lib/list-month";
+import { dhakaISO } from "@/lib/dhaka-time";
 import { prisma } from "@/lib/prisma";
 import { INCOME_TYPES, EXPENSE_TYPES } from "@/lib/finance-types";
 import { isDirectlyEditableTransactionType } from "@/lib/transaction-edit";
 
-function monthRange(now: Date) {
-  return {
-    monthStart: new Date(now.getFullYear(), now.getMonth(), 1),
-    monthEnd: new Date(now.getFullYear(), now.getMonth() + 1, 1),
-  };
-}
-
-export async function getAllTransactionsData() {
-  const now = dhakaNow();
-  const { monthStart, monthEnd } = monthRange(now);
-
-  const transactions = await prisma.transaction.findMany({
+export async function getAllTransactionsData(requestedMonth?: string) {
+  const scope = resolveListMonth(requestedMonth);
+  const [transactions, filterRows] = await Promise.all([prisma.transaction.findMany({
+    where: scope.selectedMonth ? { date: { gte: scope.start, lt: scope.end } } : undefined,
     orderBy: { date: "desc" },
     select: {
       id: true,
@@ -37,7 +30,12 @@ export async function getAllTransactionsData() {
       tenantLeaseId: true,
       guestStayId: true,
     },
-  });
+  }), scope.selectedMonth ? prisma.transaction.findMany({
+    orderBy: { date: "desc" },
+    // Month/property options need only lightweight metadata across history,
+    // never the tenant, payroll, guest or notes details of unrelated months.
+    select: { date: true, propertyId: true, property: { select: { name: true } } },
+  }) : Promise.resolve(null)]);
 
   const rows = transactions.map((t) => {
     const isProfitAffecting =
@@ -83,25 +81,30 @@ export async function getAllTransactionsData() {
     };
   });
 
-  const thisMonth = rows.filter((r) => r.date >= monthStart && r.date < monthEnd);
-  const totalIncome = thisMonth
+  const scopedRows = rows;
+  const totalIncome = scopedRows
     .filter((r) => (INCOME_TYPES as readonly string[]).includes(r.type))
     .reduce((sum, r) => sum + r.amount, 0);
-  const totalExpense = thisMonth
+  const totalExpense = scopedRows
     .filter((r) => (EXPENSE_TYPES as readonly string[]).includes(r.type))
     .reduce((sum, r) => sum + r.amount, 0);
 
   const properties = Array.from(
-    new Map(rows.map((r) => [r.propertyId, r.propertyName])),
+    new Map(filterRows
+      ? filterRows.map((row) => [row.propertyId, row.property?.name ?? "কোম্পানি স্টাফ"] as const)
+      : rows.map((row) => [row.propertyId, row.propertyName] as const)),
     ([id, name]) => ({ id, name })
   );
 
   return {
-    transactions: rows,
+    transactions: scopedRows,
+    selectedMonth: scope.selectedMonth,
+    currentMonth: scope.currentMonth,
+    availableMonths: listMonthOptions((filterRows ?? rows).map((row) => dhakaISO(row.date).slice(0, 7)), scope.currentMonth, scope.selectedMonth),
     totalIncome,
     totalExpense,
     net: totalIncome - totalExpense,
-    entryCount: thisMonth.length,
+    entryCount: scopedRows.length,
     properties,
   };
 }

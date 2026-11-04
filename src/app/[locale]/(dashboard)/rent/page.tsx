@@ -1,5 +1,7 @@
+import { Link } from "@/i18n/navigation";
+import { Button } from "@/components/ui/button";
 import { getTranslations } from "next-intl/server";
-import { TrendingUp, CheckCircle2, AlertTriangle, Percent } from "lucide-react";
+import { TrendingUp, CheckCircle2, AlertTriangle, Percent, FileText } from "lucide-react";
 import { getRentCollectionData } from "@/lib/tenants-data";
 import { RentCollectionTable } from "@/components/properties/rent-collection-table";
 import { MobileRentList } from "@/components/mobile/mobile-rent-list";
@@ -19,6 +21,11 @@ export default async function RentCollectionPage({
 
   return (
     <>
+    <div className="flex justify-end print:hidden">
+      <Button variant="outline" render={<Link href={`/rent/report?month=${rentCollection.selectedMonth}`} />} nativeButton={false}>
+        <FileText className="size-4" />{t("monthlyReportTitle")}
+      </Button>
+    </div>
     <MobileRentList {...rentCollection} />
     <div className="hidden min-w-0 flex-1 flex-col gap-6 md:flex">
       <div className="flex items-start justify-between gap-3">

@@ -3,7 +3,9 @@ import { AppSidebar } from "@/components/app-sidebar";
 import { SiteHeader } from "@/components/site-header";
 import { MobileTopBar } from "@/components/mobile/mobile-top-bar";
 import { MobileTabBar } from "@/components/mobile/mobile-tab-bar";
-import { getActionRequiredData, toNotificationList } from "@/lib/dashboard-data";
+import { Suspense } from "react";
+import { DashboardNotifications } from "@/components/dashboard/dashboard-notifications";
+import { NotificationBell } from "@/components/notification-bell";
 import { requireCurrentUser } from "@/lib/auth/session";
 import { RentActionFeedback } from "@/components/properties/rent-action-feedback";
 
@@ -14,7 +16,11 @@ export default async function DashboardLayout({
 }) {
   await requireCurrentUser();
 
-  const notifications = toNotificationList(await getActionRequiredData());
+  const notifications = (
+    <Suspense fallback={<NotificationBell items={[]} pending />}>
+      <DashboardNotifications />
+    </Suspense>
+  );
 
   return (
     <SidebarProvider>

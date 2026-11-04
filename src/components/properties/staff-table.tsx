@@ -41,11 +41,15 @@ export function StaffTable({
   staff,
   payrollCost,
   propertyId,
+  selectedMonth,
+  readOnlyPayroll = false,
   showPropertyColumn = false,
 }: {
   staff: PropertyDetail["staff"] | AllStaffData["staff"];
   payrollCost: number;
   propertyId?: string;
+  selectedMonth?: string;
+  readOnlyPayroll?: boolean;
   showPropertyColumn?: boolean;
 }) {
   const t = useTranslations("Properties");
@@ -87,9 +91,9 @@ export function StaffTable({
 
     const byStatus =
       filter === "paid"
-        ? byProperty.filter((s) => s.status === "ACTIVE" && isRentSettled(s.payrollStatus, s.overdueAmount))
+        ? byProperty.filter((s) => (selectedMonth || s.status === "ACTIVE") && isRentSettled(s.payrollStatus, s.overdueAmount))
         : filter === "overdue"
-          ? byProperty.filter((s) => s.status === "ACTIVE" && s.pastDueAmount > 0)
+          ? byProperty.filter((s) => (selectedMonth || s.status === "ACTIVE") && s.pastDueAmount > 0)
           : filter === "inactive"
             ? byProperty.filter((s) => s.status === "INACTIVE")
             : filter === "former"
@@ -109,7 +113,7 @@ export function StaffTable({
       const endsAfterRangeStarts = !rangeStart || !terminatedAt || terminatedAt >= rangeStart;
       return startsBeforeRangeEnds && endsAfterRangeStarts;
     });
-  }, [staff, filter, propertyFilter, showPropertyColumn, dateFrom, dateTo]);
+  }, [staff, filter, propertyFilter, showPropertyColumn, dateFrom, dateTo, selectedMonth]);
 
   if (staff.length === 0) {
     return <p className="py-8 text-center text-sm text-muted-foreground">{t("noStaff")}</p>;
@@ -265,7 +269,7 @@ export function StaffTable({
                     {isTerminated ? "—" : paymentMethodLabel(t, s.paymentMethod)}
                   </TableCell>
                   <TableCell>
-                    {isTerminated ? (
+                    {isTerminated && !selectedMonth ? (
                       <div className="flex flex-col gap-0.5">
                         <Badge className="w-fit border-transparent bg-muted text-muted-foreground">
                           {t("filterFormer")}
@@ -276,7 +280,7 @@ export function StaffTable({
                           </span>
                         ) : null}
                       </div>
-                    ) : isInactive ? (
+                    ) : isInactive && !selectedMonth ? (
                       <Badge className="w-fit border-transparent bg-muted text-muted-foreground">
                         {t("inactiveLabel")}
                       </Badge>
@@ -297,14 +301,14 @@ export function StaffTable({
                         variant="outline"
                         size="icon-sm"
                         title={t("salarySlipTitle")}
-                        render={<Link href={`/employees/${s.id}/invoice`} />}
+                        render={<Link href={`/employees/${s.id}/invoice${selectedMonth ? `?month=${selectedMonth}` : ""}`} />}
                         nativeButton={false}
                         className="border-primary/40 text-primary hover:bg-primary/10"
                       >
                         <Printer className="size-3.5" />
                         <span className="sr-only">{t("salarySlipTitle")}</span>
                       </Button>
-                      {s.status === "ACTIVE" ? (
+                      {s.status === "ACTIVE" && !readOnlyPayroll ? (
                         <RecordPayrollPaymentDialog
                           propertyId={rowPropertyId}
                           employeeId={s.id}

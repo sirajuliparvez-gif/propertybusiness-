@@ -2,6 +2,7 @@ import { getLocale } from "next-intl/server";
 import { redirect } from "@/i18n/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { prisma } from "@/lib/prisma";
+import { cache } from "react";
 
 export type CurrentUser = {
   id: string;
@@ -14,7 +15,9 @@ export type CurrentUser = {
 // which round-trips to Supabase to validate the token) — the profile fields
 // (name, role) live in our own `public.User` row, whose id is deliberately
 // kept equal to the Supabase auth user id.
-export async function getCurrentUser(): Promise<CurrentUser | null> {
+// Request-scoped only: layout, page and server components share one verified
+// lookup, without retaining a user's session across requests.
+export const getCurrentUser = cache(async function getCurrentUser(): Promise<CurrentUser | null> {
   const supabase = await createClient();
   const { data } = await supabase.auth.getUser();
   const userId = data?.user?.id;
@@ -24,7 +27,7 @@ export async function getCurrentUser(): Promise<CurrentUser | null> {
     where: { id: userId },
     select: { id: true, name: true, email: true, role: true },
   });
-}
+});
 
 // Server Components/layouts that must never render for a signed-out visitor —
 // middleware already redirects unauthenticated requests before they get this

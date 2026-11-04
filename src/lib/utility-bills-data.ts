@@ -1,14 +1,7 @@
-import { dhakaNow } from "@/lib/dhaka-time";
+import { resolveListMonth, listMonthOptions } from "@/lib/list-month";
 import { prisma } from "@/lib/prisma";
 import { attachElectricityConsumption, latestElectricityReadingByUnit } from "@/lib/electricity-consumption";
 import { splitUtilityBillTransactions } from "@/lib/utility-bill-split";
-
-function monthRange(now: Date) {
-  return {
-    monthStart: new Date(now.getFullYear(), now.getMonth(), 1),
-    monthEnd: new Date(now.getFullYear(), now.getMonth() + 1, 1),
-  };
-}
 
 function getPropertiesWithBills() {
   return prisma.property.findMany({
@@ -60,22 +53,9 @@ function getPropertiesWithBills() {
   });
 }
 
-export async function getAllUtilityBillsData() {
-  const now = dhakaNow();
-  const { monthStart, monthEnd } = monthRange(now);
-
-  const [properties, paidThisMonthAgg] = await Promise.all([
-    getPropertiesWithBills(),
-    // Total settled this month regardless of who bore the cost — company's
-    // own UTILITY_EXPENSE (paidByCompany bills) plus tenant reimbursements.
-    prisma.transaction.aggregate({
-      where: {
-        type: { in: ["UTILITY_EXPENSE", "UTILITY_REIMBURSEMENT_FROM_TENANT"] },
-        date: { gte: monthStart, lt: monthEnd },
-      },
-      _sum: { amount: true },
-    }),
-  ]);
+export async function getAllUtilityBillsData(requestedMonth?: string) {
+  const scope = resolveListMonth(requestedMonth);
+  const properties = await getPropertiesWithBills();
 
   const propertyUnitOptions = properties.map((p) => ({
     id: p.id,
@@ -103,7 +83,7 @@ export async function getAllUtilityBillsData() {
     ),
   }));
 
-  const bills = properties
+  const allBills = properties
     .flatMap((p) => {
       const unitLabelById = new Map(
         p.unitTypes.flatMap((ut) => ut.units.map((u) => [u.id, u.label] as const))
@@ -155,16 +135,21 @@ export async function getAllUtilityBillsData() {
     })
     .sort((a, b) => b.dueDate.getTime() - a.dueDate.getTime());
 
+  const bills = scope.selectedMonth ? allBills.filter((bill) => bill.month === scope.selectedMonth) : allBills;
+
   const totalUnpaid = bills
     .filter((b) => b.status !== "PAID")
     .reduce((sum, b) => sum + Math.max(0, b.amount - b.paidAmount), 0);
   const unpaidCount = bills.filter((b) => b.status !== "PAID").length;
-  const paidThisMonth = Number(paidThisMonthAgg._sum.amount ?? 0);
+  const paidThisMonth = bills.reduce((sum, bill) => sum + bill.paidAmount, 0);
   const paidCount = bills.filter((b) => b.status === "PAID").length;
   const paymentRate = bills.length > 0 ? Math.round((paidCount / bills.length) * 100) : 0;
 
   return {
     bills,
+    selectedMonth: scope.selectedMonth,
+    currentMonth: scope.currentMonth,
+    availableMonths: listMonthOptions(allBills.map((bill) => bill.month), scope.currentMonth, scope.selectedMonth),
     properties: propertyUnitOptions,
     totalUnpaid,
     unpaidCount,

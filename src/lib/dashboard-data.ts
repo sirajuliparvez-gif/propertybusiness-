@@ -1,9 +1,10 @@
+import { resolveListMonth } from "@/lib/list-month";
+import { dashboardMonthKeys, dashboardFinancialBuckets, dashboardYearlyBuckets } from "@/lib/dashboard-period";
 import { dhakaNow } from "@/lib/dhaka-time";
 import { cache } from "react";
 import { prisma } from "@/lib/prisma";
 import { isIncomeType, isExpenseType } from "@/lib/finance-types";
-import { getAllTenantsData } from "@/lib/tenants-data";
-import { getAllStaffData } from "@/lib/employees-data";
+import { getDashboardLedgerData } from "@/lib/dashboard-ledger-data";
 import { isMonthPastDue, RENT_DUE_DAY, SALARY_DUE_DAY } from "@/lib/rent-ledger";
 import { reportingMonthKey } from "@/lib/reporting-period";
 import {
@@ -43,20 +44,7 @@ export const getActionRequiredData = cache(async function getActionRequiredData(
   const salaryPastDueNow = isMonthPastDue(currentMonth, SALARY_DUE_DAY, now);
   const todayStart = startOfDay(now);
 
-  const [
-    rentDue,
-    utilityDue,
-    downpaymentExhausted,
-    payrollDue,
-    vacantUnits,
-    agreementsExpiring,
-    tenantLeaseExpiring,
-    missingTenantNid,
-    tenantLeasesMissingAgreement,
-    ownerAgreementsMissingDocument,
-    guestCheckIns,
-    guestCheckOuts,
-  ] = await Promise.all([
+  const lists = Promise.all([
     // Recorded rent months still owing something and already past the 10th
     // (months nobody recorded at all come from the lease-based query below).
     prisma.rentPayment.findMany({
@@ -187,6 +175,7 @@ export const getActionRequiredData = cache(async function getActionRequiredData(
     }),
   ]);
 
+  // Start the independent totals batch without waiting for the lists.
   // Second batch: what the first queries cannot see (rent months with no row at
   // all, staff nobody has paid yet) plus true totals, because each list above is
   // capped at 20 rows and the tab badges must show the real number.
@@ -199,19 +188,7 @@ export const getActionRequiredData = cache(async function getActionRequiredData(
     status: { in: ["UNPAID" as const, "PARTIAL" as const] },
     dueDate: { lte: daysFromNow(DAYS_AHEAD) },
   };
-  const [
-    unrecordedRent,
-    unrecordedRentCount,
-    rowRentCount,
-    unpaidEmployees,
-    utilityCount,
-    vacantCount,
-    tenantExpiringCount,
-    agreementExpiringCount,
-    nidCount,
-    tenantDocCount,
-    ownerDocCount,
-  ] = await Promise.all([
+  const totals = Promise.all([
     rentPastDueNow
       ? prisma.tenantLease.findMany({
           where: unrecordedRentWhere,
@@ -247,6 +224,36 @@ export const getActionRequiredData = cache(async function getActionRequiredData(
     prisma.tenantLease.count({ where: { status: "ACTIVE", documents: { none: {} } } }),
     prisma.ownerLeaseAgreement.count({ where: { status: "ACTIVE", documents: { none: {} } } }),
   ]);
+
+  const [listResults, totalResults] = await Promise.all([lists, totals]);
+  const [
+    unrecordedRent,
+    unrecordedRentCount,
+    rowRentCount,
+    unpaidEmployees,
+    utilityCount,
+    vacantCount,
+    tenantExpiringCount,
+    agreementExpiringCount,
+    nidCount,
+    tenantDocCount,
+    ownerDocCount,
+  ] = totalResults;
+
+  const [
+    rentDue,
+    utilityDue,
+    downpaymentExhausted,
+    payrollDue,
+    vacantUnits,
+    agreementsExpiring,
+    tenantLeaseExpiring,
+    missingTenantNid,
+    tenantLeasesMissingAgreement,
+    ownerAgreementsMissingDocument,
+    guestCheckIns,
+    guestCheckOuts,
+  ] = listResults;
 
   return {
     counts: {
@@ -392,100 +399,46 @@ const TRANSACTION_TYPE_TO_CATEGORY: Record<string, string> = {
   OTHER: "other",
 };
 
-export async function getMonthlyFinancials(monthsBack = 12) {
-  const now = dhakaNow();
-  const start = new Date(now.getFullYear(), now.getMonth() - (monthsBack - 1), 1);
-  const startMonth = `${start.getFullYear()}-${String(start.getMonth() + 1).padStart(2, "0")}`;
-
+export async function getMonthlyFinancials(monthsBack = 12, requestedMonth?: string) {
+  const scope = resolveListMonth(requestedMonth);
+  const month = scope.selectedMonth ?? scope.currentMonth;
+  const months = dashboardMonthKeys(month, monthsBack);
+  const start = resolveListMonth(months[0]).start;
   const transactions = await prisma.transaction.findMany({
-    where: {
-      OR: [{ date: { gte: start } }, { rentPayment: { month: { gte: startMonth } } }],
-    },
-    select: {
-      date: true,
-      amount: true,
-      type: true,
-      rentPayment: { select: { month: true } },
-    },
+    // Later receipts can settle an earlier rent month, so the date query
+    // deliberately does not end at the selected month's calendar boundary.
+    where: { OR: [{ date: { gte: start } }, { rentPayment: { month: { gte: months[0] } } }] },
+    select: { date: true, amount: true, type: true, rentPayment: { select: { month: true } } },
   });
-
-  const buckets = new Map<string, { income: number; expense: number }>();
-  for (let i = 0; i < monthsBack; i++) {
-    const d = new Date(now.getFullYear(), now.getMonth() - (monthsBack - 1) + i, 1);
-    const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
-    buckets.set(key, { income: 0, expense: 0 });
-  }
-
-  for (const tx of transactions) {
-    const key = reportingMonthKey({
-      transactionType: tx.type,
-      transactionDate: tx.date,
-      rentPaymentMonth: tx.rentPayment?.month,
-    });
-    const bucket = buckets.get(key);
-    if (!bucket) continue;
-    if (isIncomeType(tx.type)) bucket.income += Number(tx.amount);
-    else if (isExpenseType(tx.type)) bucket.expense += Number(tx.amount);
-  }
-
-  return Array.from(buckets.entries()).map(([month, v]) => ({
-    month,
-    income: v.income,
-    expense: v.expense,
-    net: v.income - v.expense,
-  }));
+  return dashboardFinancialBuckets(transactions.map((transaction) => ({
+    ...transaction, amount: Number(transaction.amount), rentPaymentMonth: transaction.rentPayment?.month,
+  })), months);
 }
 
-export async function getYearlyFinancials(yearsBack = 3) {
-  const now = dhakaNow();
-  const start = new Date(now.getFullYear() - (yearsBack - 1), 0, 1);
-  const startMonth = `${start.getFullYear()}-01`;
-
-  const transactions = await prisma.transaction.findMany({
-    where: {
-      OR: [{ date: { gte: start } }, { rentPayment: { month: { gte: startMonth } } }],
-    },
-    select: {
-      date: true,
-      amount: true,
-      type: true,
-      rentPayment: { select: { month: true } },
-    },
-  });
-
-  const buckets = new Map<number, { income: number; expense: number }>();
-  for (let i = 0; i < yearsBack; i++) {
-    buckets.set(now.getFullYear() - (yearsBack - 1) + i, { income: 0, expense: 0 });
-  }
-
-  for (const tx of transactions) {
-    const reportingMonth = reportingMonthKey({
-      transactionType: tx.type,
-      transactionDate: tx.date,
-      rentPaymentMonth: tx.rentPayment?.month,
-    });
-    const bucket = buckets.get(Number(reportingMonth.slice(0, 4)));
-    if (!bucket) continue;
-    if (isIncomeType(tx.type)) bucket.income += Number(tx.amount);
-    else if (isExpenseType(tx.type)) bucket.expense += Number(tx.amount);
-  }
-
-  return Array.from(buckets.entries()).map(([year, v]) => ({
-    year: String(year),
-    income: v.income,
-    expense: v.expense,
-    net: v.income - v.expense,
-  }));
+export async function getYearlyFinancials(yearsBack = 3, requestedMonth?: string) {
+  const scope = resolveListMonth(requestedMonth);
+  const month = scope.selectedMonth ?? scope.currentMonth;
+  const number = Number(month.slice(5));
+  const monthly = await getMonthlyFinancials((yearsBack - 1) * 12 + number, month);
+  return dashboardYearlyBuckets(monthly, month, yearsBack);
 }
 
-export async function getPropertyPerformance() {
+export async function getDashboardFinancials(month: string) {
+  const monthNumber = Number(month.slice(5));
+  // One history read supplies both charts, including all three calendar years
+  // through the selected month and the latest twelve monthly points.
+  const monthly = await getMonthlyFinancials(24 + monthNumber, month);
+  return { monthly: monthly.slice(-12), yearly: dashboardYearlyBuckets(monthly, month) };
+}
+
+export async function getPropertyPerformance(selectedMonth?: string) {
   const properties = await prisma.property.findMany({
     where: { status: "ACTIVE" },
     select: {
       id: true,
       name: true,
       transactions: {
-        select: { type: true, direction: true, amount: true },
+        select: { type: true, direction: true, amount: true, date: true, rentPayment: { select: { month: true } } },
       },
     },
   });
@@ -496,6 +449,7 @@ export async function getPropertyPerformance() {
     const expenseByCategory: Record<string, number> = {};
 
     for (const tx of p.transactions) {
+      if (selectedMonth && reportingMonthKey({ transactionType: tx.type, transactionDate: tx.date, rentPaymentMonth: tx.rentPayment?.month }) !== selectedMonth) continue;
       const amount = Number(tx.amount);
       if (isIncomeType(tx.type)) {
         income += amount;
@@ -531,18 +485,17 @@ export async function getTotalOutstanding() {
   // dashboard total can never disagree with the Rent, Utility Bills and Staff
   // pages: rent past the 10th (ledger-based), every bill still owing, and the
   // salary that is still unpaid.
-  const [tenantsData, staffData, utilityAgg] = await Promise.all([
-    getAllTenantsData(),
-    getAllStaffData(),
+  const [ledgerData, utilityAgg] = await Promise.all([
+    getDashboardLedgerData(),
     prisma.utilityBill.aggregate({
       _sum: { amount: true, paidAmount: true },
       where: { status: { in: ["UNPAID", "PARTIAL"] } },
     }),
   ]);
 
-  const rent = tenantsData.totalPastDueRent;
+  const rent = ledgerData.totals.totalPastDueRent;
   const utility = Number(utilityAgg._sum.amount ?? 0) - Number(utilityAgg._sum.paidAmount ?? 0);
-  const payroll = staffData.totalPastDuePayroll;
+  const payroll = ledgerData.totals.totalPastDuePayroll;
 
   return { total: rent + utility + payroll, rent, utility, payroll };
 }
@@ -571,9 +524,8 @@ export async function getCashFlowForecast() {
   const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
   const monthEnd = new Date(now.getFullYear(), now.getMonth() + 1, 1);
 
-  const [tenantsData, staffData, companyBillAgg, ownerRentPaid, ownerRentDue] = await Promise.all([
-    getAllTenantsData(),
-    getAllStaffData(),
+  const [ledgerData, companyBillAgg, ownerRentPaid, ownerRentDue] = await Promise.all([
+    getDashboardLedgerData(),
     // Only bills the company bears itself are a real outflow — tenant-billed
     // ones are reimbursed, a pass-through that nets to zero (see finance-types).
     prisma.utilityBill.aggregate({
@@ -606,10 +558,10 @@ export async function getCashFlowForecast() {
   ]);
 
   // Rent still to collect, from the ledger (recorded and unrecorded months alike).
-  const incoming = tenantsData.totalOverdueRent;
+  const incoming = ledgerData.totals.totalOverdueRent;
   const outgoingUtility =
     Number(companyBillAgg._sum.amount ?? 0) - Number(companyBillAgg._sum.paidAmount ?? 0);
-  const outgoingPayroll = staffData.totalOverduePayroll;
+  const outgoingPayroll = ledgerData.totals.totalOverduePayroll;
   const ownerRentTotal = ownerRentDue.reduce((sum, property) => {
     const fixedRent = property.ownerLeaseAgreements[0]?.fixedMonthlyRentAmount;
     if (fixedRent != null) return sum + Number(fixedRent);

@@ -33,14 +33,14 @@ export async function MobileDashboard({ data }: { data: DashboardData }) {
     <div className="flex min-w-0 flex-1 flex-col gap-4 md:hidden">
       <div>
         <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-          {t("eyebrow")}
+          {t("monthSummary")}
         </p>
         <h1 className="text-2xl font-bold tracking-tight">{t("title")}</h1>
       </div>
 
       <Card className="border-none bg-linear-to-br from-primary/15 via-card to-card">
         <CardContent className="p-5">
-          <p className="text-sm text-muted-foreground">{t("netThisMonth")}</p>
+          <p className="text-sm text-muted-foreground">{t("netSelectedMonth")}</p>
           <p
             className={cn(
               "mt-1 font-mono text-3xl font-bold tracking-tight tabular-nums",
@@ -79,7 +79,7 @@ export async function MobileDashboard({ data }: { data: DashboardData }) {
               <p className="font-mono text-base font-bold tabular-nums text-success">
                 {formatTaka(data.rentCollection.totalCollected)}
               </p>
-              <p className="text-[11px] text-muted-foreground">{tp("collectedThisMonth")}</p>
+              <p className="text-[11px] text-muted-foreground">{tp("collectedForMonth")}</p>
             </div>
             <div>
               <p className="font-mono text-base font-bold tabular-nums text-destructive">
@@ -101,7 +101,7 @@ export async function MobileDashboard({ data }: { data: DashboardData }) {
               {unpaidTenants.map((p) => (
                 <li key={p.id}>
                   <Link
-                    href="/rent"
+                    href={`/rent?month=${data.selectedMonth}`}
                     className="flex items-center gap-3 px-4 py-3 transition-colors active:bg-muted/60"
                   >
                     <InitialAvatar name={p.tenantName} />

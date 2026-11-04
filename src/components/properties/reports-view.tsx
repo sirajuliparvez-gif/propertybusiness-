@@ -1,18 +1,12 @@
 "use client";
 
-import { useMemo, useState } from "react";
-import { useTranslations } from "next-intl";
-import { Wallet, CheckCircle2, ArrowRight, Users } from "lucide-react";
+import { useState } from "react";
+import { useLocale, useTranslations } from "next-intl";
+import Image from "next/image";
+import styles from "./financial-report.module.css";
+import { InvoicePrintButton } from "./invoice-print-button";
+import { ReportPrintMetadata } from "./report-print-metadata";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import { Table, TableBody, TableCell, TableFooter, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { getTypeIcon } from "@/lib/property-types";
 import { formatTaka } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import type { ReportsData } from "@/lib/reports-data";
@@ -45,19 +39,15 @@ const CATEGORY_COLORS = {
   other: "oklch(0.6 0.03 260)",
 } as const;
 
-export function ReportsView({ months, propertyPLByMonth, defaultMonth }: ReportsData) {
+export function ReportsView({ months, propertyPLByMonth, defaultMonth, generatedDate, labels }: ReportsData & { generatedDate: string; labels: Record<string, { full: string; short: string }> }) {
   const t = useTranslations("Properties");
+  const nav = useTranslations("Nav");
+  const locale = useLocale();
   const [selectedMonth, setSelectedMonth] = useState(defaultMonth);
 
-  const monthLabels = useMemo(() => {
-    // A fixed timeZone here too — same reasoning as format.ts's
-    // BUSINESS_TIMEZONE: without one, this renders differently on the
-    // server (UTC) vs. the client's own browser timezone, which is exactly
-    // the kind of text mismatch React's hydration flags.
-    const fmt = new Intl.DateTimeFormat("bn", { month: "long", timeZone: "Asia/Dhaka" });
-    const fmtShort = new Intl.DateTimeFormat("bn", { month: "short", timeZone: "Asia/Dhaka" });
-    return new Map(months.map((m) => [m.month, { full: fmt.format(m.date), short: fmtShort.format(m.date) }]));
-  }, [months]);
+  // ICU abbreviations differ between Node and WebKit for Bengali months.
+  // Use the server snapshot on both renders to keep hydration stable.
+  const monthLabels = new Map(Object.entries(labels));
 
   const monthIndex = months.findIndex((m) => m.month === selectedMonth);
   const data = months[monthIndex] ?? months[months.length - 1];
@@ -79,8 +69,6 @@ export function ReportsView({ months, propertyPLByMonth, defaultMonth }: Reports
     ? pctDelta(data.ownerRent + data.payroll + data.otherExpense, prevData.ownerRent + prevData.payroll + prevData.otherExpense)
     : 0;
   const profitDelta = prevData ? pctDelta(data.netProfit, prevData.netProfit) : 0;
-
-  const grossMargin = data.income > 0 ? Math.round((data.grossProfit / data.income) * 100) : 0;
 
   const categories = (
     [
@@ -105,157 +93,102 @@ export function ReportsView({ months, propertyPLByMonth, defaultMonth }: Reports
 
   const maxAbsNet = Math.max(1, ...months.map((m) => Math.abs(m.netProfit)));
 
+  const expense = data.ownerRent + data.payroll + data.otherExpense;
+  const statement = [
+    { label: t("financialReportIncome"), amount: data.income },
+    { label: t("transactionTypeRentPaidToOwner"), amount: -data.ownerRent },
+    { label: t("grossProfit"), amount: data.grossProfit, subtotal: true },
+    { label: t("transactionTypePayrollExpense"), amount: -data.payroll },
+    { label: t("expenseTypeUtility"), amount: -data.utility },
+    { label: t("expenseTypeMaintenance"), amount: -data.maintenance },
+    { label: t("expenseTypeOther"), amount: -data.other },
+  ];
+
   return (
-    <div className="flex flex-col gap-4">
-      <div className="flex justify-end">
-        <Select
-          value={selectedMonth}
-          onValueChange={(v) => setSelectedMonth(v ?? defaultMonth)}
-          items={months.map((m) => ({ value: m.month, label: monthLabels.get(m.month)?.full ?? m.month }))}
-        >
-          <SelectTrigger className="h-9 w-44">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            {months.map((m) => (
-              <SelectItem key={m.month} value={m.month}>
-                {monthLabels.get(m.month)?.full ?? m.month}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+    <div className="flex min-w-0 flex-col gap-5">
+      <div className="flex flex-wrap items-center justify-end gap-3 print:hidden">
+        <label className="sr-only" htmlFor="financial-report-month">{t("rentMonthFilter")}</label>
+        <select id="financial-report-month" value={data.month} onChange={(event) => setSelectedMonth(event.target.value)}
+          className="h-10 rounded-lg border bg-card px-3 text-sm font-medium focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring">
+          {[...months].reverse().map((m) => <option key={m.month} value={m.month}>{monthLabels.get(m.month)?.full}</option>)}
+        </select>
+        <InvoicePrintButton />
       </div>
-
-      {/* Hero: gross → net */}
-      <div className="grid items-center gap-3 md:grid-cols-[1fr_auto_1fr]">
-        <div className="rounded-xl bg-card p-5 ring-1 ring-(--card-ring) shadow-(--shadow-sm)">
-          <div className="flex items-center gap-1.5 text-sm font-medium text-muted-foreground">
-            <Wallet className="size-3.5" />
-            {t("grossProfit")}
-          </div>
-          <p className="mt-2 font-mono text-2xl font-bold tabular-nums">{formatTaka(data.grossProfit)}</p>
-          <p className="mt-1 text-xs text-muted-foreground">
-            {formatTaka(data.income)} − {formatTaka(data.ownerRent)}
-          </p>
-          <div className="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-muted">
-            <div
-              className="h-full rounded-full bg-blue-500"
-              style={{ width: `${Math.max(0, Math.min(100, grossMargin))}%` }}
-            />
-          </div>
-        </div>
-
-        <div className="flex flex-row items-center justify-center gap-2 text-center md:flex-col">
-          <ArrowRight className="size-5 shrink-0 rotate-90 text-muted-foreground md:rotate-0" />
+      <article data-testid="invoice" className={`${styles.report} ${styles.financialPrint}`}>
+        <header className={styles.header}>
           <div>
-            <p className="text-xs text-muted-foreground">{t("lessOperatingCost")}</p>
-            <p className="font-mono text-sm font-semibold text-destructive">
-              −{formatTaka(data.payroll + data.otherExpense)}
-            </p>
-          </div>
-        </div>
-
-        <div className="rounded-xl bg-card p-5 ring-1 ring-(--card-ring) shadow-(--shadow-sm)">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-1.5 text-sm font-medium text-muted-foreground">
-              <CheckCircle2 className="size-3.5" />
-              {t("netProfit")}
+            <div className={styles.brand}>
+              <Image src="/logo.jpg" alt={nav("brand")} width={52} height={52} priority className={styles.logo} />
+              <p className={styles.brandName}>{nav("brand")}</p>
             </div>
-            {prevData ? <DeltaBadge pct={profitDelta} /> : null}
+            <h2 className={styles.title}>{t("financialReportTitle")}</h2>
           </div>
-          <p className={cn("mt-2 font-mono text-2xl font-bold tabular-nums", data.netProfit < 0 && "text-destructive")}>
-            {formatTaka(data.netProfit)}
-          </p>
-          <p className="mt-1 text-xs text-muted-foreground">
-            {formatTaka(data.grossProfit)} − {formatTaka(data.payroll + data.otherExpense)}
-          </p>
-          <div className="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-muted">
-            <div
-              className={cn("h-full rounded-full", data.netProfit >= 0 ? "bg-success" : "bg-destructive")}
-              style={{ width: `${Math.max(2, Math.min(100, Math.abs(data.margin)))}%` }}
-            />
+          <div className={styles.metadata}>
+            <span className={styles.month}>{monthLabels.get(data.month)?.full}</span>
+            <ReportPrintMetadata initialDate={generatedDate} locale={locale} dateLabel={t("monthlyReportPrintDate")}
+              pageLabel={t("monthlyReportPage")} title={`${nav("brand")} · ${t("financialReportTitle")}`}
+              month={monthLabels.get(data.month)?.full ?? data.month} pageName="monthlyFinancialReport" />
           </div>
-        </div>
-      </div>
-
-      {/* P&L waterfall */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base">
-            {monthLabels.get(data.month)?.full} — {t("pnlStatement")}
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="flex flex-col gap-4">
+        </header>
+        <dl className={styles.summary}>
           {[
-            { label: t("expectedIncome"), value: data.income, tone: "bg-success", pct: 100 },
-            { label: t("transactionTypeRentPaidToOwner"), value: -data.ownerRent, tone: "bg-destructive/70", pct: (data.ownerRent / Math.max(1, data.income)) * 100 },
-            { label: `= ${t("grossProfit")}`, value: data.grossProfit, tone: "bg-blue-500", pct: (data.grossProfit / Math.max(1, data.income)) * 100, muted: true },
-            { label: t("transactionTypePayrollExpense"), value: -data.payroll, tone: "bg-destructive/70", pct: (data.payroll / Math.max(1, data.income)) * 100 },
-            { label: t("expenseTypeUtility"), value: -data.utility, tone: "bg-destructive/70", pct: (data.utility / Math.max(1, data.income)) * 100 },
-            { label: t("otherOperatingExpense"), value: -(data.maintenance + data.other), tone: "bg-destructive/70", pct: ((data.maintenance + data.other) / Math.max(1, data.income)) * 100 },
-          ].map((row, i) => (
-            <div key={i} className="grid grid-cols-[1fr_auto] items-center gap-3 sm:grid-cols-[180px_1fr_auto]">
-              <span className={cn("text-sm", row.muted ? "text-muted-foreground" : "font-medium")}>{row.label}</span>
-              <div className="hidden h-2 w-full overflow-hidden rounded-full bg-muted sm:block">
-                <div
-                  className={cn("h-full rounded-full", row.tone)}
-                  style={{ width: `${Math.max(2, Math.min(100, row.pct))}%` }}
-                />
-              </div>
-              <span
-                className={cn(
-                  "text-right font-mono text-sm font-semibold tabular-nums",
-                  row.value < 0 ? "text-destructive" : row.muted ? "text-muted-foreground" : "text-success"
-                )}
-              >
-                {row.value < 0 ? "−" : ""}
-                {formatTaka(Math.abs(row.value))}
-              </span>
-            </div>
-          ))}
-          <div className="grid grid-cols-[1fr_auto] items-center gap-3 border-t pt-3 sm:grid-cols-[180px_1fr_auto]">
-            <span className="text-sm font-semibold">{t("netProfit")}</span>
-            <div className="hidden h-2.5 w-full overflow-hidden rounded-full bg-muted sm:block">
-              <div
-                className={cn("h-full rounded-full", data.netProfit >= 0 ? "bg-success" : "bg-destructive")}
-                style={{ width: `${Math.max(2, Math.min(100, Math.abs(data.margin)))}%` }}
-              />
-            </div>
-            <span
-              className={cn(
-                "text-right font-mono text-base font-bold tabular-nums",
-                data.netProfit >= 0 ? "text-success" : "text-destructive"
-              )}
-            >
-              {formatTaka(data.netProfit)}
-            </span>
-          </div>
-
-          {prevData ? (
-            <div className="grid grid-cols-2 gap-3 border-t pt-3 sm:grid-cols-4">
-              <div>
-                <p className="text-xs text-muted-foreground">{t("margin")}</p>
-                <p className={cn("font-mono text-sm font-semibold tabular-nums", data.margin >= 0 ? "text-success" : "text-destructive")}>
-                  {data.margin}%
-                </p>
-              </div>
-              <div>
-                <p className="text-xs text-muted-foreground">{t("incomeChange")}</p>
-                <DeltaBadge pct={incomeDelta} />
-              </div>
-              <div>
-                <p className="text-xs text-muted-foreground">{t("expenseChange")}</p>
-                <DeltaBadge pct={expenseDelta} invert />
-              </div>
-              <div>
-                <p className="text-xs text-muted-foreground">{t("profitChange")}</p>
-                <DeltaBadge pct={profitDelta} />
-              </div>
-            </div>
-          ) : null}
-        </CardContent>
-      </Card>
-
+            [t("financialReportIncome"), data.income], [t("totalExpense"), expense],
+            [t("grossProfit"), data.grossProfit], [t("netProfit"), data.netProfit],
+          ].map(([label, value], index) => <div key={label} className={styles.metric}>
+            <dt>{label}</dt>
+            <dd className={index === 1 || Number(value) < 0 ? styles.remaining : index === 0 || index === 3 ? styles.collected : undefined}>{formatTaka(Number(value))}</dd>
+          </div>)}
+        </dl>
+        <p className={styles.note}>{t("financialReportBasis")}</p>
+        <h3 className={styles.sectionTitle}>{t("pnlStatement")}</h3>
+        <table className={`${styles.table} ${styles.statement}`}>
+          <caption className="sr-only">{t("pnlStatement")} — {monthLabels.get(data.month)?.full}</caption>
+          <tbody>
+            {statement.map((row) => <tr key={row.label} className={row.subtotal ? styles.total : undefined}>
+              <th scope="row" className="text-left font-medium">{row.label}</th>
+              <td className={`${styles.number} ${row.amount < 0 ? styles.remaining : ""}`}>{formatTaka(row.amount || 0)}</td>
+            </tr>)}
+          </tbody>
+          <tfoot><tr className={styles.total}>
+            <th scope="row" className="text-left">{t("netProfit")}</th>
+            <td className={`${styles.number} ${data.netProfit < 0 ? styles.remaining : styles.collected}`}>{formatTaka(data.netProfit)}</td>
+          </tr></tfoot>
+        </table>
+        <h3 className={styles.sectionTitle}>{t("propertyWisePL")}</h3>
+        <div className={styles.tableWrap}>
+          <table className={styles.table}>
+            <caption className="sr-only">{t("propertyWisePL")} — {monthLabels.get(data.month)?.full}</caption>
+            <thead><tr>
+              {[t("propertyLabel"), t("financialReportIncome"), t("transactionTypeRentPaidToOwner"), t("financialReportOperatingExpense"), t("netProfit"), t("margin")].map((label, i) =>
+                <th key={label} scope="col" className={i === 0 ? "text-left" : "text-right"}>{label}</th>)}
+            </tr></thead>
+            <tbody>
+              {propertyRows.length === 0 ? <tr><td colSpan={6} className="py-8 text-center text-muted-foreground">{t("noTransactions")}</td></tr> : propertyRows.map((row) => <tr key={row.propertyId} className={styles.tenant}>
+                <th scope="row" className={`${styles.name} text-left`}>{row.propertyId === COMPANY_KEY ? t("companyExpenseRowLabel") : row.propertyName}</th>
+                {[row.income, row.ownerRent, row.payroll + row.otherExpense, row.netProfit].map((value, index) =>
+                  <td key={index} className={`${styles.number} ${index === 3 ? value < 0 ? styles.remaining : styles.collected : ""}`}>{formatTaka(value)}</td>)}
+                <td className={styles.number}>{row.margin}%</td>
+              </tr>)}
+            </tbody>
+            <tfoot><tr className={styles.total}>
+              <th scope="row" className="text-left">{t("total")}</th>
+              {[totals.income, totals.ownerRent, totals.otherExpense, totals.netProfit].map((value, index) =>
+                <td key={index} className={styles.number}>{formatTaka(value)}</td>)}
+              <td className={styles.number}>{totals.income > 0 ? Math.round(totals.netProfit / totals.income * 1000) / 10 : 0}%</td>
+            </tr></tfoot>
+          </table>
+        </div>
+        <footer className={styles.footer}>
+          <p className={styles.scope}>{t("financialReportScope")}</p>
+          <div className={styles.signatures}><p>{t("monthlyReportPreparedBy")}</p><p>{t("monthlyReportApprovedBy")}</p></div>
+        </footer>
+      </article>
+      <div className="flex flex-col gap-4 print:hidden">
+        {prevData && <div className="flex flex-wrap items-center gap-x-6 gap-y-2 text-xs text-muted-foreground">
+          <span>{t("incomeChange")}: <DeltaBadge pct={incomeDelta} /></span>
+          <span>{t("expenseChange")}: <DeltaBadge pct={expenseDelta} invert /></span>
+          <span>{t("profitChange")}: <DeltaBadge pct={profitDelta} /></span>
+        </div>}
       {/* Trend + category breakdown */}
       <div className="grid gap-4 lg:grid-cols-3">
         <Card className="lg:col-span-2">
@@ -340,172 +273,7 @@ export function ReportsView({ months, propertyPLByMonth, defaultMonth }: Reports
         </Card>
       </div>
 
-      {/* Per-property P&L */}
-      <Card>
-        <CardHeader className="flex-row items-center justify-between space-y-0">
-          <CardTitle className="text-base">{t("propertyWisePL")}</CardTitle>
-          <span className="text-xs text-muted-foreground">{t("sortedByProfit")}</span>
-        </CardHeader>
-        <CardContent>
-          {propertyRows.length === 0 ? (
-            <p className="py-8 text-center text-sm text-muted-foreground">{t("noTransactions")}</p>
-          ) : (
-            <>
-            <div className="flex flex-col gap-2 md:hidden">
-              {propertyRows.map((r) => {
-                const isCompanyRow = r.propertyId === COMPANY_KEY;
-                const TypeIcon = isCompanyRow ? Users : getTypeIcon(t, r.propertyType);
-                return (
-                  <div key={r.propertyId} className="rounded-lg border p-3">
-                    <div className="flex items-center justify-between gap-2">
-                      <div className="flex min-w-0 items-center gap-2">
-                        <TypeIcon className="size-3.5 shrink-0 text-muted-foreground" />
-                        <span className="truncate text-sm font-medium">
-                          {isCompanyRow ? t("companyExpenseRowLabel") : r.propertyName}
-                        </span>
-                      </div>
-                      <span
-                        className={cn(
-                          "shrink-0 font-mono text-sm font-semibold tabular-nums",
-                          r.netProfit >= 0 ? "text-success" : "text-destructive"
-                        )}
-                      >
-                        {formatTaka(r.netProfit)}
-                      </span>
-                    </div>
-                    <div className="mt-1.5 h-1.5 w-full overflow-hidden rounded-full bg-muted">
-                      <div
-                        className={cn("h-full rounded-full", r.margin >= 0 ? "bg-success" : "bg-destructive")}
-                        style={{ width: `${Math.max(2, Math.min(100, Math.abs(r.margin)))}%` }}
-                      />
-                    </div>
-                    <div className="mt-2 grid grid-cols-3 gap-2 text-xs">
-                      <div>
-                        <p className="text-muted-foreground">{t("expectedColumn")}</p>
-                        <p className="font-mono tabular-nums">{formatTaka(r.income)}</p>
-                      </div>
-                      <div>
-                        <p className="text-muted-foreground">{t("totalExpense")}</p>
-                        <p className="font-mono tabular-nums text-muted-foreground">
-                          {formatTaka(r.ownerRent + r.payroll + r.otherExpense)}
-                        </p>
-                      </div>
-                      <div>
-                        <p className="text-muted-foreground">{t("margin")}</p>
-                        <p
-                          className={cn(
-                            "font-mono tabular-nums",
-                            r.margin >= 15 ? "text-success" : r.margin >= 0 ? "text-warning" : "text-destructive"
-                          )}
-                        >
-                          {r.margin}%
-                        </p>
-                      </div>
-                    </div>
-                  </div>
-                );
-              })}
-              <div className="flex items-center justify-between border-t pt-2 text-sm">
-                <span className="text-muted-foreground">{t("total")}</span>
-                <span
-                  className={cn(
-                    "font-mono font-semibold tabular-nums",
-                    totals.netProfit >= 0 ? "text-success" : "text-destructive"
-                  )}
-                >
-                  {formatTaka(totals.netProfit)}
-                </span>
-              </div>
-            </div>
-            <div className="hidden md:block">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>{t("propertyLabel")}</TableHead>
-                  <TableHead className="text-right">{t("expectedColumn")}</TableHead>
-                  <TableHead className="text-right">{t("leaseColumn")}</TableHead>
-                  <TableHead className="text-right">{t("totalExpense")}</TableHead>
-                  <TableHead className="text-right">{t("netProfit")}</TableHead>
-                  <TableHead className="text-right">{t("margin")}</TableHead>
-                  <TableHead>{t("visualColumn")}</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {propertyRows.map((r) => {
-                  const isCompanyRow = r.propertyId === COMPANY_KEY;
-                  const TypeIcon = isCompanyRow ? Users : getTypeIcon(t, r.propertyType);
-                  return (
-                    <TableRow key={r.propertyId}>
-                      <TableCell>
-                        <div className="flex items-center gap-2">
-                          <TypeIcon className="size-3.5 text-muted-foreground" />
-                          {isCompanyRow ? t("companyExpenseRowLabel") : r.propertyName}
-                        </div>
-                      </TableCell>
-                      <TableCell className="text-right font-mono tabular-nums">{formatTaka(r.income)}</TableCell>
-                      <TableCell className="text-right font-mono tabular-nums text-muted-foreground">
-                        {formatTaka(r.ownerRent)}
-                      </TableCell>
-                      <TableCell className="text-right font-mono tabular-nums text-muted-foreground">
-                        {formatTaka(r.payroll + r.otherExpense)}
-                      </TableCell>
-                      <TableCell
-                        className={cn(
-                          "text-right font-mono tabular-nums",
-                          r.netProfit >= 0 ? "text-success" : "text-destructive"
-                        )}
-                      >
-                        {formatTaka(r.netProfit)}
-                      </TableCell>
-                      <TableCell
-                        className={cn(
-                          "text-right font-mono tabular-nums",
-                          r.margin >= 15 ? "text-success" : r.margin >= 0 ? "text-warning" : "text-destructive"
-                        )}
-                      >
-                        {r.margin}%
-                      </TableCell>
-                      <TableCell>
-                        <div className="h-1.5 w-20 overflow-hidden rounded-full bg-muted">
-                          <div
-                            className={cn("h-full rounded-full", r.margin >= 0 ? "bg-success" : "bg-destructive")}
-                            style={{ width: `${Math.max(2, Math.min(100, Math.abs(r.margin)))}%` }}
-                          />
-                        </div>
-                      </TableCell>
-                    </TableRow>
-                  );
-                })}
-              </TableBody>
-              <TableFooter>
-                <TableRow>
-                  <TableCell className="text-muted-foreground">{t("total")}</TableCell>
-                  <TableCell className="text-right font-mono font-semibold tabular-nums">
-                    {formatTaka(totals.income)}
-                  </TableCell>
-                  <TableCell className="text-right font-mono tabular-nums text-muted-foreground">
-                    {formatTaka(totals.ownerRent)}
-                  </TableCell>
-                  <TableCell className="text-right font-mono tabular-nums text-muted-foreground">
-                    {formatTaka(totals.otherExpense)}
-                  </TableCell>
-                  <TableCell
-                    className={cn(
-                      "text-right font-mono font-semibold tabular-nums",
-                      totals.netProfit >= 0 ? "text-success" : "text-destructive"
-                    )}
-                  >
-                    {formatTaka(totals.netProfit)}
-                  </TableCell>
-                  <TableCell colSpan={2} />
-                </TableRow>
-              </TableFooter>
-            </Table>
-            </div>
-            </>
-          )}
-        </CardContent>
-      </Card>
+      </div>
     </div>
   );
 }

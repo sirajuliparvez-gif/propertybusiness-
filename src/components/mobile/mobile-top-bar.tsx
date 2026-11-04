@@ -4,10 +4,9 @@ import { useTranslations } from "next-intl";
 import Image from "next/image";
 import { Link } from "@/i18n/navigation";
 import { GlobalSearch } from "@/components/global-search";
-import { NotificationBell } from "@/components/notification-bell";
-import type { NotificationItem } from "@/lib/dashboard-data";
+import type { ReactNode } from "react";
 
-export function MobileTopBar({ notifications }: { notifications: NotificationItem[] }) {
+export function MobileTopBar({ notifications }: { notifications: ReactNode }) {
   const t = useTranslations("Nav");
 
   return (
@@ -21,7 +20,7 @@ export function MobileTopBar({ notifications }: { notifications: NotificationIte
       <div className="min-w-0 flex-1">
         <GlobalSearch />
       </div>
-      <NotificationBell items={notifications} />
+      {notifications}
     </header>
   );
 }
