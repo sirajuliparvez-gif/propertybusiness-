@@ -135,6 +135,11 @@
     "viewAll": "View all"
   },
   "Properties": {
+    "financialReportTitle": "Monthly income & expense report",
+    "financialReportIncome": "Total income",
+    "financialReportOperatingExpense": "Operating expenses",
+    "financialReportBasis": "Income, owner rent, payroll and other operating expenses for the selected month. Tenant receipts are attributed to the billing month they settle; other transactions use their transaction dates.",
+    "financialReportScope": "Advance deposits, advance adjustments/refunds, utility reimbursements and owner withdrawals are excluded from profit and loss. Company payroll and administration costs appear as a separate row. Figures may change with subsequent entries.",
     "monthlyReportLoading": "Loading report…",
     "monthlyReportPage": "Page",
     "monthlyReportPrintDate": "Print date",

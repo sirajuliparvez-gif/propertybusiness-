@@ -4,13 +4,14 @@ import { useEffect, useState } from "react";
 import { flushSync } from "react-dom";
 import { formatDate } from "@/lib/format";
 
-export function ReportPrintMetadata({ initialDate, locale, dateLabel, pageLabel, title, month }: {
+export function ReportPrintMetadata({ initialDate, locale, dateLabel, pageLabel, title, month, pageName = "monthlyRentReport" }: {
   initialDate: string;
   locale: string;
   dateLabel: string;
   pageLabel: string;
   title: string;
   month: string;
+  pageName?: "monthlyRentReport" | "monthlyFinancialReport";
 }) {
   const [printDate, setPrintDate] = useState(initialDate);
   useEffect(() => {
@@ -21,7 +22,7 @@ export function ReportPrintMetadata({ initialDate, locale, dateLabel, pageLabel,
   }, [locale]);
   return <>
     <p>{dateLabel}: {printDate}</p>
-    <style>{`@page monthlyRentReport {
+    <style>{`@page ${pageName} {
       size: A4 landscape;
       margin: 18mm 12mm;
       @top-left { content: ${JSON.stringify(title)}; font-family: var(--font-sans), sans-serif; font-size: 10pt; font-weight: 600; color: #222; }

@@ -84,3 +84,16 @@
   .signatures { margin-top:40px; break-inside:avoid; color:#333; font-size:10px; }
   .signatures p { border-color:#777; }
 }
+
+.sectionTitle { padding:24px 32px 14px; font-size:16px; font-weight:650; }
+.statement { min-width:0; }
+.statement td:last-child { width:35%; }
+.statement tr { border-bottom:1px solid var(--border); }
+@media (max-width:639px) { .sectionTitle { padding-inline:20px; } }
+@media print {
+  .financialPrint { page:monthlyFinancialReport; }
+  .financialPrint thead { display:table-header-group; }
+  .financialPrint tfoot { display:table-row-group; }
+  .financialPrint tr { break-inside:avoid; }
+  .sectionTitle { padding:16px 0 10px; font-size:12px; break-after:avoid; }
+}
