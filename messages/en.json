@@ -136,6 +136,7 @@
     "search": "Search",
     "searchPlaceholder": "Search property, tenant, or phone...",
     "searchNoResults": "No results found.",
+    "loading": "Loading…",
     "notifications": "Notifications",
     "allClear": "All caught up!",
     "viewAll": "View all"

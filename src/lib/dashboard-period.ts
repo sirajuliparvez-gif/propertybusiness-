@@ -25,3 +25,16 @@ export function dashboardFinancialBuckets(transactions: {
   }
   return [...buckets].map(([month, totals]) => ({ month, ...totals, net: totals.income - totals.expense }));
 }
+
+export function dashboardYearlyBuckets(monthly: { month: string; income: number; expense: number }[], endMonth: string, yearsBack = 3) {
+  const year = Number(endMonth.slice(0, 4));
+  const buckets = new Map(Array.from({ length: yearsBack }, (_, index) => [String(year - yearsBack + index + 1), { income: 0, expense: 0 }]));
+  for (const point of monthly) {
+    if (point.month > endMonth) continue;
+    const bucket = buckets.get(point.month.slice(0, 4));
+    if (!bucket) continue;
+    bucket.income += point.income;
+    bucket.expense += point.expense;
+  }
+  return [...buckets].map(([year, totals]) => ({ year, ...totals, net: totals.income - totals.expense }));
+}

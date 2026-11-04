@@ -23,8 +23,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
 import {
   getActionRequiredData,
-  getMonthlyFinancials,
-  getYearlyFinancials,
+  getDashboardFinancials,
   getPropertyPerformance,
   getOccupancyStats,
   getCashFlowForecast,
@@ -50,8 +49,7 @@ async function getDashboardData(requestedMonth?: string) {
     utilityExpenseAgg,
     recentTransactions,
     actionRequired,
-    monthlyFinancials,
-    yearlyFinancials,
+    financials,
     propertyPerformance,
     occupancy,
     cashFlowForecast,
@@ -79,8 +77,7 @@ async function getDashboardData(requestedMonth?: string) {
       },
     }),
     getActionRequiredData(),
-    getMonthlyFinancials(12, selectedMonth),
-    getYearlyFinancials(3, selectedMonth),
+    getDashboardFinancials(selectedMonth),
     getPropertyPerformance(selectedMonth),
     getOccupancyStats(),
     getCashFlowForecast(),
@@ -88,6 +85,7 @@ async function getDashboardData(requestedMonth?: string) {
     getRentCollectionData(selectedMonth),
   ]);
 
+  const { monthly: monthlyFinancials, yearly: yearlyFinancials } = financials;
   const income = monthlyFinancials[monthlyFinancials.length - 1]?.income ?? 0;
   const expense = monthlyFinancials[monthlyFinancials.length - 1]?.expense ?? 0;
   const utilityExpense = utilityExpenseAgg._sum.amount ? Number(utilityExpenseAgg._sum.amount) : 0;

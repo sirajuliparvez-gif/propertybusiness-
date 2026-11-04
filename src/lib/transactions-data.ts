@@ -6,7 +6,8 @@ import { isDirectlyEditableTransactionType } from "@/lib/transaction-edit";
 
 export async function getAllTransactionsData(requestedMonth?: string) {
   const scope = resolveListMonth(requestedMonth);
-  const transactions = await prisma.transaction.findMany({
+  const [transactions, filterRows] = await Promise.all([prisma.transaction.findMany({
+    where: scope.selectedMonth ? { date: { gte: scope.start, lt: scope.end } } : undefined,
     orderBy: { date: "desc" },
     select: {
       id: true,
@@ -29,7 +30,12 @@ export async function getAllTransactionsData(requestedMonth?: string) {
       tenantLeaseId: true,
       guestStayId: true,
     },
-  });
+  }), scope.selectedMonth ? prisma.transaction.findMany({
+    orderBy: { date: "desc" },
+    // Month/property options need only lightweight metadata across history,
+    // never the tenant, payroll, guest or notes details of unrelated months.
+    select: { date: true, propertyId: true, property: { select: { name: true } } },
+  }) : Promise.resolve(null)]);
 
   const rows = transactions.map((t) => {
     const isProfitAffecting =
@@ -75,7 +81,7 @@ export async function getAllTransactionsData(requestedMonth?: string) {
     };
   });
 
-  const scopedRows = scope.selectedMonth ? rows.filter((row) => row.date >= scope.start && row.date < scope.end) : rows;
+  const scopedRows = rows;
   const totalIncome = scopedRows
     .filter((r) => (INCOME_TYPES as readonly string[]).includes(r.type))
     .reduce((sum, r) => sum + r.amount, 0);
@@ -84,7 +90,9 @@ export async function getAllTransactionsData(requestedMonth?: string) {
     .reduce((sum, r) => sum + r.amount, 0);
 
   const properties = Array.from(
-    new Map(rows.map((r) => [r.propertyId, r.propertyName])),
+    new Map(filterRows
+      ? filterRows.map((row) => [row.propertyId, row.property?.name ?? "কোম্পানি স্টাফ"] as const)
+      : rows.map((row) => [row.propertyId, row.propertyName] as const)),
     ([id, name]) => ({ id, name })
   );
 
@@ -92,7 +100,7 @@ export async function getAllTransactionsData(requestedMonth?: string) {
     transactions: scopedRows,
     selectedMonth: scope.selectedMonth,
     currentMonth: scope.currentMonth,
-    availableMonths: listMonthOptions(rows.map((row) => dhakaISO(row.date).slice(0, 7)), scope.currentMonth, scope.selectedMonth),
+    availableMonths: listMonthOptions((filterRows ?? rows).map((row) => dhakaISO(row.date).slice(0, 7)), scope.currentMonth, scope.selectedMonth),
     totalIncome,
     totalExpense,
     net: totalIncome - totalExpense,

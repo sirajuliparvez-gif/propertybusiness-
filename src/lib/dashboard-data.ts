@@ -1,5 +1,5 @@
 import { resolveListMonth } from "@/lib/list-month";
-import { dashboardMonthKeys, dashboardFinancialBuckets } from "@/lib/dashboard-period";
+import { dashboardMonthKeys, dashboardFinancialBuckets, dashboardYearlyBuckets } from "@/lib/dashboard-period";
 import { dhakaNow } from "@/lib/dhaka-time";
 import { cache } from "react";
 import { prisma } from "@/lib/prisma";
@@ -45,20 +45,7 @@ export const getActionRequiredData = cache(async function getActionRequiredData(
   const salaryPastDueNow = isMonthPastDue(currentMonth, SALARY_DUE_DAY, now);
   const todayStart = startOfDay(now);
 
-  const [
-    rentDue,
-    utilityDue,
-    downpaymentExhausted,
-    payrollDue,
-    vacantUnits,
-    agreementsExpiring,
-    tenantLeaseExpiring,
-    missingTenantNid,
-    tenantLeasesMissingAgreement,
-    ownerAgreementsMissingDocument,
-    guestCheckIns,
-    guestCheckOuts,
-  ] = await Promise.all([
+  const lists = Promise.all([
     // Recorded rent months still owing something and already past the 10th
     // (months nobody recorded at all come from the lease-based query below).
     prisma.rentPayment.findMany({
@@ -189,6 +176,7 @@ export const getActionRequiredData = cache(async function getActionRequiredData(
     }),
   ]);
 
+  // Start the independent totals batch without waiting for the lists.
   // Second batch: what the first queries cannot see (rent months with no row at
   // all, staff nobody has paid yet) plus true totals, because each list above is
   // capped at 20 rows and the tab badges must show the real number.
@@ -201,19 +189,7 @@ export const getActionRequiredData = cache(async function getActionRequiredData(
     status: { in: ["UNPAID" as const, "PARTIAL" as const] },
     dueDate: { lte: daysFromNow(DAYS_AHEAD) },
   };
-  const [
-    unrecordedRent,
-    unrecordedRentCount,
-    rowRentCount,
-    unpaidEmployees,
-    utilityCount,
-    vacantCount,
-    tenantExpiringCount,
-    agreementExpiringCount,
-    nidCount,
-    tenantDocCount,
-    ownerDocCount,
-  ] = await Promise.all([
+  const totals = Promise.all([
     rentPastDueNow
       ? prisma.tenantLease.findMany({
           where: unrecordedRentWhere,
@@ -249,6 +225,36 @@ export const getActionRequiredData = cache(async function getActionRequiredData(
     prisma.tenantLease.count({ where: { status: "ACTIVE", documents: { none: {} } } }),
     prisma.ownerLeaseAgreement.count({ where: { status: "ACTIVE", documents: { none: {} } } }),
   ]);
+
+  const [listResults, totalResults] = await Promise.all([lists, totals]);
+  const [
+    unrecordedRent,
+    unrecordedRentCount,
+    rowRentCount,
+    unpaidEmployees,
+    utilityCount,
+    vacantCount,
+    tenantExpiringCount,
+    agreementExpiringCount,
+    nidCount,
+    tenantDocCount,
+    ownerDocCount,
+  ] = totalResults;
+
+  const [
+    rentDue,
+    utilityDue,
+    downpaymentExhausted,
+    payrollDue,
+    vacantUnits,
+    agreementsExpiring,
+    tenantLeaseExpiring,
+    missingTenantNid,
+    tenantLeasesMissingAgreement,
+    ownerAgreementsMissingDocument,
+    guestCheckIns,
+    guestCheckOuts,
+  ] = listResults;
 
   return {
     counts: {
@@ -413,14 +419,17 @@ export async function getMonthlyFinancials(monthsBack = 12, requestedMonth?: str
 export async function getYearlyFinancials(yearsBack = 3, requestedMonth?: string) {
   const scope = resolveListMonth(requestedMonth);
   const month = scope.selectedMonth ?? scope.currentMonth;
-  const [year, number] = month.split("-").map(Number);
+  const number = Number(month.slice(5));
   const monthly = await getMonthlyFinancials((yearsBack - 1) * 12 + number, month);
-  const buckets = new Map(Array.from({ length: yearsBack }, (_, index) => [String(year - yearsBack + index + 1), { income: 0, expense: 0 }]));
-  for (const point of monthly) {
-    const bucket = buckets.get(point.month.slice(0, 4))!;
-    bucket.income += point.income; bucket.expense += point.expense;
-  }
-  return [...buckets].map(([year, totals]) => ({ year, ...totals, net: totals.income - totals.expense }));
+  return dashboardYearlyBuckets(monthly, month, yearsBack);
+}
+
+export async function getDashboardFinancials(month: string) {
+  const monthNumber = Number(month.slice(5));
+  // One history read supplies both charts, including all three calendar years
+  // through the selected month and the latest twelve monthly points.
+  const monthly = await getMonthlyFinancials(24 + monthNumber, month);
+  return { monthly: monthly.slice(-12), yearly: dashboardYearlyBuckets(monthly, month) };
 }
 
 export async function getPropertyPerformance(selectedMonth?: string) {

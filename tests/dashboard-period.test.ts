@@ -1,9 +1,23 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { dashboardMonthKeys, dashboardFinancialBuckets } from "@/lib/dashboard-period";
+import { dashboardMonthKeys, dashboardFinancialBuckets, dashboardYearlyBuckets } from "@/lib/dashboard-period";
 import { reportingMonthKey } from "@/lib/reporting-period";
 
 const transaction = (type: string, amount: number, date: string, rentPaymentMonth?: string) => ({ type, amount, date: new Date(date), rentPaymentMonth });
+
+test("shared chart history preserves monthly and year-to-selected-month totals", () => {
+  const points = dashboardFinancialBuckets([
+    transaction("RENT_RECEIVED_FROM_TENANT", 1000, "2026-10-03", "2026-09"),
+    transaction("MAINTENANCE_EXPENSE", 100, "2025-12-12"),
+    transaction("UTILITY_PROFIT_FROM_TENANT", 30, "2026-10-05"),
+  ], dashboardMonthKeys("2026-09", 33));
+  assert.equal(points.slice(-12)[0].month, "2025-10");
+  assert.deepEqual(dashboardYearlyBuckets(points, "2026-09"), [
+    { year: "2024", income: 0, expense: 0, net: 0 },
+    { year: "2025", income: 0, expense: 100, net: -100 },
+    { year: "2026", income: 1000, expense: 0, net: 1000 },
+  ]);
+});
 
 test("dashboard trend ends on the selected month across year boundaries", () => {
   const keys = dashboardMonthKeys("2026-01");
