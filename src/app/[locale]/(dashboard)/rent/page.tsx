@@ -15,13 +15,17 @@ export default async function RentCollectionPage({
   searchParams: Promise<{ month?: string }>;
 }) {
   const t = await getTranslations("Properties");
+  const arrears = await getTranslations("RentArrears");
   const { month } = await searchParams;
   const rentCollection = await getRentCollectionData(month);
   const { payments, totalDue, totalCollected, totalRemaining, collectionRate } = rentCollection;
 
   return (
     <>
-    <div className="flex justify-end print:hidden">
+    <div className="flex flex-wrap justify-end gap-2 print:hidden">
+      <Button variant="outline" render={<Link href="/rent/arrears" />} nativeButton={false}>
+        <FileText className="size-4" />{arrears("title")}
+      </Button>
       <Button variant="outline" render={<Link href={`/rent/report?month=${rentCollection.selectedMonth}`} />} nativeButton={false}>
         <FileText className="size-4" />{t("monthlyReportTitle")}
       </Button>
