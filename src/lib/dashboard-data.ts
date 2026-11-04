@@ -4,8 +4,7 @@ import { dhakaNow } from "@/lib/dhaka-time";
 import { cache } from "react";
 import { prisma } from "@/lib/prisma";
 import { isIncomeType, isExpenseType } from "@/lib/finance-types";
-import { getAllTenantsData } from "@/lib/tenants-data";
-import { getAllStaffData } from "@/lib/employees-data";
+import { getDashboardLedgerData } from "@/lib/dashboard-ledger-data";
 import { isMonthPastDue, RENT_DUE_DAY, SALARY_DUE_DAY } from "@/lib/rent-ledger";
 import { reportingMonthKey } from "@/lib/reporting-period";
 import {
@@ -486,18 +485,17 @@ export async function getTotalOutstanding() {
   // dashboard total can never disagree with the Rent, Utility Bills and Staff
   // pages: rent past the 10th (ledger-based), every bill still owing, and the
   // salary that is still unpaid.
-  const [tenantsData, staffData, utilityAgg] = await Promise.all([
-    getAllTenantsData(),
-    getAllStaffData(),
+  const [ledgerData, utilityAgg] = await Promise.all([
+    getDashboardLedgerData(),
     prisma.utilityBill.aggregate({
       _sum: { amount: true, paidAmount: true },
       where: { status: { in: ["UNPAID", "PARTIAL"] } },
     }),
   ]);
 
-  const rent = tenantsData.totalPastDueRent;
+  const rent = ledgerData.totals.totalPastDueRent;
   const utility = Number(utilityAgg._sum.amount ?? 0) - Number(utilityAgg._sum.paidAmount ?? 0);
-  const payroll = staffData.totalPastDuePayroll;
+  const payroll = ledgerData.totals.totalPastDuePayroll;
 
   return { total: rent + utility + payroll, rent, utility, payroll };
 }
@@ -526,9 +524,8 @@ export async function getCashFlowForecast() {
   const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
   const monthEnd = new Date(now.getFullYear(), now.getMonth() + 1, 1);
 
-  const [tenantsData, staffData, companyBillAgg, ownerRentPaid, ownerRentDue] = await Promise.all([
-    getAllTenantsData(),
-    getAllStaffData(),
+  const [ledgerData, companyBillAgg, ownerRentPaid, ownerRentDue] = await Promise.all([
+    getDashboardLedgerData(),
     // Only bills the company bears itself are a real outflow — tenant-billed
     // ones are reimbursed, a pass-through that nets to zero (see finance-types).
     prisma.utilityBill.aggregate({
@@ -561,10 +558,10 @@ export async function getCashFlowForecast() {
   ]);
 
   // Rent still to collect, from the ledger (recorded and unrecorded months alike).
-  const incoming = tenantsData.totalOverdueRent;
+  const incoming = ledgerData.totals.totalOverdueRent;
   const outgoingUtility =
     Number(companyBillAgg._sum.amount ?? 0) - Number(companyBillAgg._sum.paidAmount ?? 0);
-  const outgoingPayroll = staffData.totalOverduePayroll;
+  const outgoingPayroll = ledgerData.totals.totalOverduePayroll;
   const ownerRentTotal = ownerRentDue.reduce((sum, property) => {
     const fixedRent = property.ownerLeaseAgreements[0]?.fixedMonthlyRentAmount;
     if (fixedRent != null) return sum + Number(fixedRent);

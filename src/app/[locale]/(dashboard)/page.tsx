@@ -29,7 +29,7 @@ import {
   getCashFlowForecast,
   getTotalOutstanding,
 } from "@/lib/dashboard-data";
-import { getRentCollectionData } from "@/lib/tenants-data";
+import { getDashboardRentCollection } from "@/lib/dashboard-ledger-data";
 import { ActionRequired } from "@/components/dashboard/action-required";
 import { IncomeExpenseChart } from "@/components/dashboard/income-expense-chart";
 import { PropertyPerformance } from "@/components/dashboard/property-performance";
@@ -82,7 +82,7 @@ async function getDashboardData(requestedMonth?: string) {
     getOccupancyStats(),
     getCashFlowForecast(),
     getTotalOutstanding(),
-    getRentCollectionData(selectedMonth),
+    getDashboardRentCollection(selectedMonth),
   ]);
 
   const { monthly: monthlyFinancials, yearly: yearlyFinancials } = financials;
