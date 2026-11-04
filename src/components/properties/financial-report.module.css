@@ -109,3 +109,10 @@
   .utilityPrint tfoot { display:table-row-group; }
   .utilityPrint tr { break-inside:avoid; }
 }
+
+@media print {
+  .salaryPrint { page:monthlySalaryReport; }
+  .salaryPrint thead { display:table-header-group; }
+  .salaryPrint tfoot { display:table-row-group; }
+  .salaryPrint tr { break-inside:avoid; }
+}

@@ -135,6 +135,17 @@
     "viewAll": "View all"
   },
   "Properties": {
+    "salaryReportTitle": "Monthly staff salary report",
+    "salaryReportStaff": "Staff / role",
+    "salaryReportOutstanding": "Salary outstanding",
+    "salaryReportPendingStaff": "Staff awaiting payment",
+    "salaryReportPaymentDate": "Latest payment",
+    "salaryReportUnpaid": "Unpaid",
+    "salaryReportCount": "Staff: {count}",
+    "salaryReportEmpty": "No salary records found for this month.",
+    "salaryReportBasis": "Salary due for the selected month and its latest payments, including later payments attributed to their salary month. Partial payments and outstanding balances are shown separately.",
+    "salaryReportScope": "Recorded salary snapshots are preserved; eligible months without a payroll record use the configured salary. Former staff records are included. Property and company staff are grouped by their current assignment. Figures may change with later entries.",
+    "salaryReportCredit": "Overpayment: {amount}. This has not been offset against other staff members’ outstanding salaries.",
     "utilityReportTenantUnknown": "Tenant not confirmed for this bill",
     "utilityReportTitle": "Monthly utility bill report",
     "utilityReportBill": "Unit / tenant",
