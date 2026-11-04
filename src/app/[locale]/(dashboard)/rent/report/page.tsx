@@ -3,7 +3,7 @@ import Image from "next/image";
 import { Fragment } from "react";
 import styles from "@/components/properties/financial-report.module.css";
 import { ReportPrintMetadata } from "@/components/properties/report-print-metadata";
-import { ReportMonthSelect } from "./month-select";
+import { ReportMonthSelect } from "@/components/properties/report-month-select";
 import { ArrowLeft, Building2 } from "lucide-react";
 import { Link } from "@/i18n/navigation";
 import { Button } from "@/components/ui/button";

@@ -97,3 +97,15 @@
   .financialPrint tr { break-inside:avoid; }
   .sectionTitle { padding:16px 0 10px; font-size:12px; break-after:avoid; }
 }
+
+.utilityTable { min-width:980px; }
+.billDetail { display:block; margin-top:3px; color:var(--muted-foreground); font-size:11px; font-weight:400; }
+@media print {
+  .utilityPrint { page:monthlyUtilityReport; }
+  .utilityTable { min-width:0; font-size:9px; }
+  .utilityTable th,.utilityTable td { padding:7px 6px; }
+  .billDetail { font-size:8px; color:#444; }
+  .utilityPrint thead { display:table-header-group; }
+  .utilityPrint tfoot { display:table-row-group; }
+  .utilityPrint tr { break-inside:avoid; }
+}

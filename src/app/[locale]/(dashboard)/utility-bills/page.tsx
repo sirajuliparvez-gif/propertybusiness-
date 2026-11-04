@@ -1,5 +1,7 @@
+import { Link } from "@/i18n/navigation";
+import { Button } from "@/components/ui/button";
 import { getTranslations } from "next-intl/server";
-import { AlertTriangle, CheckCircle2, ListChecks, Percent } from "lucide-react";
+import { AlertTriangle, CheckCircle2, ListChecks, Percent, FileText } from "lucide-react";
 import { getAllUtilityBillsData } from "@/lib/utility-bills-data";
 import { AddUtilityBillDialogGlobal } from "@/components/properties/add-utility-bill-dialog-global";
 import { UtilityBillsTable } from "@/components/properties/utility-bills-table";
@@ -14,12 +16,15 @@ export default async function UtilityBillsPage() {
 
   return (
     <div className="flex min-w-0 flex-1 flex-col gap-6">
-      <div className="flex items-center justify-between gap-3">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">{t("utilityBillsSection")}</h1>
           <p className="text-sm text-muted-foreground">{t("utilityBillsPageSubtitle")}</p>
         </div>
-        {properties.length > 0 ? <AddUtilityBillDialogGlobal properties={properties} /> : null}
+        <div className="flex flex-wrap gap-2 sm:justify-end">
+          <Button variant="outline" render={<Link href="/utility-bills/report" />} nativeButton={false}><FileText className="size-4" />{t("utilityReportTitle")}</Button>
+          {properties.length > 0 ? <AddUtilityBillDialogGlobal properties={properties} /> : null}
+        </div>
       </div>
 
       <div className="grid grid-cols-2 gap-3 sm:gap-4 md:grid-cols-4">

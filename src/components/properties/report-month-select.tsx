@@ -6,7 +6,7 @@ import { LoaderCircle } from "lucide-react";
 import { useRouter } from "@/i18n/navigation";
 import { monthLabel } from "@/lib/format";
 
-export function ReportMonthSelect({ month, months }: { month: string; months: string[] }) {
+export function ReportMonthSelect({ month, months, basePath = "/rent/report" }: { month: string; months: string[]; basePath?: string }) {
   const locale = useLocale();
   const t = useTranslations("Properties");
   const router = useRouter();
@@ -22,7 +22,7 @@ export function ReportMonthSelect({ month, months }: { month: string; months: st
         disabled={pending}
         onChange={(event) => {
           const nextMonth = event.target.value;
-          startTransition(() => router.push(`/rent/report?month=${nextMonth}`, { scroll: false }));
+          startTransition(() => router.push(`${basePath}?month=${nextMonth}`, { scroll: false }));
         }}
         className="h-10 rounded-lg border bg-card px-3 text-sm font-medium focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring disabled:cursor-wait disabled:opacity-60"
       >
