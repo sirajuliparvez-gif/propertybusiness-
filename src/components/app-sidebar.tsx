@@ -17,8 +17,10 @@ import {
   Settings,
   FileSpreadsheet,
   FileText,
+  FilePlus,
   HandCoins,
   Receipt,
+  type LucideIcon,
 } from "lucide-react";
 import {
   Sidebar,
@@ -33,31 +35,58 @@ import {
   SidebarMenuItem,
 } from "@/components/ui/sidebar";
 
+type SidebarItem = {
+  href: string;
+  label: string;
+  icon: LucideIcon;
+  prefetch?: boolean;
+};
+
 export function AppSidebar() {
   const t = useTranslations("Nav");
   const pathname = usePathname();
-
-  const items = [
-    { href: "/", label: t("dashboard"), icon: LayoutDashboard },
-    { href: "/properties", label: t("properties"), icon: Building2 },
-    { href: "/vacant-units", label: t("vacantUnits"), icon: DoorOpen },
-    { href: "/tenants", label: t("tenants"), icon: Users },
-    { href: "/rent", label: t("rent"), icon: Wallet },
-    { href: "/utility-bills", label: t("utilityBills"), icon: Zap },
-    { href: "/guest-stays", label: t("guestStays"), icon: BedDouble },
-    { href: "/employees", label: t("employees"), icon: HardHat },
-    { href: "/transactions", label: t("transactions"), icon: ArrowLeftRight },
-    { href: "/reports", label: t("reports"), icon: BarChart3 },
-    { href: "/import-export", label: t("importExport"), icon: FileSpreadsheet },
+  const groups: { label?: string; items: SidebarItem[] }[] = [
+    {
+      items: [{ href: "/", label: t("dashboard"), icon: LayoutDashboard }],
+    },
+    {
+      label: t("quickActions"),
+      items: [
+        { href: "/rent/arrears", label: t("quickRentArrears"), icon: HandCoins, prefetch: false },
+        { href: "/utility-bills?add=bill", label: t("quickUtilityBill"), icon: FilePlus, prefetch: false },
+        { href: "/transactions?add=expense", label: t("quickExpense"), icon: Receipt, prefetch: false },
+      ],
+    },
+    {
+      label: t("sidebarMoney"),
+      items: [
+        { href: "/rent", label: t("rent"), icon: Wallet },
+        { href: "/utility-bills", label: t("utilityBills"), icon: Zap },
+        { href: "/transactions", label: t("transactions"), icon: ArrowLeftRight },
+      ],
+    },
+    {
+      label: t("sidebarManagement"),
+      items: [
+        { href: "/tenants", label: t("tenants"), icon: Users },
+        { href: "/properties", label: t("properties"), icon: Building2 },
+        { href: "/vacant-units", label: t("vacantUnits"), icon: DoorOpen },
+        { href: "/employees", label: t("employees"), icon: HardHat },
+        { href: "/guest-stays", label: t("guestStays"), icon: BedDouble },
+      ],
+    },
+    {
+      label: t("sidebarReports"),
+      items: [
+        { href: "/rent/report", label: t("quickRentReport"), icon: FileText, prefetch: false },
+        { href: "/reports", label: t("reports"), icon: BarChart3 },
+        { href: "/import-export", label: t("importExport"), icon: FileSpreadsheet },
+      ],
+    },
   ];
-
-  const shortcuts = [
-    { href: "/rent/arrears", label: t("quickRentArrears"), icon: HandCoins },
-    { href: "/rent/report", label: t("quickRentReport"), icon: FileText },
-    { href: "/utility-bills?add=bill", label: t("quickUtilityBill"), icon: Zap },
-    { href: "/transactions?add=expense", label: t("quickExpense"), icon: Receipt },
-  ];
-  const activeShortcut = shortcuts.find((item) => pathname === item.href);
+  const items = groups.flatMap((group) => group.items);
+  const currentPage = items.find((item) => item.href === pathname);
+  const activeItem = currentPage ?? items.find((item) => pathname.startsWith(`${item.href}/`));
 
   return (
     <Sidebar collapsible="icon">
@@ -73,57 +102,51 @@ export function AppSidebar() {
           </SidebarMenuItem>
         </SidebarMenu>
       </SidebarHeader>
-      <SidebarContent>
-        <SidebarGroup className="border-b border-sidebar-border">
-          <SidebarGroupLabel>{t("quickActions")}</SidebarGroupLabel>
-          <SidebarGroupContent>
-            <SidebarMenu>
-              {shortcuts.map((item) => (
-                <SidebarMenuItem key={item.href}>
-                  <SidebarMenuButton
-                    isActive={item === activeShortcut}
-                    tooltip={item.label}
-                    render={<Link href={item.href} prefetch={false} aria-current={item === activeShortcut ? "page" : undefined} />}
-                  >
-                    <item.icon />
-                    <span>{item.label}</span>
-                  </SidebarMenuButton>
-                </SidebarMenuItem>
-              ))}
-            </SidebarMenu>
-          </SidebarGroupContent>
-        </SidebarGroup>
-        <SidebarGroup>
-          <SidebarGroupContent>
-            <SidebarMenu>
-              {items.map((item) => {
-                const active =
-                  item.href === "/"
-                    ? pathname === "/"
-                    : !activeShortcut && (pathname === item.href || pathname.startsWith(`${item.href}/`));
-                return (
+      <SidebarContent className="group-data-[collapsible=icon]:overflow-x-hidden group-data-[collapsible=icon]:overflow-y-auto">
+        {groups.map(({ label, items }) => (
+          <SidebarGroup
+            key={items[0].href}
+            role={label ? "group" : undefined}
+            aria-label={label}
+            className="py-1"
+          >
+            {label ? (
+              <SidebarGroupLabel className="h-6 group-data-[collapsible=icon]:-mt-6">
+                {label}
+              </SidebarGroupLabel>
+            ) : null}
+            <SidebarGroupContent>
+              <SidebarMenu>
+                {items.map((item) => (
                   <SidebarMenuItem key={item.href}>
                     <SidebarMenuButton
-                      isActive={active}
+                      isActive={item === activeItem}
                       tooltip={item.label}
-                      render={<Link href={item.href} />}
+                      render={
+                        <Link
+                          href={item.href}
+                          prefetch={item.prefetch}
+                          aria-current={item === currentPage ? "page" : undefined}
+                        />
+                      }
                     >
                       <item.icon />
                       <span>{item.label}</span>
                     </SidebarMenuButton>
                   </SidebarMenuItem>
-                );
-              })}
-            </SidebarMenu>
-          </SidebarGroupContent>
-        </SidebarGroup>
+                ))}
+              </SidebarMenu>
+            </SidebarGroupContent>
+          </SidebarGroup>
+        ))}
       </SidebarContent>
       <SidebarFooter>
         <SidebarMenu>
           <SidebarMenuItem>
             <SidebarMenuButton
+              isActive={pathname === "/settings"}
               tooltip={t("settings")}
-              render={<Link href="/settings" />}
+              render={<Link href="/settings" aria-current={pathname === "/settings" ? "page" : undefined} />}
             >
               <Settings />
               <span>{t("settings")}</span>

@@ -21,6 +21,9 @@
     "quickRentReport": "Monthly rent report",
     "quickUtilityBill": "Add utility bill",
     "quickExpense": "Add expense",
+    "sidebarMoney": "Rent, bills & transactions",
+    "sidebarManagement": "Property & management",
+    "sidebarReports": "Reports & data",
     "brand": "Reshmi Enterprise"
   },
   "Auth": {
