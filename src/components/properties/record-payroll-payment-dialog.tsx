@@ -47,6 +47,7 @@ export function RecordPayrollPaymentDialog({
   settled = false,
   returnTo,
   iconOnly = false,
+  rowContent,
 }: {
   propertyId: string | null;
   employeeId: string;
@@ -60,6 +61,7 @@ export function RecordPayrollPaymentDialog({
   settled?: boolean;
   returnTo?: string;
   iconOnly?: boolean;
+  rowContent?: React.ReactNode;
 }) {
   const t = useTranslations("Properties");
   const locale = useLocale();
@@ -77,7 +79,9 @@ export function RecordPayrollPaymentDialog({
     <Dialog>
       <DialogTrigger
         render={
-          <Button
+          rowContent ? (
+            <button type="button" className="flex w-full items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-muted/60" />
+          ) : <Button
             type="button"
             variant="outline"
             size={iconOnly ? "icon-sm" : "sm"}
@@ -85,8 +89,12 @@ export function RecordPayrollPaymentDialog({
           />
         }
       >
-        <Wallet className="size-3.5" />
-        {iconOnly ? <span className="sr-only">{t("paySalary")}</span> : t("paySalary")}
+        {rowContent ?? (
+          <>
+            <Wallet className="size-3.5" />
+            {iconOnly ? <span className="sr-only">{t("paySalary")}</span> : t("paySalary")}
+          </>
+        )}
       </DialogTrigger>
       <DialogContent>
         <DialogHeader>

@@ -113,8 +113,8 @@ async function getDashboardData(requestedMonth?: string) {
   };
 }
 
-export default async function DashboardPage({ searchParams }: { searchParams: Promise<{ month?: string }> }) {
-  const { month } = await searchParams;
+export default async function DashboardPage({ searchParams }: { searchParams: Promise<{ month?: string; dues?: string }> }) {
+  const { month, dues } = await searchParams;
   const locale = await getLocale();
   const t = await getTranslations("Dashboard");
   const tp = await getTranslations("Properties");
@@ -249,8 +249,9 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
         </Card>
       </div>
 
-      <ActionRequired data={data.actionRequired} />
-
+    </div>
+    <ActionRequired data={data.actionRequired} month={data.selectedMonth} initialTab={dues} />
+    <div className="hidden min-w-0 flex-1 flex-col gap-6 md:flex">
       <IncomeExpenseChart key={data.selectedMonth} monthly={data.monthlyFinancials} yearly={data.yearlyFinancials} />
 
       <PropertyPerformance data={data.propertyPerformance} />

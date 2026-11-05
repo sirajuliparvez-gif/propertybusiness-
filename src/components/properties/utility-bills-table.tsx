@@ -105,6 +105,7 @@ export function PayUtilityBillButton({
   iconOnly = false,
   variant = "button",
   rowContent,
+  billLabel,
 }: {
   billId: string;
   propertyId: string;
@@ -118,6 +119,7 @@ export function PayUtilityBillButton({
   // pattern) rendering `rowContent` instead of the button label.
   variant?: "button" | "row";
   rowContent?: React.ReactNode;
+  billLabel?: string;
 }) {
   const t = useTranslations("Properties");
   const [isPending, startTransition] = useTransition();
@@ -171,6 +173,7 @@ export function PayUtilityBillButton({
       <DialogContent>
         <DialogHeader>
           <DialogTitle>{t("payBill")}</DialogTitle>
+          {billLabel ? <p className="text-sm text-muted-foreground">{billLabel}</p> : null}
         </DialogHeader>
         <form
           action={(formData: FormData) => startTransition(() => payUtilityBill(formData))}
