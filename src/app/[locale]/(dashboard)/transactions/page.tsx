@@ -11,11 +11,14 @@ import { AddOwnerWithdrawalDialogGlobal } from "@/components/properties/add-owne
 import { StatTile } from "@/components/stat-tile";
 import { formatTaka } from "@/lib/format";
 
-export default async function TransactionsPage({ searchParams }: { searchParams: Promise<{ month?: string }> }) {
-  const { month } = await searchParams;
+export default async function TransactionsPage({ searchParams }: { searchParams: Promise<{ month?: string; add?: string }> }) {
+  const { month, add } = await searchParams;
+  const openAddForm = add === "expense";
   const t = await getTranslations("Properties");
   const [{ transactions, totalIncome, totalExpense, net, entryCount, selectedMonth, availableMonths }, propertyUnitOptions] =
     await Promise.all([getAllTransactionsData(month), getPropertyUnitOptions()]);
+
+  const dismissAddFormTo = selectedMonth ? `/transactions?month=${selectedMonth}` : "/transactions";
 
   return (
     <div className="flex min-w-0 flex-1 flex-col gap-6">
@@ -28,7 +31,11 @@ export default async function TransactionsPage({ searchParams }: { searchParams:
           <ReportMonthSelect month={selectedMonth ?? "ALL"} months={availableMonths} basePath="/transactions" allowAll />
           <Button variant="outline" render={<Link href={`/transactions/report${selectedMonth ? `?month=${selectedMonth}` : ""}`} />} nativeButton={false}><FileText className="size-4" />{t("transactionReportTitle")}</Button>
           <AddOwnerWithdrawalDialogGlobal />
-          <AddExpenseDialogGlobal properties={propertyUnitOptions} />
+          <AddExpenseDialogGlobal
+            key={String(openAddForm)}
+            properties={propertyUnitOptions}
+            dismissTo={openAddForm ? dismissAddFormTo : undefined}
+          />
         </div>
       </div>
 

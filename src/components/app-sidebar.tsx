@@ -16,6 +16,9 @@ import {
   BarChart3,
   Settings,
   FileSpreadsheet,
+  FileText,
+  HandCoins,
+  Receipt,
 } from "lucide-react";
 import {
   Sidebar,
@@ -23,6 +26,7 @@ import {
   SidebarFooter,
   SidebarGroup,
   SidebarGroupContent,
+  SidebarGroupLabel,
   SidebarHeader,
   SidebarMenu,
   SidebarMenuButton,
@@ -47,6 +51,14 @@ export function AppSidebar() {
     { href: "/import-export", label: t("importExport"), icon: FileSpreadsheet },
   ];
 
+  const shortcuts = [
+    { href: "/rent/arrears", label: t("quickRentArrears"), icon: HandCoins },
+    { href: "/rent/report", label: t("quickRentReport"), icon: FileText },
+    { href: "/utility-bills?add=bill", label: t("quickUtilityBill"), icon: Zap },
+    { href: "/transactions?add=expense", label: t("quickExpense"), icon: Receipt },
+  ];
+  const activeShortcut = shortcuts.find((item) => pathname === item.href);
+
   return (
     <Sidebar collapsible="icon">
       <SidebarHeader>
@@ -62,6 +74,25 @@ export function AppSidebar() {
         </SidebarMenu>
       </SidebarHeader>
       <SidebarContent>
+        <SidebarGroup className="border-b border-sidebar-border">
+          <SidebarGroupLabel>{t("quickActions")}</SidebarGroupLabel>
+          <SidebarGroupContent>
+            <SidebarMenu>
+              {shortcuts.map((item) => (
+                <SidebarMenuItem key={item.href}>
+                  <SidebarMenuButton
+                    isActive={item === activeShortcut}
+                    tooltip={item.label}
+                    render={<Link href={item.href} prefetch={false} aria-current={item === activeShortcut ? "page" : undefined} />}
+                  >
+                    <item.icon />
+                    <span>{item.label}</span>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+              ))}
+            </SidebarMenu>
+          </SidebarGroupContent>
+        </SidebarGroup>
         <SidebarGroup>
           <SidebarGroupContent>
             <SidebarMenu>
@@ -69,7 +100,7 @@ export function AppSidebar() {
                 const active =
                   item.href === "/"
                     ? pathname === "/"
-                    : pathname.startsWith(item.href);
+                    : !activeShortcut && (pathname === item.href || pathname.startsWith(`${item.href}/`));
                 return (
                   <SidebarMenuItem key={item.href}>
                     <SidebarMenuButton

@@ -24,9 +24,9 @@ export function QuickActionsSheet({
     { href: "/properties/new", label: t("newProperty"), icon: Building2, tone: "text-blue-600 dark:text-blue-400 bg-linear-to-br from-blue-500/20 to-blue-500/5" },
     { href: "/rent", label: t("recordRent"), icon: Wallet, tone: "text-success bg-linear-to-br from-success/25 to-success/5" },
     { href: "/tenants", label: t("newTenant"), icon: Users, tone: "text-blue-600 dark:text-blue-400 bg-linear-to-br from-blue-500/20 to-blue-500/5" },
-    { href: "/utility-bills", label: t("newUtilityBill"), icon: Zap, tone: "text-warning bg-linear-to-br from-warning/25 to-warning/5" },
+    { href: "/utility-bills?add=bill", label: t("newUtilityBill"), icon: Zap, tone: "text-warning bg-linear-to-br from-warning/25 to-warning/5" },
     { href: "/employees", label: t("newEmployee"), icon: HardHat, tone: "text-violet-600 dark:text-violet-400 bg-linear-to-br from-violet-500/20 to-violet-500/5" },
-    { href: "/transactions", label: t("companyExpenseAction"), icon: Receipt, tone: "text-rose-600 dark:text-rose-400 bg-linear-to-br from-rose-500/20 to-rose-500/5" },
+    { href: "/transactions?add=expense", label: t("companyExpenseAction"), icon: Receipt, tone: "text-rose-600 dark:text-rose-400 bg-linear-to-br from-rose-500/20 to-rose-500/5" },
     { href: "/transactions", label: t("ownerWithdrawalAction"), icon: HandCoins, tone: "text-amber-600 dark:text-amber-400 bg-linear-to-br from-amber-500/20 to-amber-500/5" },
   ];
 

@@ -10,11 +10,14 @@ import { MobileUtilityBillsList } from "@/components/mobile/mobile-utility-bills
 import { StatTile } from "@/components/stat-tile";
 import { formatTaka } from "@/lib/format";
 
-export default async function UtilityBillsPage({ searchParams }: { searchParams: Promise<{ month?: string }> }) {
-  const { month } = await searchParams;
+export default async function UtilityBillsPage({ searchParams }: { searchParams: Promise<{ month?: string; add?: string }> }) {
+  const { month, add } = await searchParams;
+  const openAddForm = add === "bill";
   const t = await getTranslations("Properties");
   const { bills, properties, totalUnpaid, unpaidCount, paidThisMonth, paymentRate, selectedMonth, availableMonths } =
     await getAllUtilityBillsData(month);
+
+  const dismissAddFormTo = selectedMonth ? `/utility-bills?month=${selectedMonth}` : "/utility-bills";
 
   return (
     <div className="flex min-w-0 flex-1 flex-col gap-6">
@@ -26,7 +29,11 @@ export default async function UtilityBillsPage({ searchParams }: { searchParams:
         <div className="flex flex-wrap items-center gap-2 sm:justify-end">
           <ReportMonthSelect month={selectedMonth ?? "ALL"} months={availableMonths} basePath="/utility-bills" allowAll />
           <Button variant="outline" render={<Link href={`/utility-bills/report${selectedMonth ? `?month=${selectedMonth}` : ""}`} />} nativeButton={false}><FileText className="size-4" />{t("utilityReportTitle")}</Button>
-          {properties.length > 0 ? <AddUtilityBillDialogGlobal properties={properties} /> : null}
+          {properties.length > 0 ? <AddUtilityBillDialogGlobal
+            key={String(openAddForm)}
+            properties={properties}
+            dismissTo={openAddForm ? dismissAddFormTo : undefined}
+          /> : null}
         </div>
       </div>
 
