@@ -3,6 +3,7 @@
 import { dhakaTodayISO } from "@/lib/dhaka-time";
 import { useMemo, useState, useTransition } from "react";
 import { useTranslations } from "next-intl";
+import { useRouter } from "@/i18n/navigation";
 import { Loader2, Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -33,10 +34,13 @@ type UtilityType = "GAS" | "ELECTRICITY" | "WATER" | "OTHER";
 
 export function AddUtilityBillDialogGlobal({
   properties,
+  dismissTo,
 }: {
   properties: AllUtilityBillsData["properties"];
+  dismissTo?: string;
 }) {
   const t = useTranslations("Properties");
+  const router = useRouter();
   const [isPending, startTransition] = useTransition();
   const [type, setType] = useState<UtilityType>("ELECTRICITY");
   const [propertyId, setPropertyId] = useState(properties[0]?.id ?? "");
@@ -79,7 +83,12 @@ export function AddUtilityBillDialogGlobal({
   }
 
   return (
-    <Dialog>
+    <Dialog
+      defaultOpen={dismissTo != null}
+      onOpenChange={(open) => {
+        if (!open && dismissTo) router.replace(dismissTo, { scroll: false });
+      }}
+    >
       <DialogTrigger render={<Button size="sm" />}>
         <Plus className="size-3.5" />
         {t("addUtilityBill")}

@@ -3,6 +3,7 @@
 import { dhakaTodayISO } from "@/lib/dhaka-time";
 import { useMemo, useState, useTransition } from "react";
 import { useTranslations } from "next-intl";
+import { useRouter } from "@/i18n/navigation";
 import { Loader2, Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -30,8 +31,9 @@ import type { PropertyUnitOptions } from "@/lib/transactions-data";
 const NONE_VALUE = "NONE";
 const COMPANY_EXPENSE_VALUE = "COMPANY";
 
-export function AddExpenseDialogGlobal({ properties }: { properties: PropertyUnitOptions }) {
+export function AddExpenseDialogGlobal({ properties, dismissTo }: { properties: PropertyUnitOptions; dismissTo?: string }) {
   const t = useTranslations("Properties");
+  const router = useRouter();
   const [isPending, startTransition] = useTransition();
   const [propertyId, setPropertyId] = useState(COMPANY_EXPENSE_VALUE);
   const [type, setType] = useState<"MAINTENANCE_EXPENSE" | "OTHER">("OTHER");
@@ -50,7 +52,12 @@ export function AddExpenseDialogGlobal({ properties }: { properties: PropertyUni
   }
 
   return (
-    <Dialog>
+    <Dialog
+      defaultOpen={dismissTo != null}
+      onOpenChange={(open) => {
+        if (!open && dismissTo) router.replace(dismissTo, { scroll: false });
+      }}
+    >
       <DialogTrigger render={<Button size="sm" />}>
         <Plus className="size-3.5" />
         {t("addCompanyExpense")}

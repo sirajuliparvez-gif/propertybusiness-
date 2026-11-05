@@ -16,6 +16,11 @@
     "reports": "Reports",
     "importExport": "Import/Export",
     "settings": "Settings",
+    "quickActions": "Quick actions",
+    "quickRentArrears": "Collect rent arrears",
+    "quickRentReport": "Monthly rent report",
+    "quickUtilityBill": "Add utility bill",
+    "quickExpense": "Add expense",
     "brand": "Reshmi Enterprise"
   },
   "Auth": {
