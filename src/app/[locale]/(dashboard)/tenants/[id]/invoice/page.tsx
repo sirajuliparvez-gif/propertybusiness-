@@ -1,7 +1,7 @@
 import { dhakaISO, dhakaNow } from "@/lib/dhaka-time";
 import { notFound } from "next/navigation";
 import { getTranslations } from "next-intl/server";
-import { ArrowLeft, Building2, Scissors, Wallet } from "lucide-react";
+import { ArrowLeft, Building2, Scissors } from "lucide-react";
 import { Link } from "@/i18n/navigation";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -13,6 +13,7 @@ import { isMonthPastDue, LEDGER_START_MONTH, RENT_DUE_DAY } from "@/lib/rent-led
 import { cn } from "@/lib/utils";
 import { InvoiceHeader } from "@/components/invoice-header";
 import { InvoiceMonthSelect } from "@/components/properties/invoice-month-select";
+import { RecordTenantRentPaymentDialog } from "@/components/properties/record-tenant-rent-payment-dialog";
 import { InvoicePrintButton } from "@/components/properties/invoice-print-button";
 import { rentTermsDueAmount, resolveRentTermsForMonth } from "@/lib/rent-terms";
 
@@ -154,14 +155,30 @@ export default async function TenantInvoicePage({
         </div>
       </div>
 
-      {rentRemaining + previousRentDue > 0 && tenant.leaseStatus === "ACTIVE" ? (
+      {tenant.leaseStatus === "ACTIVE" && selectedMonth <= nowMonth && rentRemaining > 0 ? (
         <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border bg-muted/40 px-4 py-3 print:hidden">
-          <p className="text-sm text-muted-foreground">{t("invoicePartialRentHint")}</p>
-          <Button variant="outline" size="sm" render={<Link href={`/tenants/${id}`} />} nativeButton={false}>
-            <Wallet className="size-4" />
-            {t("invoiceOpenTenantProfile")}
-          </Button>
+          <p className="text-sm text-muted-foreground">{t("invoiceCollectRentHint")}</p>
+          <RecordTenantRentPaymentDialog
+            key={`${selectedMonth}:${rentRemaining}`}
+            propertyId={tenant.propertyId}
+            tenantLeaseId={tenant.id}
+            tenantName={tenant.tenantName}
+            propertyName={tenant.propertyName}
+            unitLabel={tenant.unitLabel}
+            {...selectedTerms}
+            paymentProgress={[{ month: selectedMonth, dueAmount: rentDue, paidAmount: rentPaid }]}
+            initialBillingMonth={selectedMonth}
+            fixedBillingMonth={selectedMonth}
+            returnTo={`/tenants/${id}/invoice?${new URLSearchParams({
+              month: selectedMonth,
+              ...(highlightedBillId ? { bill: highlightedBillId } : {}),
+            })}`}
+          />
         </div>
+      ) : tenant.leaseStatus === "ACTIVE" && previousRentDue > 0 ? (
+        <p className="rounded-lg border bg-muted/40 px-4 py-3 text-sm text-muted-foreground print:hidden">
+          {t("invoiceChooseOutstandingMonth")}
+        </p>
       ) : null}
 
       <TwoUpInvoice>

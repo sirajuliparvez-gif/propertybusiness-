@@ -46,6 +46,7 @@ export type OverdueMonth = {
 };
 
 export function RecordTenantRentPaymentDialog({
+  fixedBillingMonth,
   propertyId,
   tenantLeaseId,
   tenantName,
@@ -66,6 +67,7 @@ export function RecordTenantRentPaymentDialog({
   initialBillingMonth,
   triggerLabel,
 }: {
+  fixedBillingMonth?: string;
   propertyId: string;
   tenantLeaseId: string;
   tenantName?: string;
@@ -191,7 +193,7 @@ export function RecordTenantRentPaymentDialog({
           </>
         )}
       </DialogTrigger>
-      <DialogContent>
+      <DialogContent className={fixedBillingMonth ? "[&_div:has(>label[for=rentPaymentModeTabs])]:hidden" : undefined}>
         <DialogHeader>
           <DialogTitle>{dialogTitle}</DialogTitle>
         </DialogHeader>
@@ -255,7 +257,9 @@ export function RecordTenantRentPaymentDialog({
             </p>
           ) : null}
 
-          {mode === "cash" || mode === "downpaymentAdjustment" ? (
+          {fixedBillingMonth ? (
+            <input type="hidden" name="billingMonth" value={fixedBillingMonth} />
+          ) : mode === "cash" || mode === "downpaymentAdjustment" ? (
             <FormField label={t("billingMonth")} htmlFor="rentBillingMonth" required>
               <Input
                 id="rentBillingMonth"
@@ -359,7 +363,7 @@ export function RecordTenantRentPaymentDialog({
                 name="amount"
                 type="number"
                 step="any"
-                min={0}
+                min={fixedBillingMonth ? 0.01 : 0}
                 max={
                   mode === "downpaymentAdjustment"
                     ? Math.min(currentDownpaymentBalance, remainingForMonth(billingMonth))
@@ -380,6 +384,14 @@ export function RecordTenantRentPaymentDialog({
               ) : null}
             </FormField>
           )}
+
+          {fixedBillingMonth ? (
+            <p className="text-sm text-muted-foreground">
+              {t("overdueAfterPayment", {
+                amount: formatTaka(Math.max(0, remainingForMonth(billingMonth) - Math.max(0, Number(amount) || 0))),
+              })}
+            </p>
+          ) : null}
 
           <FormField label={t("paymentDate")} htmlFor="rentPaymentDate" required>
             <Input id="rentPaymentDate" name="date" type="date" max={todayValue} defaultValue={todayValue} required />
