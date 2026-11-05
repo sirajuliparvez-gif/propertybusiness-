@@ -43,6 +43,7 @@ export default async function TenantProfilePage({
 }) {
   const { id } = await params;
   const t = await getTranslations("Properties");
+  const history = await getTranslations("TenantHistory");
   const locale = await getLocale();
   const tenant = await getTenantProfile(id);
   if (!tenant) notFound();
@@ -128,6 +129,10 @@ export default async function TenantProfilePage({
           <Button variant="outline" render={<Link href={`/tenants/${tenant.id}/invoice`} />} nativeButton={false}>
             <Printer className="size-3.5" />
             {t("invoiceLabel")}
+          </Button>
+          <Button variant="outline" render={<Link href={`/tenants/${tenant.id}/history`} />} nativeButton={false}>
+            <History className="size-3.5" />
+            {history("open")}
           </Button>
           <EditTenantDialog
             leaseId={tenant.id}

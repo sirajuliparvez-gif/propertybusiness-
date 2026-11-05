@@ -11,15 +11,7 @@ import { getMonthlyTransactionReport } from "@/lib/monthly-transaction-report-da
 import { formatDate, formatTaka, monthLabel } from "@/lib/format";
 import { paymentMethodLabel } from "@/lib/payment-method";
 
-const typeKeys: Record<string, string> = {
-  RENT_RECEIVED_FROM_TENANT: "transactionTypeRentReceived", RENT_PAID_TO_OWNER: "transactionTypeRentPaidToOwner",
-  DOWNPAYMENT_PAID_TO_OWNER: "transactionTypeDownpaymentPaidToOwner", DOWNPAYMENT_RECEIVED_FROM_TENANT: "transactionTypeDownpaymentReceivedFromTenant",
-  DOWNPAYMENT_REFUND_TO_TENANT: "transactionTypeDownpaymentRefundToTenant", DOWNPAYMENT_REFUND_FROM_OWNER: "transactionTypeDownpaymentRefundFromOwner",
-  UTILITY_REIMBURSEMENT_FROM_TENANT: "transactionTypeUtilityReimbursement", UTILITY_PROFIT_FROM_TENANT: "transactionTypeUtilityProfit",
-  SERVICE_CHARGE_RECEIVED_FROM_TENANT: "transactionTypeServiceCharge", GUEST_STAY_PAYMENT_RECEIVED: "transactionTypeGuestStayPayment",
-  GUEST_DEPOSIT_REFUND: "transactionTypeGuestDepositRefund", PAYROLL_EXPENSE: "transactionTypePayrollExpense",
-  UTILITY_EXPENSE: "transactionTypeUtilityExpense", MAINTENANCE_EXPENSE: "expenseTypeMaintenance", OTHER: "expenseTypeOther", OWNER_WITHDRAWAL: "transactionTypeOwnerWithdrawal",
-};
+import { transactionTypeLabels } from "@/lib/transaction-type-labels";
 
 export default async function MonthlyTransactionReportPage({ searchParams }: { searchParams: Promise<{ month?: string }> }) {
   const { month: requested } = await searchParams;
@@ -56,7 +48,7 @@ export default async function MonthlyTransactionReportPage({ searchParams }: { s
             {rows.length === 0 ? <tr><td colSpan={7} className="py-10 text-center text-muted-foreground">{t("transactionReportEmpty")}</td></tr> : rows.map((entry) => <tr key={entry.id} className={styles.tenant}>
               <td className="whitespace-nowrap">{formatDate(entry.date, locale)}</td>
               <th scope="row" className={`${styles.name} ${styles.transactionDetails} text-left`}>
-                {t(typeKeys[entry.type] ?? "expenseTypeOther")}
+                {t(transactionTypeLabels[entry.type] ?? "expenseTypeOther")}
                 {entry.relatedName && <span className={styles.billDetail}>{entry.relatedName}</span>}
                 {entry.notes && <span className={styles.billDetail}>{entry.notes}</span>}
               </th>
