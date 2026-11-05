@@ -1,3 +1,4 @@
+import { nextPaymentMonth } from "@/lib/payment-month";
 import { computeServiceChargeAmount } from "@/lib/service-charge";
 
 export type RentTerms = {
@@ -40,4 +41,9 @@ export function numericRentRates(
     serviceChargeType: rate.serviceChargeType,
     serviceChargeValue: rate.serviceChargeValue == null ? null : Number(rate.serviceChargeValue),
   }));
+}
+
+export function earliestRentChangeMonth(today: string, latestEffectiveMonth?: string | null) {
+  const nextMonth = nextPaymentMonth(today.slice(0, 7));
+  return latestEffectiveMonth && latestEffectiveMonth > nextMonth ? latestEffectiveMonth : nextMonth;
 }

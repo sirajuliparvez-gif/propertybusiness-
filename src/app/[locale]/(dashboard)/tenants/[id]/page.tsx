@@ -22,6 +22,7 @@ import { StatusPill, isRentSettled, rentPillStatus } from "@/components/properti
 import { StatTile } from "@/components/stat-tile";
 import { RecordTenantRentPaymentDialog } from "@/components/properties/record-tenant-rent-payment-dialog";
 import { VacateTenantDialog } from "@/components/properties/vacate-tenant-dialog";
+import { ChangeTenantRentDialog } from "@/components/properties/change-tenant-rent-dialog";
 import { EditTenantDialog } from "@/components/properties/edit-tenant-dialog";
 import { EditRentPaymentDialog } from "@/components/properties/edit-rent-payment-dialog";
 import { DeleteRentPaymentButton } from "@/components/properties/delete-rent-payment-button";
@@ -34,6 +35,7 @@ import { getTenantProfile } from "@/lib/tenants-data";
 import { formatTaka, formatDate, monthLabel } from "@/lib/format";
 import { paymentMethodLabel } from "@/lib/payment-method";
 import { dhakaISO, dhakaTodayISO } from "@/lib/dhaka-time";
+import { earliestRentChangeMonth } from "@/lib/rent-terms";
 import { previousPaymentMonth } from "@/lib/payment-month";
 
 export default async function TenantProfilePage({
@@ -49,6 +51,12 @@ export default async function TenantProfilePage({
 
   const isFormer = tenant.leaseStatus !== "ACTIVE";
   const currentMonth = dhakaTodayISO().slice(0, 7);
+  // Rate rows are ordered by effective month in the tenant profile query.
+  const rentHistory = tenant.rentRates.flatMap((rate, index, rates) => {
+    const previousRent = rates[index - 1]?.monthlyRentAmount;
+    if (previousRent === rate.monthlyRentAmount) return [];
+    return [{ ...rate, previousRent }];
+  });
   const previousMonth = previousPaymentMonth(dhakaTodayISO().slice(0, 7));
   const leaseStartMonth = dhakaISO(tenant.startDate).slice(0, 7);
   const previousPayment = tenant.payments.find((payment) => payment.month === previousMonth);
@@ -148,48 +156,60 @@ export default async function TenantProfilePage({
             returnTo={`/tenants/${tenant.id}`}
           />
           {!isFormer ? (
-            <>
-              {previousMonthSettled ? (
-                <Button variant="outline" size="sm" render={<a href="#payment-history" />} nativeButton={false}>
-                  <History className="size-3.5" />
-                  {t("viewPreviousMonthPayment")}
-                </Button>
-              ) : null}
-              {leaseStartMonth <= previousMonth ? (
-                <AddRentArrearsDialog
-                  tenantLeaseId={tenant.id}
-                  monthlyDueAmount={tenant.monthlyRentAmount + tenant.serviceChargeAmount}
-                  leaseStartMonth={leaseStartMonth}
-                  returnTo={`/tenants/${tenant.id}`}
-                />
-              ) : null}
-              <CorrectHistoricalRentDialog
-                tenantLeaseId={tenant.id}
-                leaseStartMonth={leaseStartMonth}
-                currentMonthlyRent={tenant.monthlyRentAmount}
-                returnTo={`/tenants/${tenant.id}`}
-              />
-              <RecordTenantRentPaymentDialog
-                propertyId={tenant.propertyId}
-                tenantLeaseId={tenant.id}
-                tenantName={tenant.tenantName}
-                propertyName={tenant.propertyName}
-                unitLabel={tenant.unitLabel}
-                monthlyRentAmount={tenant.monthlyRentAmount}
-                currentDownpaymentBalance={tenant.currentDownpaymentBalance}
-                serviceChargeType={tenant.serviceChargeType}
-                serviceChargeValue={tenant.serviceChargeValue}
-                rentRates={tenant.rentRates}
-                paymentProgress={tenant.paymentProgress}
-                overdueMonths={tenant.overdueMonths}
-                monthSettled={currentMonthSettled}
-                returnTo={`/tenants/${tenant.id}`}
-                triggerLabel={currentMonthSettled ? t("advanceRentPayment") : t("collectRent")}
-              />
-            </>
+            <RecordTenantRentPaymentDialog
+              propertyId={tenant.propertyId}
+              tenantLeaseId={tenant.id}
+              tenantName={tenant.tenantName}
+              propertyName={tenant.propertyName}
+              unitLabel={tenant.unitLabel}
+              monthlyRentAmount={tenant.monthlyRentAmount}
+              currentDownpaymentBalance={tenant.currentDownpaymentBalance}
+              serviceChargeType={tenant.serviceChargeType}
+              serviceChargeValue={tenant.serviceChargeValue}
+              rentRates={tenant.rentRates}
+              paymentProgress={tenant.paymentProgress}
+              overdueMonths={tenant.overdueMonths}
+              monthSettled={currentMonthSettled}
+              returnTo={`/tenants/${tenant.id}`}
+              triggerLabel={currentMonthSettled ? t("advanceRentPayment") : t("collectRent")}
+            />
+          ) : null}
+          {!isFormer && previousMonthSettled ? (
+            <Button variant="outline" size="sm" render={<a href="#payment-history" />} nativeButton={false}>
+              <History className="size-3.5" />
+              {t("viewPreviousMonthPayment")}
+            </Button>
           ) : null}
         </div>
       </div>
+
+      {!isFormer ? (
+        <section aria-labelledby="rent-account-tools" className="flex flex-wrap items-center gap-x-4 gap-y-2 rounded-lg border bg-muted/30 px-4 py-3">
+          <h2 id="rent-account-tools" className="text-sm font-semibold">{t("rentAccountTools")}</h2>
+          <div className="flex flex-wrap items-center gap-2">
+            <ChangeTenantRentDialog
+              leaseId={tenant.id}
+              currentRent={tenant.monthlyRentAmount}
+              configuredRent={tenant.configuredMonthlyRentAmount}
+              earliestMonth={earliestRentChangeMonth(dhakaTodayISO(), tenant.latestRentEffectiveMonth)}
+            />
+            {leaseStartMonth <= previousMonth ? (
+              <AddRentArrearsDialog
+                tenantLeaseId={tenant.id}
+                monthlyDueAmount={tenant.monthlyRentAmount + tenant.serviceChargeAmount}
+                leaseStartMonth={leaseStartMonth}
+                returnTo={`/tenants/${tenant.id}`}
+              />
+            ) : null}
+            <CorrectHistoricalRentDialog
+              tenantLeaseId={tenant.id}
+              leaseStartMonth={leaseStartMonth}
+              currentMonthlyRent={tenant.monthlyRentAmount}
+              returnTo={`/tenants/${tenant.id}`}
+            />
+          </div>
+        </section>
+      ) : null}
 
       <div className={`grid grid-cols-2 gap-3 sm:gap-4 ${hasDownpaymentHistory ? "md:grid-cols-4" : "md:grid-cols-3"}`}>
         <StatTile
@@ -226,6 +246,44 @@ export default async function TenantProfilePage({
           }
         />
       </div>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">{t("rentChangeHistory")}</CardTitle>
+        </CardHeader>
+        <CardContent>
+          {rentHistory.length === 0 ? (
+            <p className="text-sm text-muted-foreground">{t("rentChangeHistoryEmpty")}</p>
+          ) : (
+            <ul className="divide-y">
+              {[...rentHistory].reverse().map(({ effectiveMonth, monthlyRentAmount, previousRent }) => {
+                const delta = previousRent == null ? 0 : monthlyRentAmount - previousRent;
+                return (
+                  <li key={effectiveMonth} className="flex flex-wrap items-center justify-between gap-x-6 gap-y-2 py-3 first:pt-0 last:pb-0">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="text-sm font-medium">{monthLabel(effectiveMonth, locale)}</span>
+                      {effectiveMonth > currentMonth ? <Badge variant="outline">{t("rentChangeScheduled")}</Badge> : null}
+                    </div>
+                    <div className="flex flex-wrap items-center gap-2 text-sm tabular-nums">
+                      {previousRent == null ? (
+                        <span className="text-muted-foreground">{t("rentChangeFirstRate")}</span>
+                      ) : (
+                        <span className="text-muted-foreground">{formatTaka(previousRent)} →</span>
+                      )}
+                      <strong>{formatTaka(monthlyRentAmount)}</strong>
+                      {delta !== 0 ? (
+                        <Badge variant="secondary">
+                          {t(delta > 0 ? "rentChangeIncrease" : "rentChangeDecrease", { amount: formatTaka(Math.abs(delta)) })}
+                        </Badge>
+                      ) : null}
+                    </div>
+                  </li>
+                );
+              })}
+            </ul>
+          )}
+        </CardContent>
+      </Card>
 
       <div className="grid gap-4 lg:grid-cols-3">
         <Card>

@@ -2,7 +2,7 @@
 
 import { dhakaTodayISO } from "@/lib/dhaka-time";
 import { useState, useTransition } from "react";
-import { useTranslations } from "next-intl";
+import { useLocale, useTranslations } from "next-intl";
 import { Loader2, Wallet } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -24,7 +24,7 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 import { FormField } from "@/components/properties/form-field";
-import { formatTaka, formatDate } from "@/lib/format";
+import { formatTaka, formatDate, monthLabel } from "@/lib/format";
 import { recordPayrollPayment, recordOverduePayrollPayment } from "@/lib/actions/payroll";
 
 type Mode = "cash" | "overdue";
@@ -40,6 +40,9 @@ export function RecordPayrollPaymentDialog({
   propertyId,
   employeeId,
   defaultAmount,
+  billingMonth,
+  employeeName,
+  initialMode = "cash",
   overdueMonths = [],
   settled = false,
   returnTo,
@@ -48,6 +51,9 @@ export function RecordPayrollPaymentDialog({
   propertyId: string | null;
   employeeId: string;
   defaultAmount: number;
+  billingMonth?: string;
+  employeeName?: string;
+  initialMode?: Mode;
   overdueMonths?: OverdueMonth[];
   // This month is fully paid and nothing older is owed — a further payment
   // would double-count, so the button is not offered.
@@ -56,8 +62,9 @@ export function RecordPayrollPaymentDialog({
   iconOnly?: boolean;
 }) {
   const t = useTranslations("Properties");
+  const locale = useLocale();
   const [isPending, startTransition] = useTransition();
-  const [mode, setMode] = useState<Mode>("cash");
+  const [mode, setMode] = useState<Mode>(initialMode);
   const [method, setMethod] = useState("NONE");
   const [amount, setAmount] = useState(String(defaultAmount || ""));
   const totalOverdueAmount = overdueMonths.reduce((sum, m) => sum + m.gap, 0);
@@ -83,7 +90,7 @@ export function RecordPayrollPaymentDialog({
       </DialogTrigger>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>{t("paySalary")}</DialogTitle>
+          <DialogTitle>{employeeName ? `${t("paySalary")} · ${employeeName}` : t("paySalary")}</DialogTitle>
         </DialogHeader>
         <form
           action={(formData: FormData) =>
@@ -98,7 +105,15 @@ export function RecordPayrollPaymentDialog({
           <input type="hidden" name="method" value={method} />
           {returnTo ? <input type="hidden" name="returnTo" value={returnTo} /> : null}
 
-          {overdueMonths.length > 0 ? (
+          {billingMonth ? (
+            <div className="rounded-lg border bg-muted/40 px-3 py-2 text-sm">
+              <input type="hidden" name="billingMonth" value={billingMonth} />
+              <p className="font-medium">{t("payrollBillingMonth", { month: monthLabel(billingMonth, locale) })}</p>
+              <p className="text-muted-foreground">{t("utilityRemainingDue", { amount: formatTaka(defaultAmount) })}</p>
+            </div>
+          ) : null}
+
+          {!billingMonth && overdueMonths.length > 0 ? (
             <FormField label={t("paymentMode")} htmlFor="payrollModeTabs">
               <Tabs value={mode} onValueChange={(v) => setMode(v as Mode)}>
                 <TabsList className="h-8 w-full">
@@ -154,6 +169,7 @@ export function RecordPayrollPaymentDialog({
                 type="number"
                 step="any"
                 min={0}
+                max={billingMonth ? defaultAmount : undefined}
                 required
                 value={amount}
                 onChange={(e) => setAmount(e.target.value)}
@@ -161,7 +177,7 @@ export function RecordPayrollPaymentDialog({
             </FormField>
           )}
 
-          <FormField label={t("paymentDate")} htmlFor="payrollDate" required>
+          <FormField label={t("payrollPaymentDate")} htmlFor="payrollDate" required>
             <Input id="payrollDate" name="date" type="date" defaultValue={todayValue} required />
           </FormField>
 

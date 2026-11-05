@@ -17,7 +17,6 @@ export default async function EmployeesPage({ searchParams }: { searchParams: Pr
     staff,
     totalActiveStaff,
     selectedMonth,
-    currentMonth,
     availableMonths,
     totalOverduePayroll,
     totalMonthlyPayroll,
@@ -41,7 +40,6 @@ export default async function EmployeesPage({ searchParams }: { searchParams: Pr
         </div>
       </div>
 
-      {selectedMonth && selectedMonth < currentMonth && <p className="text-sm text-muted-foreground">{t("historicalPayrollViewHint")}</p>}
       <div className="grid grid-cols-2 gap-3 sm:gap-4 md:grid-cols-5">
         <StatTile
           label={t(selectedMonth ? "periodStaffCount" : "activeStaffCount")}
@@ -75,9 +73,9 @@ export default async function EmployeesPage({ searchParams }: { searchParams: Pr
         />
       </div>
 
-      <MobileStaffList key={selectedMonth ?? "ALL"} staff={staff} selectedMonth={selectedMonth ?? undefined} readOnlyPayroll={Boolean(selectedMonth && selectedMonth < currentMonth)} />
+      <MobileStaffList key={selectedMonth ?? "ALL"} staff={staff} selectedMonth={selectedMonth ?? undefined} />
       <div className="hidden md:block">
-        <StaffTable key={selectedMonth ?? "ALL"} selectedMonth={selectedMonth ?? undefined} readOnlyPayroll={Boolean(selectedMonth && selectedMonth < currentMonth)} staff={staff} payrollCost={totalMonthlyPayroll} showPropertyColumn />
+        <StaffTable key={selectedMonth ?? "ALL"} selectedMonth={selectedMonth ?? undefined} staff={staff} payrollCost={totalMonthlyPayroll} showPropertyColumn />
       </div>
     </div>
   );
