@@ -21,6 +21,9 @@
     "quickRentReport": "মাসিক ভাড়া রিপোর্ট",
     "quickUtilityBill": "ইউটিলিটি বিল যোগ",
     "quickExpense": "খরচ যোগ",
+    "sidebarMoney": "ভাড়া, বিল ও লেনদেন",
+    "sidebarManagement": "প্রপার্টি ও ব্যবস্থাপনা",
+    "sidebarReports": "রিপোর্ট ও ডেটা",
     "brand": "রেশমি এন্টারপ্রাইজ"
   },
   "Auth": {
