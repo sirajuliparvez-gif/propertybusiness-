@@ -1,7 +1,7 @@
-import { dhakaNow } from "@/lib/dhaka-time";
+import { dhakaISO, dhakaNow } from "@/lib/dhaka-time";
 import { notFound } from "next/navigation";
 import { getTranslations } from "next-intl/server";
-import { ArrowLeft, Building2, Scissors } from "lucide-react";
+import { ArrowLeft, Building2, Scissors, Wallet } from "lucide-react";
 import { Link } from "@/i18n/navigation";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -23,7 +23,7 @@ function currentMonthKey() {
 
 function TwoUpInvoice({ children }: { children: React.ReactNode }) {
   return (
-    <div data-testid="invoice" className="print-two-up flex flex-col">
+    <div data-testid="invoice" className="print-two-up flex flex-col print:block">
       {children}
       <div aria-hidden="true" className="my-4 flex items-center gap-2 text-muted-foreground print:my-2">
         <Scissors className="size-3.5 shrink-0" />
@@ -68,12 +68,16 @@ export default async function TenantInvoicePage({
   // ---- rent
   const payment = tenant.payments.find((p) => p.month === selectedMonth) ?? null;
   // Rent is only tracked from LEDGER_START_MONTH on; an earlier month with no record has no rent to show.
-  const rentTracked = payment != null || selectedMonth >= LEDGER_START_MONTH;
+  const rentTracked = payment != null || (
+    selectedMonth >= LEDGER_START_MONTH &&
+    selectedMonth >= dhakaISO(tenant.startDate).slice(0, 7) &&
+    (tenant.leaseStatus === "ACTIVE" || (leaseEnd != null && selectedMonth <= dhakaISO(leaseEnd).slice(0, 7)))
+  );
   const selectedTerms = resolveRentTermsForMonth(
     {
-      monthlyRentAmount: tenant.monthlyRentAmount,
-      serviceChargeType: tenant.serviceChargeType,
-      serviceChargeValue: tenant.serviceChargeValue,
+      monthlyRentAmount: tenant.configuredMonthlyRentAmount,
+      serviceChargeType: tenant.configuredServiceChargeType,
+      serviceChargeValue: tenant.configuredServiceChargeValue,
     },
     tenant.rentRates,
     selectedMonth
@@ -87,13 +91,15 @@ export default async function TenantInvoicePage({
   const [selectedYear, selectedMonthNumber] = selectedMonth.split("-").map(Number);
   const rentDeadline = new Date(selectedYear, selectedMonthNumber - 1, RENT_DUE_DAY);
   const adjustment = tenant.downpaymentAdjustments.find((a) => a.month === selectedMonth) ?? null;
-  const previousRentDue = tenant.payments
-    .filter((p) => p.month < selectedMonth)
-    .reduce((sum, p) => sum + Math.max(0, p.dueAmount - p.paidAmount), 0);
+  const earlierRent = tenant.payments
+    .filter((p) => p.month < selectedMonth && p.dueAmount > p.paidAmount)
+    .map((p) => ({ ...p, remaining: p.dueAmount - p.paidAmount }))
+    .sort((a, b) => a.month.localeCompare(b.month));
+  const previousRentDue = earlierRent.reduce((sum, p) => sum + p.remaining, 0);
 
   const rentStatusLabels: Record<string, string> = {
     PAID: t("paid"),
-    PARTIAL: t("pending"),
+    PARTIAL: t("invoicePartiallyPaid"),
     UNPAID: isMonthPastDue(selectedMonth, RENT_DUE_DAY) ? t("overdueStatus") : t("dueInPeriod"),
     ADJUSTED_FROM_DOWNPAYMENT: t("paid"),
   };
@@ -110,7 +116,7 @@ export default async function TenantInvoicePage({
   const billRemaining = (b: (typeof unitBills)[number]) =>
     b.status === "PAID" ? 0 : Math.max(0, b.amount - b.paidAmount);
   const utilityDue = statementBills.reduce((sum, b) => sum + b.amount, 0);
-  const utilityPaid = statementBills.reduce((sum, b) => sum + b.paidAmount, 0);
+  const utilityRemaining = statementBills.reduce((sum, b) => sum + billRemaining(b), 0);
 
   const utilityTypeLabels: Record<string, string> = {
     GAS: t("utilityTypeGas"),
@@ -119,12 +125,13 @@ export default async function TenantInvoicePage({
     OTHER: t("utilityTypeOther"),
   };
   const billStatusLabel = (status: string) =>
-    status === "PAID" ? t("paid") : status === "PARTIAL" ? t("pending") : t("billStatusUnpaid");
+    status === "PAID" ? t("paid") : status === "PARTIAL" ? t("invoicePartiallyPaid") : t("billStatusUnpaid");
 
   // ---- totals
-  const totalDue = rentDue + previousRentDue + utilityDue;
-  const totalPaid = rentPaid + utilityPaid;
-  const balance = Math.max(0, totalDue - totalPaid);
+  const totalDue = rentDue + earlierRent.reduce((sum, p) => sum + p.dueAmount, 0) + utilityDue;
+  // An overpayment on one bill does not settle another bill.
+  const balance = rentRemaining + previousRentDue + utilityRemaining;
+  const totalSettled = totalDue - balance;
 
   const highlightedShown = highlightedBillId
     ? [...statementBills, ...companyBorneBills].some((b) => b.id === highlightedBillId)
@@ -147,10 +154,20 @@ export default async function TenantInvoicePage({
         </div>
       </div>
 
+      {rentRemaining + previousRentDue > 0 && tenant.leaseStatus === "ACTIVE" ? (
+        <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border bg-muted/40 px-4 py-3 print:hidden">
+          <p className="text-sm text-muted-foreground">{t("invoicePartialRentHint")}</p>
+          <Button variant="outline" size="sm" render={<Link href={`/tenants/${id}`} />} nativeButton={false}>
+            <Wallet className="size-4" />
+            {t("invoiceOpenTenantProfile")}
+          </Button>
+        </div>
+      ) : null}
+
       <TwoUpInvoice>
       <div
         data-testid="invoice-copy"
-        className="flex break-inside-avoid flex-col gap-6 rounded-xl border bg-card p-6 text-sm print:break-inside-avoid print:gap-3 print:rounded-none print:border-0 print:p-0 sm:p-8"
+        className="flex break-inside-avoid flex-col gap-6 rounded-xl border bg-card p-6 text-sm print:block print:space-y-3 print:[&_[data-slot=table-container]]:overflow-visible print:[&_tr]:break-inside-avoid print:rounded-none print:border-0 print:p-0 sm:p-8"
       >
         <InvoiceHeader brand={tNav("brand")} title={t("invoiceLabel")} subtitle={monthLabel(selectedMonth)}>
           <p className="mt-1 flex items-center gap-1 text-xs text-muted-foreground">
@@ -220,14 +237,6 @@ export default async function TenantInvoicePage({
               {t("noRentRecordThisMonth")}
             </p>
           )}
-          {previousRentDue > 0 ? (
-            <div className="mt-3 flex items-center justify-between rounded-lg border border-destructive/30 bg-destructive/5 p-3 text-xs">
-              <span className="font-medium text-destructive">{t("invoicePreviousRentDue")}</span>
-              <span data-testid="invoice-previous-rent" className="font-mono text-sm font-semibold tabular-nums text-destructive">
-                {formatTaka(previousRentDue)}
-              </span>
-            </div>
-          ) : null}
           {adjustment ? (
             <div className="mt-3 rounded-lg border border-primary/30 bg-primary/5 p-3 text-xs">
               <p className="font-medium text-primary">{t("adjustedFromDownpaymentNote")}</p>
@@ -245,6 +254,37 @@ export default async function TenantInvoicePage({
             </div>
           ) : null}
         </div>
+
+        {earlierRent.length > 0 ? (
+          <section className="min-w-0" data-testid="invoice-rent-arrears">
+            <div className="flex flex-wrap items-center justify-between gap-2 rounded-t-lg border border-destructive/30 bg-destructive/5 px-3 py-2 text-xs print:break-after-avoid">
+              <h2 className="font-semibold text-destructive">{t("invoicePreviousRentDue")}</h2>
+              <span data-testid="invoice-previous-rent" className="font-mono text-sm font-semibold tabular-nums text-destructive">
+                {formatTaka(previousRentDue)}
+              </span>
+            </div>
+            <Table className="text-xs">
+              <TableHeader>
+                <TableRow>
+                  <TableHead scope="col" className="h-8 whitespace-normal">{t("invoiceBillMonth")}</TableHead>
+                  <TableHead scope="col" className="h-8 whitespace-normal text-right">{t("totalDueLabel")}</TableHead>
+                  <TableHead scope="col" className="h-8 whitespace-normal text-right">{t("invoiceRentSettled")}</TableHead>
+                  <TableHead scope="col" className="h-8 whitespace-normal text-right">{t("remaining")}</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {earlierRent.map((p) => (
+                  <TableRow key={p.month}>
+                    <TableCell className="whitespace-normal font-medium">{monthLabel(p.month)}</TableCell>
+                    <TableCell className="text-right tabular-nums">{formatTaka(p.dueAmount)}</TableCell>
+                    <TableCell className="text-right tabular-nums">{formatTaka(p.paidAmount)}</TableCell>
+                    <TableCell className="text-right font-semibold tabular-nums text-destructive">{formatTaka(p.remaining)}</TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </section>
+        ) : null}
 
         <div>
           <p className="mb-2 text-xs font-semibold tracking-wide text-muted-foreground uppercase">
@@ -336,15 +376,15 @@ export default async function TenantInvoicePage({
           ) : null}
         </div>
 
-        <div className="grid grid-cols-3 gap-4 border-t pt-4">
+        <div className="grid grid-cols-3 gap-4 border-t pt-4 print:break-inside-avoid">
           <div>
             <p className="text-xs text-muted-foreground">{t("invoiceGrandDue")}</p>
             <p data-testid="invoice-total-due" className="font-mono text-lg font-bold tabular-nums">{formatTaka(totalDue)}</p>
           </div>
           <div className="text-center">
-            <p className="text-xs text-muted-foreground">{t("invoiceGrandPaid")}</p>
+            <p className="text-xs text-muted-foreground">{t("invoiceTotalSettled")}</p>
             <p data-testid="invoice-total-paid" className="font-mono text-lg font-bold tabular-nums text-success">
-              {formatTaka(totalPaid)}
+              {formatTaka(totalSettled)}
             </p>
           </div>
           <div className="text-right">
