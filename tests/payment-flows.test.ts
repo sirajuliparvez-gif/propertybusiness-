@@ -17,7 +17,7 @@ import { localizedMutationPaths } from "@/lib/localized-revalidation";
 import { reportingMonthKey } from "@/lib/reporting-period";
 import { withRentActionFeedback } from "@/lib/rent-action-feedback";
 import { rentTermsDueAmount, resolveRentTermsForMonth } from "@/lib/rent-terms";
-import { buildRentLedger } from "@/lib/rent-ledger";
+import { allocateRentPayment, buildRentLedger } from "@/lib/rent-ledger";
 
 test("rent payment can settle September when money arrives in October", () => {
   assert.equal(resolvePaymentMonth("2026-09", "2026-10-03"), "2026-09");
@@ -211,4 +211,23 @@ test("utility bill can be paid in two installments", () => {
     newPaidAmount: 1_000,
     status: "PAID",
   });
+});
+
+test("oldest-first arrears preview settles full or partial payments against remaining balances", () => {
+  const balances = [
+    { month: "2026-09", gap: 8_000 },
+    { month: "2026-10", gap: 10_000 },
+  ];
+  assert.deepEqual(allocateRentPayment(balances, 18_000), [
+    { ...balances[0], amount: 8_000 },
+    { ...balances[1], amount: 10_000 },
+  ]);
+  assert.deepEqual(allocateRentPayment(balances, 12_000), [
+    { ...balances[0], amount: 8_000 },
+    { ...balances[1], amount: 4_000 },
+  ]);
+  assert.deepEqual(allocateRentPayment([{ ...balances[0], gap: 2_000 }, balances[1]], 3_000), [
+    { ...balances[0], gap: 2_000, amount: 2_000 },
+    { ...balances[1], amount: 1_000 },
+  ]);
 });

@@ -5,7 +5,7 @@ import { revalidatePath } from "next/cache";
 import { getLocale } from "next-intl/server";
 import { prisma } from "@/lib/prisma";
 import { redirect } from "@/i18n/navigation";
-import { buildRentLedger, overdueEntries, totalOverdue, RENT_DUE_DAY } from "@/lib/rent-ledger";
+import { allocateRentPayment, buildRentLedger, overdueEntries, RENT_DUE_DAY } from "@/lib/rent-ledger";
 import { applyRentInstallment, isRentPaymentSettled } from "@/lib/payment-progress";
 import {
   isPaymentMonth,
@@ -15,6 +15,9 @@ import {
   resolvePaymentMonth,
 } from "@/lib/payment-month";
 import { localizedMutationPaths } from "@/lib/localized-revalidation";
+import { buildRentArrearsReport } from "@/lib/rent-arrears-report";
+import { requireCurrentUser } from "@/lib/auth/session";
+import { isValidTransactionDate } from "@/lib/transaction-edit";
 import { withRentActionFeedback } from "@/lib/rent-action-feedback";
 import { numericRentRates, rentTermsDueAmount, resolveRentTermsForMonth } from "@/lib/rent-terms";
 
@@ -559,18 +562,25 @@ export async function recordTenantRentPayment(formData: FormData) {
 // including a genuine partial on whichever month the money runs out on.
 export async function recordOverdueRentPayment(formData: FormData) {
   const locale = await getLocale();
-  const propertyId = formData.get("propertyId") as string;
-  const tenantLeaseId = formData.get("tenantLeaseId") as string;
-  if (!propertyId || !tenantLeaseId) throw new Error("Missing property or lease id");
-
+  const user = await requireCurrentUser();
+  const propertyId = str(formData, "propertyId");
+  const tenantLeaseId = str(formData, "tenantLeaseId");
   const dateStr = str(formData, "date");
-  const amountStr = str(formData, "amount");
-  if (!dateStr || !amountStr) throw new Error("Missing required payment fields");
-  let remaining = Number(amountStr);
-  const paymentAmount = remaining;
-  if (!(remaining > 0)) throw new Error("Amount must be greater than zero");
-  const paidDate = new Date(dateStr);
+  const paymentAmount = Number(str(formData, "amount"));
+  const today = dhakaTodayISO();
+  if (!propertyId || !tenantLeaseId || !dateStr || !isValidTransactionDate(dateStr) ||
+      dateStr > today || !Number.isFinite(paymentAmount) || paymentAmount <= 0) {
+    return { ok: false as const, reason: "invalid" as const };
+  }
 
+  const from = str(formData, "arrearsFrom");
+  const to = str(formData, "arrearsTo");
+  const period = isPaymentMonth(from) && isPaymentMonth(to) && from <= to && to <= today.slice(0, 7)
+    ? { from, to }
+    : null;
+  if ((from || to) && !period) return { ok: false as const, reason: "invalid" as const };
+
+  const paidDate = new Date(dateStr);
   const methodRaw = formData.get("method");
   const method =
     methodRaw === "CASH" ||
@@ -582,85 +592,92 @@ export async function recordOverdueRentPayment(formData: FormData) {
       ? methodRaw
       : null;
 
-  const lease = await prisma.tenantLease.findUnique({
-    where: { id: tenantLeaseId },
-    include: { rentRates: { orderBy: { effectiveMonth: "asc" } } },
-  });
-  if (!lease) throw new Error("Tenant lease not found");
-
-  const existingPayments = await prisma.rentPayment.findMany({
-    where: { tenantLeaseId },
-    select: { id: true, month: true, dueDate: true, dueAmount: true, paidAmount: true, status: true, paidAt: true },
-  });
-  const asOf = lease.status === "ACTIVE" ? dhakaNow() : (lease.movedOutAt ?? lease.endDate ?? dhakaNow());
-  const overdueRates = numericRentRates(lease.rentRates);
-  // "Rent due" is rent + service charge bundled as one figure — see the
-  // matching note in recordTenantRentPayment above.
-  const ledger = buildRentLedger(
-    lease.startDate,
-    (month) =>
-      rentTermsDueAmount(resolveRentTermsForMonth(leaseFallbackTerms(lease), overdueRates, month)),
-    existingPayments.map((rp) => ({
-      id: rp.id,
-      month: rp.month,
-      dueDate: rp.dueDate,
-      dueAmount: Number(rp.dueAmount),
-      paidAmount: Number(rp.paidAmount),
-      status: rp.status,
-      paidAt: rp.paidAt,
-    })),
-    asOf,
-    RENT_DUE_DAY
-  );
-  const overdue = overdueEntries(ledger); // oldest month first
-  if (overdue.length === 0) throw new Error("No overdue rent for this tenant");
-  if (remaining > totalOverdue(ledger)) {
-    throw new Error("Amount exceeds total overdue rent");
-  }
-
-  await prisma.$transaction(async (tx) => {
-    for (const entry of overdue) {
-      if (remaining <= 0) break;
-      const payThisMonth = Math.min(remaining, entry.gap);
-      const newPaidAmount = entry.paidAmount + payThisMonth;
-      const newStatus = newPaidAmount >= entry.dueAmount ? "PAID" : "PARTIAL";
-
-      const rentPayment = entry.rentPaymentId
-        ? await tx.rentPayment.update({
-            where: { id: entry.rentPaymentId },
-            data: { paidAmount: newPaidAmount, status: newStatus, paidAt: paidDate },
-          })
-        : await tx.rentPayment.create({
-            data: {
-              tenantLeaseId,
-              month: entry.month,
-              dueDate: entry.dueDate,
-              dueAmount: entry.dueAmount,
-              paidAmount: newPaidAmount,
-              status: newStatus,
-              paidAt: paidDate,
-            },
-          });
-
-      await tx.transaction.create({
-        data: {
-          propertyId,
-          type: "RENT_RECEIVED_FROM_TENANT",
-          direction: "INCOMING",
-          amount: payThisMonth,
-          method,
-          tenantLeaseId,
-          rentPaymentId: rentPayment.id,
-          date: paidDate,
+  const expected = str(formData, "rentAllocation");
+  let saved: boolean;
+  try {
+    saved = await prisma.$transaction(async (tx) => {
+      const lease = await tx.tenantLease.findUnique({
+        where: { id: tenantLeaseId },
+        include: {
+          rentRates: { orderBy: { effectiveMonth: "asc" } },
+          tenant: { select: { name: true } },
+          unit: { select: { label: true, unitType: { select: { property: { select: { id: true, name: true, deletedAt: true } } } } } },
+          rentPayments: { where: period ? { month: { gte: period.from, lte: period.to } } : undefined },
         },
       });
+      if (!lease || lease.unit.unitType.property.id !== propertyId) return false;
 
-      remaining -= payThisMonth;
-    }
-  });
+      const rates = numericRentRates(lease.rentRates);
+      const terms = leaseFallbackTerms(lease);
+      const payments = lease.rentPayments.map((payment) => ({
+        ...payment, dueAmount: Number(payment.dueAmount), paidAmount: Number(payment.paidAmount),
+      }));
+      const byMonth = new Map(payments.map((payment) => [payment.month, payment]));
+      const property = lease.unit.unitType.property;
+      // For report payments use its exact billing rules and displayed range,
+      // including recorded historical bills and former tenants.
+      const entries = period
+        ? (buildRentArrearsReport([{
+            ...lease, ...terms, propertyId, propertyName: property.name,
+            propertyDeleted: property.deletedAt != null, tenantName: lease.tenant.name,
+            unitLabel: lease.unit.label, rentRates: rates,
+            payments: payments.map((payment) => ({ ...payment, adjustments: [] })),
+          }], period.from, period.to).rows[0]?.months ?? []).map((row) => ({
+            month: row.month, gap: row.remaining, dueAmount: row.due, paidAmount: row.settled,
+          }))
+        : overdueEntries(buildRentLedger(
+            lease.startDate,
+            (month) => rentTermsDueAmount(resolveRentTermsForMonth(terms, rates, month)),
+            payments,
+            lease.status === "ACTIVE" ? dhakaNow() : (lease.movedOutAt ?? lease.endDate ?? dhakaNow()),
+            RENT_DUE_DAY,
+          ));
+      const total = entries.reduce((sum, entry) => sum + entry.gap, 0);
+      if (paymentAmount > total) return false;
+      const allocations = allocateRentPayment(entries, paymentAmount);
+      if (!allocations.length || expected !== JSON.stringify(allocations)) return false;
+
+      const entriesByMonth = new Map(entries.map((entry) => [entry.month, entry]));
+      for (const allocation of allocations) {
+        const entry = entriesByMonth.get(allocation.month)!;
+        const existing = byMonth.get(entry.month);
+        const settled = allocation.amount === entry.gap;
+        const paidAmount = settled ? entry.dueAmount : entry.paidAmount + allocation.amount;
+        const status = settled ? "PAID" : "PARTIAL";
+        const rentPayment = existing
+          ? await tx.rentPayment.update({
+              where: { id: existing.id },
+              data: { paidAmount, status, paidAt: paidDate },
+            })
+          : await tx.rentPayment.create({
+              data: {
+                tenantLeaseId, month: entry.month, dueDate: paymentMonthDueDate(entry.month, RENT_DUE_DAY),
+                dueAmount: entry.dueAmount, paidAmount, status, paidAt: paidDate,
+              },
+            });
+        await tx.transaction.create({
+          data: {
+            propertyId, type: "RENT_RECEIVED_FROM_TENANT", direction: "INCOMING",
+            amount: allocation.amount, method, tenantLeaseId, rentPaymentId: rentPayment.id,
+            date: paidDate, recordedByUserId: user.id,
+          },
+        });
+      }
+      return true;
+    }, { isolationLevel: "Serializable" });
+  } catch (error) {
+    // A concurrent payment may have changed or created a bill after the read.
+    if (!(error instanceof Error && "code" in error && (error.code === "P2034" || error.code === "P2002"))) throw error;
+    saved = false;
+  }
+  if (!saved) return { ok: false as const, reason: "changed" as const };
 
   const returnTo = str(formData, "returnTo") ?? `/properties/${propertyId}`;
-  revalidateLocalizedPath(locale, returnTo);
+  const returnPath = new URL(returnTo, "http://local").pathname;
+  for (const path of new Set([
+    ...localizedMutationPaths(locale, returnPath),
+    ...["/rent/arrears", "/rent/report", "/transactions", `/tenants/${tenantLeaseId}`].map((path) => `/${locale}${path}`),
+  ])) revalidatePath(path);
   redirect({ href: withRentActionFeedback(returnTo, "overdue", { amount: paymentAmount }), locale });
 }
 

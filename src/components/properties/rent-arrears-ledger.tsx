@@ -4,14 +4,17 @@ import { Fragment, useState } from "react";
 import { useTranslations } from "next-intl";
 import { ChevronDown } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { RecordTenantRentPaymentDialog } from "@/components/properties/record-tenant-rent-payment-dialog";
 import { formatTaka } from "@/lib/format";
 import { groupRentArrearsByProperty, type buildRentArrearsReport } from "@/lib/rent-arrears-report";
 import styles from "@/components/properties/rent-arrears.module.css";
 
 type Tenant = ReturnType<typeof buildRentArrearsReport>["rows"][number];
 
-export function RentArrearsLedger({ tenants, monthLabels, selectedTenant }: {
+export function RentArrearsLedger({ tenants, monthLabels, selectedTenant, arrearsPeriod, returnTo }: {
   tenants: Tenant[]; monthLabels: Record<string, string>; selectedTenant: string;
+  arrearsPeriod: { from: string; to: string };
+  returnTo: string;
 }) {
   const t = useTranslations("RentArrears");
   const p = useTranslations("Properties");
@@ -48,6 +51,22 @@ export function RentArrearsLedger({ tenants, monthLabels, selectedTenant }: {
             <tbody>{tenant.months.map((month) => <tr key={month.month}><th scope="row">{monthLabels[month.month]}</th><td>{formatTaka(month.due)}</td><td>{formatTaka(month.collected)}{month.adjusted > 0 && <small>{p("monthlyReportAdjusted")}: {formatTaka(month.adjusted)}</small>}</td><td>{formatTaka(month.remaining)}</td></tr>)}</tbody>
             <tfoot><tr><th scope="row">{p("total")}</th><td>{formatTaka(tenant.totals.due)}</td><td>{formatTaka(tenant.totals.collected)}</td><td>{formatTaka(tenant.totals.remaining)}</td></tr></tfoot>
           </table></div>
+          {expanded.has(tenant.id) && tenant.totals.remaining > 0 ? (
+            <div className="flex justify-end pt-3 print:hidden">
+              <RecordTenantRentPaymentDialog
+                key={tenant.months.map(({ month, remaining }) => `${month}:${remaining}`).join(",")}
+                tenantLeaseId={tenant.id}
+                tenantName={tenant.tenantName}
+                propertyId={tenant.propertyId}
+                propertyName={tenant.propertyName}
+                unitLabel={tenant.unitLabel}
+                overdueMonths={tenant.months.filter(({ remaining }) => remaining > 0).map(({ month, remaining }) => ({ month, gap: remaining }))}
+                arrearsPeriod={arrearsPeriod}
+                returnTo={returnTo}
+                triggerLabel={t("collectOutstanding")}
+              />
+            </div>
+          ) : null}
         </div>
       </details>)}</section>)}
     </div>}

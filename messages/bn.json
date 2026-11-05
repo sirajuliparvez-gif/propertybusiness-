@@ -176,6 +176,7 @@
     "empty": "এই অংশে কোনো রেকর্ড নেই।"
   },
   "RentArrears": {
+    "collectOutstanding": "বকেয়া আদায়",
     "marketDue": "এই মার্কেটের মোট বাকি",
     "marketAccounts": "{count}টি ভাড়ার হিসাব",
     "filters": "মাস বা ভাড়াটিয়া বাছাই করুন",
@@ -807,6 +808,11 @@
     "tenantRentPaymentRecordedToast": "ভাড়াটিয়ার ভাড়া রেকর্ড করা হয়েছে।",
     "settleOverdue": "পুরোনো বকেয়া নিন",
     "overdueMonthsHint": "{count} মাস বকেয়া আছে, মোট {total} — যত টাকা দিচ্ছেন তা সবচেয়ে পুরনো মাস থেকে শুরু করে সমন্বয় হবে।",
+    "arrearsPeriodHint": "এই রিপোর্টের সময়ে ({from} থেকে {to}) {total} বাকি আছে। সবচেয়ে পুরোনো মাস আগে পরিশোধ হবে।",
+    "overdueAllocation": "কোন মাসে কত টাকা বসবে",
+    "overdueAfterPayment": "আদায়ের পর বাকি: {amount}",
+    "overdueBalanceChanged": "বকেয়ার হিসাব বদলেছে। আবার সেভ করার আগে হালনাগাদ হিসাব দেখুন।",
+    "overdueInvalidPayment": "টাকার পরিমাণ ও তারিখ যাচাই করুন।",
     "overdueOldestFirstHint": "একাধিক মাস বকেয়া থাকলে আংশিক টাকা দিলেও সবচেয়ে পুরনো মাস আগে সেটল হবে।",
     "overdueRent": "বকেয়া ভাড়া",
     "monthsOverdueCount": "{count} মাস বকেয়া",

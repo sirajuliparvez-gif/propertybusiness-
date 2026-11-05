@@ -176,6 +176,7 @@
     "empty": "No records in this section."
   },
   "RentArrears": {
+    "collectOutstanding": "Collect outstanding rent",
     "marketDue": "Market outstanding",
     "marketAccounts": "{count} tenant accounts",
     "filters": "Change period or filters",
@@ -807,6 +808,11 @@
     "tenantRentPaymentRecordedToast": "Tenant rent payment recorded.",
     "settleOverdue": "Settle Overdue",
     "overdueMonthsHint": "{count} months overdue, {total} total — whatever you pay settles the oldest month(s) first.",
+    "arrearsPeriodHint": "This report period ({from} to {to}) has {total} outstanding. The oldest month is paid first.",
+    "overdueAllocation": "Payment by month",
+    "overdueAfterPayment": "Remaining after payment: {amount}",
+    "overdueBalanceChanged": "The balance changed. Review the updated account before submitting again.",
+    "overdueInvalidPayment": "Check the payment amount and date.",
     "overdueOldestFirstHint": "If several months are overdue, a partial payment still settles the oldest one first.",
     "overdueRent": "Overdue Rent",
     "monthsOverdueCount": "{count} months overdue",
