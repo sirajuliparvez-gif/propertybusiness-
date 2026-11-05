@@ -5,11 +5,80 @@ import { getLocale } from "next-intl/server";
 import { prisma } from "@/lib/prisma";
 import { redirect } from "@/i18n/navigation";
 import { dhakaISO, dhakaTodayISO } from "@/lib/dhaka-time";
-import { isPaymentMonth, nextPaymentMonth } from "@/lib/payment-month";
+import { isPaymentMonth } from "@/lib/payment-month";
+import { earliestRentChangeMonth } from "@/lib/rent-terms";
+import { requireCurrentUser } from "@/lib/auth/session";
+import { localizedMutationPaths } from "@/lib/localized-revalidation";
+import type { Prisma } from "@/generated/prisma/client";
 
 function str(formData: FormData, key: string) {
   const v = formData.get(key);
   return typeof v === "string" && v.trim() !== "" ? v.trim() : null;
+}
+
+type LeaseWithRates = Prisma.TenantLeaseGetPayload<{ include: { rentRates: true } }>;
+
+async function saveScheduledRentTerms(
+  tx: Prisma.TransactionClient,
+  lease: LeaseWithRates,
+  effectiveMonth: string,
+  terms: Pick<Prisma.TenantRentRateUncheckedCreateInput, "monthlyRentAmount" | "serviceChargeType" | "serviceChargeValue">,
+) {
+  if (lease.rentRates.length === 0) {
+    const baselineMonth = dhakaISO(lease.startDate).slice(0, 7);
+    await tx.tenantRentRate.upsert({
+      where: { tenantLeaseId_effectiveMonth: { tenantLeaseId: lease.id, effectiveMonth: baselineMonth } },
+      update: {},
+      create: {
+        tenantLeaseId: lease.id,
+        effectiveMonth: baselineMonth,
+        monthlyRentAmount: lease.monthlyRentAmount,
+        serviceChargeType: lease.serviceChargeType,
+        serviceChargeValue: lease.serviceChargeValue,
+      },
+    });
+  }
+  await tx.tenantRentRate.upsert({
+    where: { tenantLeaseId_effectiveMonth: { tenantLeaseId: lease.id, effectiveMonth } },
+    update: terms,
+    create: { tenantLeaseId: lease.id, effectiveMonth, ...terms },
+  });
+}
+
+export async function changeTenantRent(formData: FormData) {
+  await requireCurrentUser();
+  const leaseId = str(formData, "leaseId");
+  const amount = str(formData, "monthlyRentAmount");
+  const month = str(formData, "rentEffectiveMonth");
+  if (!leaseId || amount == null || !Number.isFinite(Number(amount)) || Number(amount) < 0 || !isPaymentMonth(month)) {
+    return { ok: false as const, error: "invalid" as const };
+  }
+
+  const result = await prisma.$transaction(async (tx) => {
+    const lease = await tx.tenantLease.findUnique({
+      where: { id: leaseId },
+      include: { rentRates: { orderBy: { effectiveMonth: "asc" } } },
+    });
+    if (!lease || lease.status !== "ACTIVE") return { ok: false as const, error: "inactive" as const };
+    if (month < earliestRentChangeMonth(dhakaTodayISO(), lease.rentRates.at(-1)?.effectiveMonth)) {
+      return { ok: false as const, error: "month" as const };
+    }
+    await saveScheduledRentTerms(tx, lease, month, {
+      monthlyRentAmount: amount,
+      serviceChargeType: lease.serviceChargeType,
+      serviceChargeValue: lease.serviceChargeValue,
+    });
+    await tx.tenantLease.update({ where: { id: leaseId }, data: { monthlyRentAmount: amount } });
+    return { ok: true as const };
+  }, { isolationLevel: "Serializable" });
+
+  if (result.ok) {
+    const locale = await getLocale();
+    for (const path of localizedMutationPaths(locale, `/tenants/${leaseId}`)) revalidatePath(path);
+    revalidatePath(`/${locale}/tenants`);
+    revalidatePath(`/${locale}/rent/arrears`);
+  }
+  return result;
 }
 
 // Edits an existing tenancy's info in one go: the Tenant record (name,
@@ -63,16 +132,9 @@ export async function updateTenantLease(formData: FormData) {
     Number(existingLease.monthlyRentAmount) !== Number(monthlyRentAmount) ||
     existingLease.serviceChargeType !== serviceChargeType ||
     Number(existingLease.serviceChargeValue ?? 0) !== Number(serviceChargeValue ?? 0);
-  if (termsChanged) {
-    const earliestEffectiveMonth = nextPaymentMonth(dhakaTodayISO().slice(0, 7));
-    const latestScheduledMonth = existingLease.rentRates.at(-1)?.effectiveMonth;
-    if (
-      !isPaymentMonth(rentEffectiveMonth) ||
-      rentEffectiveMonth < earliestEffectiveMonth ||
-      (latestScheduledMonth != null && rentEffectiveMonth < latestScheduledMonth)
-    ) {
-      throw new Error("Rent changes must start from the next available billing month");
-    }
+  if (termsChanged && (!isPaymentMonth(rentEffectiveMonth) ||
+      rentEffectiveMonth < earliestRentChangeMonth(dhakaTodayISO(), existingLease.rentRates.at(-1)?.effectiveMonth))) {
+    throw new Error("Rent changes must start from the next available billing month");
   }
 
   const nidDocumentUrl = str(formData, "nidDocumentUrl");
@@ -95,33 +157,9 @@ export async function updateTenantLease(formData: FormData) {
       },
     });
 
-    if (termsChanged) {
-      if (existingLease.rentRates.length === 0) {
-        const baselineMonth = dhakaISO(existingLease.startDate).slice(0, 7);
-        await tx.tenantRentRate.upsert({
-          where: { tenantLeaseId_effectiveMonth: { tenantLeaseId: leaseId, effectiveMonth: baselineMonth } },
-          update: {},
-          create: {
-            tenantLeaseId: leaseId,
-            effectiveMonth: baselineMonth,
-            monthlyRentAmount: existingLease.monthlyRentAmount,
-            serviceChargeType: existingLease.serviceChargeType,
-            serviceChargeValue: existingLease.serviceChargeValue,
-          },
-        });
-      }
-      await tx.tenantRentRate.upsert({
-        where: {
-          tenantLeaseId_effectiveMonth: { tenantLeaseId: leaseId, effectiveMonth: rentEffectiveMonth! },
-        },
-        update: { monthlyRentAmount, serviceChargeType, serviceChargeValue },
-        create: {
-          tenantLeaseId: leaseId,
-          effectiveMonth: rentEffectiveMonth!,
-          monthlyRentAmount,
-          serviceChargeType,
-          serviceChargeValue,
-        },
+    if (termsChanged && rentEffectiveMonth) {
+      await saveScheduledRentTerms(tx, existingLease, rentEffectiveMonth, {
+        monthlyRentAmount, serviceChargeType, serviceChargeValue,
       });
     }
 

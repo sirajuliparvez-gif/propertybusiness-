@@ -26,7 +26,7 @@ import { FormField } from "@/components/properties/form-field";
 import { DocumentUploadField } from "@/components/properties/document-upload-field";
 import { updateTenantLease } from "@/lib/actions/tenants";
 import { dhakaTodayISO } from "@/lib/dhaka-time";
-import { nextPaymentMonth } from "@/lib/payment-month";
+import { earliestRentChangeMonth } from "@/lib/rent-terms";
 
 export function EditTenantDialog({
   leaseId,
@@ -70,7 +70,7 @@ export function EditTenantDialog({
   const [serviceChargeValueInput, setServiceChargeValueInput] = useState(
     serviceChargeValue != null ? String(serviceChargeValue) : ""
   );
-  const earliestRentEffectiveMonth = nextPaymentMonth(dhakaTodayISO().slice(0, 7));
+  const earliestRentEffectiveMonth = earliestRentChangeMonth(dhakaTodayISO(), rentEffectiveMonth);
 
   return (
     <Dialog>
@@ -169,7 +169,7 @@ export function EditTenantDialog({
               name="rentEffectiveMonth"
               type="month"
               min={earliestRentEffectiveMonth}
-              defaultValue={rentEffectiveMonth ?? earliestRentEffectiveMonth}
+              defaultValue={earliestRentEffectiveMonth}
               required
             />
             <p className="mt-1 text-xs text-muted-foreground">{t("rentEffectiveMonthHint")}</p>
