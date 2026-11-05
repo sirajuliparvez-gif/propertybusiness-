@@ -1,9 +1,6 @@
 import { getTranslations } from "next-intl/server";
 import { Building2 } from "lucide-react";
-import { Link } from "@/i18n/navigation";
 import { Card, CardContent } from "@/components/ui/card";
-import { InitialAvatar } from "@/components/properties/initial-avatar";
-import { StatusPill, rentPillStatus } from "@/components/properties/status-pill";
 import { formatTaka } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import type { DashboardData } from "@/app/[locale]/(dashboard)/page";
@@ -11,19 +8,6 @@ import type { DashboardData } from "@/app/[locale]/(dashboard)/page";
 export async function MobileDashboard({ data }: { data: DashboardData }) {
   const t = await getTranslations("Dashboard");
   const tp = await getTranslations("Properties");
-
-  const rentStatusLabels = {
-    PAID: tp("paid"),
-    PARTIAL: tp("pending"),
-    UNPAID: tp("overdueStatus"),
-    PENDING: tp("dueInPeriod"),
-    ADJUSTED_FROM_DOWNPAYMENT: tp("paid"),
-  };
-
-  const unpaidTenants = data.rentCollection.payments
-    .filter((p) => p.pastDueAmount > 0)
-    .sort((a, b) => b.pastDueAmount - a.pastDueAmount)
-    .slice(0, 5);
 
   const topProperties = [...data.propertyPerformance]
     .sort((a, b) => b.net - a.net)
@@ -90,40 +74,6 @@ export async function MobileDashboard({ data }: { data: DashboardData }) {
           </div>
         </CardContent>
       </Card>
-
-      {unpaidTenants.length > 0 ? (
-        <div>
-          <p className="mb-2 text-xs font-medium uppercase tracking-wide text-muted-foreground">
-            {t("rentDue")}
-          </p>
-          <Card className="overflow-hidden p-0">
-            <ul className="divide-y">
-              {unpaidTenants.map((p) => (
-                <li key={p.id}>
-                  <Link
-                    href={`/rent?month=${data.selectedMonth}`}
-                    className="flex items-center gap-3 px-4 py-3 transition-colors active:bg-muted/60"
-                  >
-                    <InitialAvatar name={p.tenantName} />
-                    <div className="min-w-0 flex-1">
-                      <p className="truncate text-sm font-medium">{p.tenantName}</p>
-                      <p className="truncate text-xs text-muted-foreground">
-                        {p.propertyName} · {p.unitLabel}
-                      </p>
-                    </div>
-                    <div className="shrink-0 text-right">
-                      <p className="font-mono text-sm font-semibold tabular-nums">
-                        {formatTaka(p.pastDueAmount)}
-                      </p>
-                      <StatusPill status={rentPillStatus(p.rentStatus, p.rentPastDue)} labels={rentStatusLabels} />
-                    </div>
-                  </Link>
-                </li>
-              ))}
-            </ul>
-          </Card>
-        </div>
-      ) : null}
 
       {topProperties.length > 0 ? (
         <div>

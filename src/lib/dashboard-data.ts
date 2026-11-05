@@ -259,7 +259,7 @@ export const getActionRequiredData = cache(async function getActionRequiredData(
     counts: {
       rentDue: rowRentCount + unrecordedRentCount,
       utilityDue: utilityCount,
-      payrollDue: payrollDue.length + unpaidEmployees.length,
+      payrollDue: payrollDue.filter((p) => Number(p.dueAmount ?? p.amountPaid) > Number(p.amountPaid)).length + unpaidEmployees.length,
       vacantUnits: vacantCount,
       agreementsExpiring: agreementExpiringCount,
       tenantLeaseExpiring: tenantExpiringCount,
@@ -268,6 +268,11 @@ export const getActionRequiredData = cache(async function getActionRequiredData(
     rentDue: [
       ...rentDue.map((r) => ({
       id: r.id,
+      tenantLeaseId: r.tenantLeaseId,
+      propertyId: r.tenantLease.unit.unitType.propertyId,
+      month: r.month,
+      dueAmount: Number(r.dueAmount),
+      paidAmount: Number(r.paidAmount),
       tenantName: r.tenantLease.tenant.name,
       propertyName: r.tenantLease.unit.unitType.property.name,
       unitLabel: r.tenantLease.unit.label,
@@ -286,12 +291,18 @@ export const getActionRequiredData = cache(async function getActionRequiredData(
           numericRentRates(l.rentRates),
           currentMonth
         );
+        const dueAmount = rentTermsDueAmount(terms);
         return {
           id: `lease-${l.id}`,
+          tenantLeaseId: l.id,
+          propertyId: l.unit.unitType.propertyId,
+          month: currentMonth,
+          dueAmount,
+          paidAmount: 0,
           tenantName: l.tenant.name,
           propertyName: l.unit.unitType.property.name,
           unitLabel: l.unit.label,
-          amount: rentTermsDueAmount(terms),
+          amount: dueAmount,
           dueDate: new Date(now.getFullYear(), now.getMonth(), RENT_DUE_DAY),
           overdue: true,
         };
@@ -299,6 +310,11 @@ export const getActionRequiredData = cache(async function getActionRequiredData(
     ],
     utilityDue: utilityDue.map((u) => ({
       id: u.id,
+      propertyId: u.propertyId,
+      month: u.month,
+      billAmount: Number(u.amount),
+      paidAmount: Number(u.paidAmount),
+      paidByCompany: u.paidByCompany,
       propertyName: u.property.name,
       tenantName: u.tenantLease?.tenant.name ?? null,
       type: u.type,
@@ -317,16 +333,22 @@ export const getActionRequiredData = cache(async function getActionRequiredData(
     payrollDue: [
       ...payrollDue.map((p) => ({
         id: p.id,
+        employeeId: p.employeeId,
+        propertyId: p.employee.propertyId,
+        month: p.month,
         employeeName: p.employee.name,
         // Company-level staff (no property) — same fallback label used across
         // the Staff pages, so this reads consistently everywhere.
         propertyName: p.employee.property?.name ?? "কোম্পানি স্টাফ",
-        amount: Number(p.dueAmount ?? p.employee.salaryAmount) - Number(p.amountPaid),
+        amount: Number(p.dueAmount ?? p.amountPaid) - Number(p.amountPaid),
         dueDate: p.dueDate,
         overdue: true,
-      })),
+      })).filter((payment) => payment.amount > 0),
       ...unpaidEmployees.map((e) => ({
         id: `emp-${e.id}`,
+        employeeId: e.id,
+        propertyId: e.propertyId,
+        month: currentMonth,
         employeeName: e.name,
         propertyName: e.property?.name ?? "কোম্পানি স্টাফ",
         amount: Number(e.salaryAmount),
