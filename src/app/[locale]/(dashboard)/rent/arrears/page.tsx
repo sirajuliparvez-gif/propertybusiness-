@@ -29,6 +29,10 @@ export default async function RentArrearsPage({ searchParams }: {
   }, { due: 0, collected: 0, adjusted: 0, settled: 0, remaining: 0, credit: 0, overdue: 0 }) }));
   const selectedProperty = report.properties.find((property) => property.id === report.property)?.name;
   const selectedTenant = report.tenantOptions.find((tenant) => tenant.id === report.tenant)?.name;
+  const returnParams = new URLSearchParams({ from: report.from, to: report.to });
+  if (report.property) returnParams.set("property", report.property);
+  if (report.tenant) returnParams.set("tenant", report.tenant);
+  if (report.includeSettled) returnParams.set("show", "all");
   const filterClass = "h-10 w-full min-w-0 rounded-lg border bg-card px-3 text-sm";
   return <div className="flex min-w-0 flex-col gap-5">
     <div className="flex flex-wrap items-center justify-between gap-3 print:hidden">
@@ -67,7 +71,7 @@ export default async function RentArrearsPage({ searchParams }: {
         {report.totals.credit > 0 && <p>{p("monthlyReportCredit", { amount: formatTaka(report.totals.credit) })}</p>}
         <div className={clean.printSignatures}><span>{p("monthlyReportPreparedBy")}: __________________</span><span>{p("monthlyReportApprovedBy")}: __________________</span></div>
       </div>
-      <RentArrearsLedger key={`${report.from}-${report.to}-${report.property}-${report.tenant}-${report.includeSettled}`} tenants={report.rows} monthLabels={Object.fromEntries(report.months.map((month) => [month, monthLabel(month, locale)]))} selectedTenant={report.tenant} />
+      <RentArrearsLedger key={`${report.from}-${report.to}-${report.property}-${report.tenant}-${report.includeSettled}`} tenants={report.rows} monthLabels={Object.fromEntries(report.months.map((month) => [month, monthLabel(month, locale)]))} selectedTenant={report.tenant} arrearsPeriod={{ from: report.from, to: report.to }} returnTo={`/rent/arrears?${returnParams}`} />
       <details className={`${clean.notes} print:hidden`}><summary>{t("monthlySummary")}</summary>
       <div className={styles.tableWrap}><table className={styles.table}>
         <caption className="sr-only">{t("monthlySummary")}</caption>

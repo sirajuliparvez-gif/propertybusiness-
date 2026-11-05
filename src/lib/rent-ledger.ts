@@ -179,3 +179,17 @@ export function pastDueEntries<M>(entries: RentLedgerEntry<M>[]) {
 export function totalPastDue<M>(entries: RentLedgerEntry<M>[]) {
   return pastDueEntries(entries).reduce((sum, e) => sum + e.gap, 0);
 }
+
+// The preview and the write use the same oldest-first allocation. The balance
+// before payment is also included so a stale preview can be rejected.
+export function allocateRentPayment(months: { month: string; gap: number }[], amount: number) {
+  let unallocated = amount;
+  const allocations: { month: string; gap: number; amount: number }[] = [];
+  for (const { month, gap } of months) {
+    if (unallocated <= 0) break;
+    const applied = Math.min(unallocated, gap);
+    if (applied > 0) allocations.push({ month, gap, amount: applied });
+    unallocated -= applied;
+  }
+  return allocations;
+}
