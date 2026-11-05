@@ -42,14 +42,12 @@ export function StaffTable({
   payrollCost,
   propertyId,
   selectedMonth,
-  readOnlyPayroll = false,
   showPropertyColumn = false,
 }: {
   staff: PropertyDetail["staff"] | AllStaffData["staff"];
   payrollCost: number;
   propertyId?: string;
   selectedMonth?: string;
-  readOnlyPayroll?: boolean;
   showPropertyColumn?: boolean;
 }) {
   const t = useTranslations("Properties");
@@ -308,15 +306,18 @@ export function StaffTable({
                         <Printer className="size-3.5" />
                         <span className="sr-only">{t("salarySlipTitle")}</span>
                       </Button>
-                      {s.status === "ACTIVE" && !readOnlyPayroll ? (
+                      {s.status === "ACTIVE" ? (
                         <RecordPayrollPaymentDialog
+                          key={filter}
                           propertyId={rowPropertyId}
                           employeeId={s.id}
-                          defaultAmount={s.salaryAmount}
+                          defaultAmount={selectedMonth ? s.overdueAmount : s.salaryAmount}
+                          billingMonth={selectedMonth}
+                          employeeName={s.name}
+                          initialMode={!selectedMonth && s.overdueMonths.length > 0 && (filter === "overdue" || s.payrollStatus === "PAID") ? "overdue" : "cash"}
                           overdueMonths={s.overdueMonths}
-                          settled={s.payrollStatus === "PAID" && s.overdueAmount <= 0}
-                          returnTo={showPropertyColumn ? "/employees" : undefined}
-                          iconOnly={showPropertyColumn}
+                          settled={s.overdueAmount <= 0 && (Boolean(selectedMonth) || s.payrollStatus === "PAID")}
+                          returnTo={showPropertyColumn ? (selectedMonth ? `/employees?month=${selectedMonth}` : "/employees") : undefined}
                         />
                       ) : null}
                       <EmployeeActions

@@ -36,6 +36,7 @@ import {
 } from "@/components/ui/dialog";
 import { FormField } from "@/components/properties/form-field";
 import { formatTaka, formatDate } from "@/lib/format";
+import { applyUtilityBillInstallment } from "@/lib/payment-progress";
 import { paymentMethodLabel } from "@/lib/payment-method";
 import { cn } from "@/lib/utils";
 import { payUtilityBill } from "@/lib/actions/utility-bills";
@@ -131,9 +132,13 @@ export function PayUtilityBillButton({
   // No upper cap here — a tenant paying more than the remaining bill is real
   // company profit (see profitAmount below), not an input error.
   const tenantAmountNum = isWater ? 0 : Math.max(0, Number(tenantAmount) || 0);
-  const billPortion = Math.min(tenantAmountNum, remaining);
-  const profitAmount = Math.max(0, tenantAmountNum - remaining);
-  const companyAmount = companyCoversRest ? remaining - billPortion : 0;
+  const { profitAmount, companyAmount, newPaidAmount } = applyUtilityBillInstallment({
+    totalAmount: amount,
+    alreadyPaid: paidAmount,
+    tenantPaymentAmount: tenantAmountNum,
+    companyCoversRest: isWater || companyCoversRest,
+  });
+  const remainingAfterPayment = Math.max(0, amount - newPaidAmount);
 
   return (
     <Dialog>
@@ -211,23 +216,32 @@ export function PayUtilityBillButton({
                 />
                 {t("companyCoversRestLabel")}
               </label>
-              {profitAmount > 0 ? (
-                <p className="text-xs text-success">
-                  {t("utilityProfitHint", { amount: formatTaka(profitAmount) })}
-                </p>
-              ) : null}
-              {companyAmount > 0 ? (
-                <p className="text-xs text-warning">
-                  {t("companyAbsorbsHint", { amount: formatTaka(companyAmount) })}
-                </p>
-              ) : null}
-              {!companyCoversRest && billPortion < remaining ? (
-                <p className="text-xs text-muted-foreground">
-                  {t("utilityStaysPartialHint", { amount: formatTaka(remaining - billPortion) })}
-                </p>
-              ) : null}
             </>
           )}
+          <div className="rounded-lg border bg-muted/40 p-3">
+            <p className="mb-2 text-sm font-semibold">{t("utilityPaymentPreview")}</p>
+            <dl className="space-y-1.5 text-sm" aria-live="polite">
+              <div className="flex justify-between gap-3">
+                <dt>{t("utilityCollectedFromTenant")}</dt>
+                <dd className="font-semibold tabular-nums">{formatTaka(tenantAmountNum)}</dd>
+              </div>
+              <div className="flex justify-between gap-3">
+                <dt>{t("utilityCompanyContribution")}</dt>
+                <dd className="font-semibold tabular-nums">{formatTaka(companyAmount)}</dd>
+              </div>
+              <div className="flex justify-between gap-3 border-t pt-1.5">
+                <dt>{t("utilityRemainingAfterPayment")}</dt>
+                <dd className={cn("font-semibold tabular-nums", remainingAfterPayment > 0 && "text-destructive")}>
+                  {formatTaka(remainingAfterPayment)}
+                </dd>
+              </div>
+            </dl>
+            {profitAmount > 0 ? (
+              <p className="mt-2 text-xs text-success">
+                {t("utilityProfitHint", { amount: formatTaka(profitAmount) })}
+              </p>
+            ) : null}
+          </div>
           <FormField label={t("paymentMethod")} htmlFor="payMethod">
             <Select
               value={method}

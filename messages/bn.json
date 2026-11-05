@@ -179,7 +179,12 @@
     "scope": "মোট হিসাবে শুধু দেখানো টেন্যান্ট ও নির্বাচিত মাসগুলো ধরা হয়েছে। অতিরিক্ত জমা টাকা আলাদা দেখানো হয়; তা দিয়ে অন্য মাস বা অন্য টেন্যান্টের বকেয়া কমানো হয়নি।"
   },
   "Properties": {
-    "historicalPayrollViewHint": "পুরোনো মাসের বেতন দেখছেন। বেতন পরিশোধের এন্ট্রি দিতে বা বিস্তারিত দেখতে স্টাফের প্রোফাইল খুলুন।",
+    "payrollBillingMonth": "বেতনের মাস: {month}",
+    "payrollPaymentDate": "পরিশোধের তারিখ",
+    "utilityPaymentPreview": "জমা দেওয়ার আগের হিসাব",
+    "utilityCompanyContribution": "কোম্পানি বহন করবে",
+    "utilityRemainingAfterPayment": "এই পরিশোধের পর বাকি",
+    "rentAccountTools": "ভাড়া পরিবর্তন ও পুরোনো হিসাব",
     "monthFilterLabel": "মাস",
     "allMonths": "সব মাস",
     "monthFilterLoading": "নির্বাচিত মাস লোড হচ্ছে…",

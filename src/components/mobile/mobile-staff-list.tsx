@@ -22,7 +22,6 @@ export function MobileStaffList({
   staff,
   propertyId,
   selectedMonth,
-  readOnlyPayroll = false,
 }: {
   staff: PropertyDetail["staff"] | AllStaffData["staff"];
   // Set on the per-property page (single-property staff list, no per-row
@@ -30,7 +29,6 @@ export function MobileStaffList({
   // property it's recording against — mirrors StaffTable's own `propertyId` prop.
   propertyId?: string;
   selectedMonth?: string;
-  readOnlyPayroll?: boolean;
 }) {
   const t = useTranslations("Properties");
   const [filter, setFilter] = useState<Filter>("all");
@@ -145,15 +143,19 @@ export function MobileStaffList({
                       <Printer className="size-3.5" />
                       <span className="sr-only">{t("salarySlipTitle")}</span>
                     </Button>
-                    {s.status === "ACTIVE" && !readOnlyPayroll ? (
+                    {s.status === "ACTIVE" ? (
                       <RecordPayrollPaymentDialog
+                        key={filter}
                         propertyId={rowPropertyId}
                         employeeId={s.id}
-                        defaultAmount={s.salaryAmount}
+                        defaultAmount={selectedMonth ? s.overdueAmount : s.salaryAmount}
+                        billingMonth={selectedMonth}
+                        employeeName={s.name}
+                        initialMode={!selectedMonth && s.overdueMonths.length > 0 && (filter === "overdue" || s.payrollStatus === "PAID") ? "overdue" : "cash"}
                         overdueMonths={s.overdueMonths}
-                        settled={s.payrollStatus === "PAID" && s.overdueAmount <= 0}
-                        returnTo={propertyId ? undefined : "/employees"}
-                        iconOnly
+                        settled={s.overdueAmount <= 0 && (Boolean(selectedMonth) || s.payrollStatus === "PAID")}
+                        returnTo={!propertyId ? (selectedMonth ? `/employees?month=${selectedMonth}` : "/employees") : undefined}
+                        iconOnly={Boolean(propertyId)}
                       />
                     ) : null}
                     <EmployeeActions

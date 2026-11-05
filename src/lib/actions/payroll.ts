@@ -1,11 +1,13 @@
 "use server";
 
-import { dhakaNow } from "@/lib/dhaka-time";
+import { dhakaISO, dhakaNow } from "@/lib/dhaka-time";
 import { revalidatePath } from "next/cache";
 import { getLocale } from "next-intl/server";
 import { prisma } from "@/lib/prisma";
 import { redirect } from "@/i18n/navigation";
-import { buildRentLedger, overdueEntries, totalOverdue, SALARY_DUE_DAY } from "@/lib/rent-ledger";
+import { buildRentLedger, overdueEntries, totalOverdue, LEDGER_START_MONTH, SALARY_DUE_DAY } from "@/lib/rent-ledger";
+import { resolvePaymentMonth } from "@/lib/payment-month";
+import { isValidTransactionDate } from "@/lib/transaction-edit";
 
 function str(formData: FormData, key: string) {
   const v = formData.get(key);
@@ -29,7 +31,11 @@ export async function recordPayrollPayment(formData: FormData) {
   const amountStr = str(formData, "amount");
   if (!dateStr || !amountStr) throw new Error("Missing required payment fields");
   const amount = Number(amountStr);
-  const month = dateStr.slice(0, 7);
+  if (!isValidTransactionDate(dateStr) || !Number.isFinite(amount) || amount <= 0) {
+    throw new Error("Invalid salary payment");
+  }
+  const billingMonth = str(formData, "billingMonth");
+  const month = resolvePaymentMonth(billingMonth, dateStr);
   const paidDate = new Date(dateStr);
 
   const methodRaw = formData.get("method");
@@ -43,7 +49,7 @@ export async function recordPayrollPayment(formData: FormData) {
       : null;
 
   await prisma.$transaction(async (tx) => {
-    const employee = await tx.employee.findUnique({ where: { id: employeeId }, select: { salaryAmount: true } });
+    const employee = await tx.employee.findUnique({ where: { id: employeeId }, select: { salaryAmount: true, joinedAt: true, status: true, propertyId: true } });
     if (!employee) throw new Error("Employee not found");
     // A second payment toward the same month ADDS to what was already paid and a
     // fully settled month refuses more — overwriting amountPaid while still
@@ -54,7 +60,17 @@ export async function recordPayrollPayment(formData: FormData) {
     });
     const alreadyPaid = existing ? Number(existing.amountPaid) : 0;
     // Keep the salary snapshotted the first time the month was touched.
-    const dueAmount = existing?.dueAmount != null ? Number(existing.dueAmount) : Number(employee.salaryAmount);
+    const dueAmount = existing?.dueAmount != null
+      ? Number(existing.dueAmount)
+      : billingMonth && existing ? alreadyPaid : Number(employee.salaryAmount);
+    if (billingMonth && (
+      employee.status !== "ACTIVE" ||
+      month > dhakaISO(dhakaNow()).slice(0, 7) ||
+      (!existing && (month < LEDGER_START_MONTH || month < dhakaISO(employee.joinedAt).slice(0, 7))) ||
+      amount > dueAmount - alreadyPaid
+    )) {
+      throw new Error("Salary payment exceeds the outstanding amount for an eligible month");
+    }
     if (existing && alreadyPaid >= dueAmount) {
       throw new Error("Salary for this month is already fully paid");
     }
@@ -78,7 +94,7 @@ export async function recordPayrollPayment(formData: FormData) {
 
     await tx.transaction.create({
       data: {
-        propertyId,
+        propertyId: billingMonth ? employee.propertyId : propertyId,
         type: "PAYROLL_EXPENSE",
         direction: "OUTGOING",
         amount,
@@ -87,10 +103,10 @@ export async function recordPayrollPayment(formData: FormData) {
         date: paidDate,
       },
     });
-  });
+  }, { isolationLevel: "Serializable" });
 
   const returnTo = str(formData, "returnTo") ?? (propertyId ? `/properties/${propertyId}` : "/employees");
-  revalidatePath(returnTo);
+  revalidatePath(returnTo.split("?")[0]);
   redirect({ href: returnTo, locale });
 }
 
@@ -122,36 +138,36 @@ export async function recordOverduePayrollPayment(formData: FormData) {
       ? methodRaw
       : null;
 
-  const employee = await prisma.employee.findUnique({ where: { id: employeeId } });
-  if (!employee) throw new Error("Employee not found");
-
-  const existingPayments = await prisma.payrollRecord.findMany({
-    where: { employeeId },
-    select: { id: true, month: true, dueDate: true, dueAmount: true, amountPaid: true, status: true, paidAt: true },
-  });
-  const asOf = employee.status === "ACTIVE" ? dhakaNow() : (employee.terminatedAt ?? dhakaNow());
-  const ledger = buildRentLedger(
-    employee.joinedAt,
-    Number(employee.salaryAmount),
-    existingPayments.map((pr) => ({
-      id: pr.id,
-      month: pr.month,
-      dueDate: pr.dueDate,
-      dueAmount: pr.dueAmount != null ? Number(pr.dueAmount) : Number(pr.amountPaid),
-      paidAmount: Number(pr.amountPaid),
-      status: pr.status === "PENDING" ? "UNPAID" : pr.status,
-      paidAt: pr.paidAt,
-    })),
-    asOf,
-    SALARY_DUE_DAY
-  );
-  const overdue = overdueEntries(ledger); // oldest month first
-  if (overdue.length === 0) throw new Error("No overdue salary for this employee");
-  if (remaining > totalOverdue(ledger)) {
-    throw new Error("Amount exceeds total overdue salary");
-  }
-
   await prisma.$transaction(async (tx) => {
+    const employee = await tx.employee.findUnique({ where: { id: employeeId } });
+    if (!employee) throw new Error("Employee not found");
+
+    const existingPayments = await tx.payrollRecord.findMany({
+      where: { employeeId },
+      select: { id: true, month: true, dueDate: true, dueAmount: true, amountPaid: true, status: true, paidAt: true },
+    });
+    const asOf = employee.status === "ACTIVE" ? dhakaNow() : (employee.terminatedAt ?? dhakaNow());
+    const ledger = buildRentLedger(
+      employee.joinedAt,
+      Number(employee.salaryAmount),
+      existingPayments.map((pr) => ({
+        id: pr.id,
+        month: pr.month,
+        dueDate: pr.dueDate,
+        dueAmount: pr.dueAmount != null ? Number(pr.dueAmount) : Number(pr.amountPaid),
+        paidAmount: Number(pr.amountPaid),
+        status: pr.status === "PENDING" ? "UNPAID" : pr.status,
+        paidAt: pr.paidAt,
+      })),
+      asOf,
+      SALARY_DUE_DAY
+    );
+    const overdue = overdueEntries(ledger); // oldest month first
+    if (overdue.length === 0) throw new Error("No overdue salary for this employee");
+    if (remaining > totalOverdue(ledger)) {
+      throw new Error("Amount exceeds total overdue salary");
+    }
+
     for (const entry of overdue) {
       if (remaining <= 0) break;
       const payThisMonth = Math.min(remaining, entry.gap);
@@ -189,7 +205,7 @@ export async function recordOverduePayrollPayment(formData: FormData) {
 
       remaining -= payThisMonth;
     }
-  });
+  }, { isolationLevel: "Serializable" });
 
   const returnTo = str(formData, "returnTo") ?? (propertyId ? `/properties/${propertyId}` : "/employees");
   revalidatePath(returnTo);
