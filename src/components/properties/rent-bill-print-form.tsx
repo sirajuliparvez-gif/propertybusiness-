@@ -2,7 +2,7 @@
 
 import { useState, useTransition, type ComponentProps, type ReactNode } from "react";
 import { useLocale, useTranslations } from "next-intl";
-import { Printer } from "lucide-react";
+import { Printer, Scissors } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { CashMemoHeader, CashMemoReading, CashMemoSignatures, cashMemoClassName } from "@/components/properties/cash-memo";
@@ -73,6 +73,42 @@ export function RentBillPrintForm({
     });
   }
 
+  const copyContents = (
+    <>
+      <CashMemoHeader {...header} date={!open && printedDate ? printedDate : header.date} />
+      <table className="w-full border-collapse text-sm">
+        <thead><tr className="border-b">
+          <th scope="col" className="p-2 text-start">{t("cashMemoCharge")}</th>
+          <th scope="col" className="p-2 text-end">{t("invoiceSimpleBillTotal")}</th>
+          <th scope="col" className="p-2 text-end">{t("invoiceSimplePaid")}</th>
+          <th scope="col" className="p-2 text-end">{t("remaining")}</th>
+        </tr></thead>
+        <tbody>
+          {copy.map((row) => (
+            <tr key={row.key} className="border-b">
+              <th scope="row" className="p-2 text-start">
+                {labels[row.key]}
+                {row.readings.map((reading, index) => (
+                  <CashMemoReading key={index} {...reading} label={t("cashMemoReading")} unitLabel={t("cashMemoUnits")}
+                    missing={t("cashMemoReadingMissing")} locale={locale} />
+                ))}
+              </th>
+              {row.dueCents == null ? <td colSpan={3} className="min-w-28 border-b border-dashed p-2" /> : (
+                <>
+                  <td className="p-2 text-end tabular-nums">{money(row.dueCents)}</td>
+                  <td className="p-2 text-end tabular-nums">{money(row.dueCents - row.remainingCents)}</td>
+                  <td className="p-2 text-end tabular-nums">{money(row.remainingCents)}</td>
+                </>
+              )}
+            </tr>
+          ))}
+        </tbody>
+      </table>
+      <p className="flex justify-between gap-2 font-semibold"><span>{t("rentBillExpected")}</span><span>{money(expected)}</span></p>
+      <CashMemoSignatures tenant={t("cashMemoTenantSignature")} company={t("cashMemoCompanySignature")} />
+    </>
+  );
+
   return (
     <>
       <div className="print:hidden">
@@ -128,39 +164,15 @@ export function RentBillPrintForm({
         )}
       </div>
       <div data-testid="issued-rent-bill-copy" className="print-invoice-a4 hidden print:block">
-        <div className={cashMemoClassName}>
-          <CashMemoHeader {...header} date={!open && printedDate ? printedDate : header.date} />
-          <table className="w-full border-collapse text-sm">
-            <thead><tr className="border-b">
-              <th scope="col" className="p-2 text-start">{t("cashMemoCharge")}</th>
-              <th scope="col" className="p-2 text-end">{t("invoiceSimpleBillTotal")}</th>
-              <th scope="col" className="p-2 text-end">{t("invoiceSimplePaid")}</th>
-              <th scope="col" className="p-2 text-end">{t("remaining")}</th>
-            </tr></thead>
-            <tbody>
-              {copy.map((row) => (
-                <tr key={row.key} className="border-b">
-                  <th scope="row" className="p-2 text-start">
-                    {labels[row.key]}
-                    {row.readings.map((reading, index) => (
-                      <CashMemoReading key={index} {...reading} label={t("cashMemoReading")} unitLabel={t("cashMemoUnits")}
-                        missing={t("cashMemoReadingMissing")} locale={locale} />
-                    ))}
-                  </th>
-                  {row.dueCents == null ? <td colSpan={3} className="min-w-28 border-b border-dashed p-2" /> : (
-                    <>
-                      <td className="p-2 text-end tabular-nums">{money(row.dueCents)}</td>
-                      <td className="p-2 text-end tabular-nums">{money(row.dueCents - row.remainingCents)}</td>
-                      <td className="p-2 text-end tabular-nums">{money(row.remainingCents)}</td>
-                    </>
-                  )}
-                </tr>
-              ))}
-            </tbody>
-          </table>
-          <p className="flex justify-between gap-2 font-semibold"><span>{t("rentBillExpected")}</span><span>{money(expected)}</span></p>
-          <CashMemoSignatures tenant={t("cashMemoTenantSignature")} company={t("cashMemoCompanySignature")} />
-        </div>
+        <section className={`${cashMemoClassName} rent-bill-paper-copy`}>
+          <p className="rent-bill-copy-label">{t("rentBillTenantCopy")}</p>
+          {copyContents}
+        </section>
+        <div className="rent-bill-cut-line" aria-hidden="true"><Scissors /></div>
+        <section className={`${cashMemoClassName} rent-bill-paper-copy`}>
+          <p className="rent-bill-copy-label">{t("rentBillOfficeCopy")}</p>
+          {copyContents}
+        </section>
       </div>
     </>
   );

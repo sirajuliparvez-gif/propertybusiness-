@@ -249,6 +249,28 @@
   .cash-memo-signatures { padding-top: 12px; }
 }
 
+@media print {
+  .rent-bill-paper-copy { padding: 3mm; }
+  .rent-bill-paper-copy > * + * { margin-top: 4px; }
+  .rent-bill-paper-copy .cash-memo-signatures { padding-top: 8px; }
+  .rent-bill-copy-label {
+    font-size: 8pt;
+    font-weight: 600;
+    text-align: end;
+  }
+  .rent-bill-cut-line {
+    display: flex;
+    align-items: center;
+    gap: 2mm;
+    margin-block: 4mm;
+    break-after: avoid;
+    break-before: avoid;
+    color: #333;
+  }
+  .rent-bill-cut-line > svg { flex: none; width: 4mm; height: 4mm; }
+  .rent-bill-cut-line::after { content: ""; flex: 1; border-top: 1px dashed currentColor; }
+}
+
 [data-slot="sidebar-inset"]:has([data-tenant-invoice-page]) > [data-dashboard-topbar] {
   display: none;
 }

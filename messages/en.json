@@ -709,6 +709,8 @@
     "receiptTotalReceived": "Total received",
     "invoicePrintBill": "Print bill",
     "rentBillPrintOptions": "What to print on the bill",
+    "rentBillTenantCopy": "Tenant copy",
+    "rentBillOfficeCopy": "Office copy",
     "rentBillChooseLines": "Tick the lines to print. A dash leaves space to write by hand.",
     "rentBillExpected": "Amount due",
     "rentBillPrinted": "Printed",

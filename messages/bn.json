@@ -711,6 +711,8 @@
     "receiptTotalReceived": "মোট নেওয়া টাকা",
     "invoicePrintBill": "বিল প্রিন্ট করুন",
     "rentBillPrintOptions": "বিলে কী কী প্রিন্ট হবে",
+    "rentBillTenantCopy": "ভাড়াটিয়ার কপি",
+    "rentBillOfficeCopy": "অফিস কপি",
     "rentBillChooseLines": "যেগুলো ছাপাবেন সেগুলোতে টিক দিন। ড্যাশ মানে হাতে লেখার জন্য ঘর খালি থাকবে।",
     "rentBillExpected": "পাওনা টাকা",
     "rentBillPrinted": "প্রিন্ট হয়েছে",
