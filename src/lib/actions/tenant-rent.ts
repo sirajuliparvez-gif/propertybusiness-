@@ -297,6 +297,7 @@ export async function createHistoricalRentArrears(formData: FormData): Promise<R
   });
 
   revalidateLocalizedPath(locale, returnTo);
+  revalidateLocalizedPath(locale, "/rent");
   redirect({
     href: withRentActionFeedback(returnTo, "arrearsAdded", {
       count: missingMonths.length,
@@ -562,17 +563,19 @@ export async function recordTenantRentPayment(formData: FormData) {
 // 3 months doesn't have to be paid off in 3 separate manual entries anymore
 // — one amount here fills the oldest debt first, then the next, etc.,
 // including a genuine partial on whichever month the money runs out on.
-export async function getTenantUtilityArrears(tenantLeaseId: string) {
+export async function getTenantUtilityArrears(tenantLeaseId: string, includeCurrentMonth = false) {
   await requireCurrentUser();
   const lease = await prisma.tenantLease.findUnique({
     where: { id: tenantLeaseId },
     select: { id: true, unitId: true, startDate: true, status: true, movedOutAt: true, endDate: true },
   });
   if (!lease) return [];
+  const currentMonth = dhakaTodayISO().slice(0, 7);
+  const cutoff = includeCurrentMonth ? addMonthsToMonthStr(currentMonth, 1) : currentMonth;
   const bills = await prisma.utilityBill.findMany({
-    where: tenantUtilityArrearsWhere(lease, dhakaTodayISO().slice(0, 7)),
+    where: tenantUtilityArrearsWhere(lease, cutoff),
     orderBy: [{ month: "asc" }, { dueDate: "asc" }, { id: "asc" }],
-    select: { id: true, type: true, month: true, amount: true, paidAmount: true },
+    select: { id: true, type: true, month: true, dueDate: true, amount: true, paidAmount: true },
   });
   return bills.map(({ amount, paidAmount, ...bill }) => ({
     ...bill, remaining: Number(amount.minus(paidAmount)),
@@ -837,6 +840,27 @@ export async function getMultiMonthRentOptions(tenantLeaseId: string) {
   return multiMonthBalances(lease, dhakaTodayISO().slice(0, 7)).map(({ month, remainingCents }) => ({ month, remainingCents }));
 }
 
+function readCollectionPayments(input: string | null, key: "month" | "id") {
+  let rows: unknown;
+  try {
+    rows = JSON.parse(input ?? "null");
+  } catch {
+    return null;
+  }
+  if (!Array.isArray(rows)) return null;
+  const payments = new Map<string, { amountCents: number; remainingCents: number }>();
+  for (const row of rows) {
+    const id = row?.[key];
+    if (typeof id !== "string" || !id || (key === "month" && !isPaymentMonth(id)) || payments.has(id) ||
+        typeof row.amount !== "string" || !/^\d+(\.\d{1,2})?$/.test(row.amount) ||
+        !Number.isSafeInteger(row.remainingCents)) return null;
+    const amountCents = Math.round(Number(row.amount) * 100);
+    if (!Number.isSafeInteger(amountCents) || amountCents <= 0 || amountCents > row.remainingCents) return null;
+    payments.set(id, { amountCents, remainingCents: row.remainingCents });
+  }
+  return payments;
+}
+
 export async function recordMultiMonthRentPayment(formData: FormData) {
   const user = await requireCurrentUser();
   const propertyId = str(formData, "propertyId");
@@ -852,22 +876,9 @@ export async function recordMultiMonthRentPayment(formData: FormData) {
     methodRaw === "CASH" || methodRaw === "BKASH" || methodRaw === "NAGAD" ||
     methodRaw === "BANK" || methodRaw === "BANK_CHECK" || methodRaw === "OTHER" ? methodRaw : null;
 
-  let input: unknown;
-  try {
-    input = JSON.parse(str(formData, "multiMonthPayments") ?? "null");
-  } catch {
-    return invalid;
-  }
-  if (!Array.isArray(input) || input.length < 1 || input.length > 36) return invalid;
-  const requested = new Map<string, { amountCents: number; remainingCents: number }>();
-  for (const row of input) {
-    if (!row || typeof row.month !== "string" || !isPaymentMonth(row.month) || requested.has(row.month) ||
-        typeof row.amount !== "string" || !/^\d+(\.\d{1,2})?$/.test(row.amount) ||
-        !Number.isSafeInteger(row.remainingCents)) return invalid;
-    const amountCents = Math.round(Number(row.amount) * 100);
-    if (!Number.isSafeInteger(amountCents) || amountCents <= 0 || amountCents > row.remainingCents) return invalid;
-    requested.set(row.month, { amountCents, remainingCents: row.remainingCents });
-  }
+  const requested = readCollectionPayments(str(formData, "multiMonthPayments"), "month");
+  const utilities = readCollectionPayments(str(formData, "multiMonthUtilities") ?? "[]", "id");
+  if (!requested || !utilities || requested.size > 36 || (!requested.size && !utilities.size)) return invalid;
 
   const paidDate = new Date(date);
   try {
@@ -880,8 +891,19 @@ export async function recordMultiMonthRentPayment(formData: FormData) {
           ? [{ ...balance, amountCents: request.amountCents }]
           : [];
       });
-      // Verify every month before writing anything, including retries of partially paid months.
-      if (selected.length !== requested.size) return false;
+      const utilityBills = utilities.size ? await tx.utilityBill.findMany({
+        where: {
+          ...tenantUtilityArrearsWhere(lease, addMonthsToMonthStr(today.slice(0, 7), 1)),
+          propertyId,
+          id: { in: [...utilities.keys()] },
+        },
+        select: { id: true, amount: true, paidAmount: true },
+      }) : [];
+      // Recheck each selected balance before writing any part of the payment.
+      if (selected.length !== requested.size || utilityBills.length !== utilities.size ||
+          utilityBills.some((bill) =>
+            Math.round(Number(bill.amount.minus(bill.paidAmount)) * 100) !== utilities.get(bill.id)?.remainingCents
+          )) return false;
       for (const { month, payment, amountCents, remainingCents, dueCents } of selected) {
         const amount = amountCents / 100;
         const status = amountCents === remainingCents ? "PAID" : "PARTIAL";
@@ -903,6 +925,24 @@ export async function recordMultiMonthRentPayment(formData: FormData) {
           },
         });
       }
+      for (const bill of utilityBills) {
+        const { amountCents, remainingCents } = utilities.get(bill.id)!;
+        const amount = amountCents / 100;
+        const settled = amountCents === remainingCents;
+        await tx.utilityBill.update({
+          where: { id: bill.id },
+          data: {
+            paidAmount: settled ? bill.amount : bill.paidAmount.plus(amount),
+            status: settled ? "PAID" : "PARTIAL",
+          },
+        });
+        await tx.transaction.create({
+          data: {
+            propertyId, unitId: lease.unitId, tenantLeaseId, utilityBillId: bill.id, amount, method,
+            type: "UTILITY_REIMBURSEMENT_FROM_TENANT", direction: "INCOMING", date: paidDate, recordedByUserId: user.id,
+          },
+        });
+      }
       return true;
     }, { isolationLevel: "Serializable" });
     if (!saved) return changed;
@@ -915,11 +955,12 @@ export async function recordMultiMonthRentPayment(formData: FormData) {
   const returnTo = str(formData, "returnTo") ?? "/rent";
   for (const path of new Set([
     new URL(returnTo, "http://local").pathname,
-    "/dashboard", "/rent", "/rent/arrears", "/rent/report", "/reports/market", "/transactions", "/tenants",
+    "/dashboard", "/rent", "/rent/arrears", "/rent/report", "/reports/market", "/transactions", "/tenants", "/utility-bills",
     `/properties/${propertyId}`, `/tenants/${tenantLeaseId}`, `/tenants/${tenantLeaseId}/invoice`, `/tenants/${tenantLeaseId}/history`,
   ])) revalidateLocalizedPath(locale, path);
-  const totalCents = [...requested.values()].reduce((sum, row) => sum + row.amountCents, 0);
-  redirect({ href: withRentActionFeedback(returnTo, "multiMonth", { count: requested.size, amount: totalCents / 100 }), locale });
+  const totalCents = [...requested.values(), ...utilities.values()].reduce((sum, row) => sum + row.amountCents, 0);
+  const feedback = utilities.size || str(formData, "collectionMode") === "single" ? "invoicePaid" : "multiMonth";
+  redirect({ href: withRentActionFeedback(returnTo, feedback, { count: requested.size, amount: totalCents / 100 }), locale });
 }
 
 // A tenant sometimes pays several months of rent in one go (any number of

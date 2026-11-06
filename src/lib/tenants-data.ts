@@ -14,7 +14,7 @@ import {
   RENT_DUE_DAY,
 } from "@/lib/rent-ledger";
 import { splitUtilityBillTransactions } from "@/lib/utility-bill-split";
-import { isPaymentMonth } from "@/lib/payment-month";
+import { isPaymentMonth, paymentMonthRange } from "@/lib/payment-month";
 import { numericRentRates, rentTermsDueAmount, resolveRentTermsForMonth } from "@/lib/rent-terms";
 
 function monthRange(now: Date) {
@@ -290,6 +290,9 @@ export async function getRentCollectionData(requestedMonth?: string) {
     orderBy: { month: "desc" },
     select: { month: true },
   });
+  const trackedMonths = currentMonth >= LEDGER_START_MONTH
+    ? paymentMonthRange(LEDGER_START_MONTH, currentMonth, 600)
+    : [];
   const rowByLease = new Map(selectedRows.map((row) => [row.tenantLeaseId, row]));
   const [year, monthNumber] = selectedMonth.split("-").map(Number);
 
@@ -331,7 +334,7 @@ export async function getRentCollectionData(requestedMonth?: string) {
     totalRemaining,
     collectionRate: payments.length > 0 ? Math.round((settledCount / payments.length) * 100) : 0,
     selectedMonth,
-    availableMonths: Array.from(new Set([currentMonth, ...recordedMonths.map((row) => row.month)])).sort().reverse(),
+    availableMonths: Array.from(new Set([currentMonth, ...trackedMonths, ...recordedMonths.map((row) => row.month)])).sort().reverse(),
   };
 }
 

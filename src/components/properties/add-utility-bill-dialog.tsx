@@ -64,7 +64,7 @@ export function AddUtilityBillDialog(props: PropertyBillFields) {
   );
 }
 
-export function InvoiceAddUtilityBillDialog({ leaseId, month }: { leaseId: string; month: string }) {
+export function InvoiceAddUtilityBillDialog({ leaseId, month, compact = false }: { leaseId: string; month: string; compact?: boolean }) {
   const t = useTranslations("Properties");
   const locale = useLocale();
   const router = useRouter();
@@ -72,7 +72,7 @@ export function InvoiceAddUtilityBillDialog({ leaseId, month }: { leaseId: strin
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
-      <DialogTrigger render={<Button variant="outline" />}>
+      <DialogTrigger render={<Button variant="outline" size={compact ? "sm" : "default"} />}>
         <Plus className="size-4" />
         {t("invoiceAddBill")}
       </DialogTrigger>

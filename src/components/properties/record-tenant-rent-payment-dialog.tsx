@@ -25,7 +25,7 @@ import {
 } from "@/components/ui/dialog";
 import { AddUtilityBillForm } from "@/components/properties/add-utility-bill-dialog";
 import { FormField } from "@/components/properties/form-field";
-import { formatTaka, monthLabel } from "@/lib/format";
+import { formatDate, formatTaka, monthLabel } from "@/lib/format";
 import {
   recordTenantRentPayment,
   recordAdvanceRentPayment,
@@ -37,7 +37,8 @@ import {
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { isPaymentMonth } from "@/lib/payment-month";
-import { allocateRentPayment } from "@/lib/rent-ledger";
+import { allocateRentPayment, LEDGER_START_MONTH } from "@/lib/rent-ledger";
+import { Link } from "@/i18n/navigation";
 import { computeServiceChargeAmount } from "@/lib/service-charge";
 import { rentTermsDueAmount, resolveRentTermsForMonth, type EffectiveRentTerms } from "@/lib/rent-terms";
 
@@ -74,6 +75,7 @@ export function RecordTenantRentPaymentDialog({
   initialBillingMonth,
   triggerLabel,
   arrearsPeriod,
+  collectionBalance,
 }: {
   fixedBillingMonth?: string;
   propertyId: string;
@@ -110,11 +112,14 @@ export function RecordTenantRentPaymentDialog({
   initialBillingMonth?: string;
   triggerLabel?: string;
   arrearsPeriod?: { from: string; to: string };
+  collectionBalance?: number;
 }) {
   const t = useTranslations("Properties");
   const locale = useLocale();
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
+  const simpleCollection = collectionBalance != null;
+  const [open, setOpen] = useState(false);
   const [hasUtilityDraft, setHasUtilityDraft] = useState(false);
   const todayValue = dhakaTodayISO();
   const [mode, setMode] = useState<Mode>(arrearsPeriod ? "overdue" : monthSettled && !initialBillingMonth ? "advance" : "cash");
@@ -136,7 +141,7 @@ export function RecordTenantRentPaymentDialog({
     const recorded = paymentProgress.find((payment) => payment.month === month);
     return recorded ? Math.max(0, recorded.dueAmount - recorded.paidAmount) : dueForMonth(month);
   };
-  const [amount, setAmount] = useState(String(remainingForMonth(billingMonth) || ""));
+  const [amount, setAmount] = useState(String((collectionBalance ?? remainingForMonth(billingMonth)) || ""));
   const [startMonth, setStartMonth] = useState(todayValue.slice(0, 7));
   const [monthsCount, setMonthsCount] = useState("3");
   const totalOverdueAmount = overdueMonths.reduce((sum, m) => sum + m.gap, 0);
@@ -146,14 +151,14 @@ export function RecordTenantRentPaymentDialog({
   const [utilityLoadFailed, setUtilityLoadFailed] = useState(false);
   const [utilityRefresh, setUtilityRefresh] = useState(0);
   useEffect(() => {
-    if (mode !== "overdue") return;
+    if (mode !== "overdue" && !(simpleCollection && mode === "multiMonth")) return;
     let active = true;
-    getTenantUtilityArrears(tenantLeaseId).then(
+    getTenantUtilityArrears(tenantLeaseId, simpleCollection).then(
       (bills) => { if (active) setUtilityArrears(bills); },
       () => { if (active) setUtilityLoadFailed(true); },
     );
     return () => { active = false; };
-  }, [mode, tenantLeaseId, utilityRefresh]);
+  }, [mode, simpleCollection, tenantLeaseId, utilityRefresh]);
 
   const [monthOptions, setMonthOptions] = useState<Awaited<ReturnType<typeof getMultiMonthRentOptions>> | null>(null);
   const [monthOptionsFailed, setMonthOptionsFailed] = useState(false);
@@ -168,14 +173,14 @@ export function RecordTenantRentPaymentDialog({
         setMonthOptions(options);
         setMonthRows((rows) => rows.length ? rows : [{
           id: 0,
-          month: options.find(({ month }) => month === billingMonth)?.month ?? options[0]?.month ?? "",
+          month: options.find(({ month }) => month === billingMonth)?.month ?? (simpleCollection ? "" : options[0]?.month ?? ""),
           amount: "",
         }]);
       },
       () => { if (active) setMonthOptionsFailed(true); },
     );
     return () => { active = false; };
-  }, [mode, tenantLeaseId, billingMonth, monthOptionsRefresh]);
+  }, [mode, simpleCollection, tenantLeaseId, billingMonth, monthOptionsRefresh]);
 
   function reloadMonthOptions() {
     setMonthOptions(null);
@@ -189,16 +194,26 @@ export function RecordTenantRentPaymentDialog({
   }
 
   const remainingByMonth = new Map(monthOptions?.map(({ month, remainingCents }) => [month, remainingCents]));
-  const monthPayments = monthRows.map(({ month, amount }) => ({
-    month, amount, remainingCents: remainingByMonth.get(month),
-  }));
-  const multiMonthTotal = monthPayments.reduce((sum, { amount }) =>
+  const monthPayments = monthRows
+    .filter(({ amount }) => !simpleCollection || amount !== "")
+    .map(({ month, amount }) => ({ month, amount, remainingCents: remainingByMonth.get(month) }));
+  const utilityPayments = simpleCollection && mode === "multiMonth" ? (utilityArrears ?? []).flatMap((bill) => {
+    const amount = utilityAmounts[bill.id];
+    return amount ? [{ id: bill.id, amount, remainingCents: Math.round(bill.remaining * 100) }] : [];
+  }) : [];
+  const plannedPayments = [...monthPayments, ...utilityPayments];
+  const multiMonthTotal = plannedPayments.reduce((sum, { amount }) =>
     sum + (Number.isFinite(Number(amount)) ? Math.round(Number(amount) * 100) : 0), 0) / 100;
-  const canSubmitMultiMonth = monthPayments.length > 0 &&
+  const canSubmitMultiMonth = plannedPayments.length > 0 &&
     new Set(monthPayments.map(({ month }) => month)).size === monthPayments.length &&
-    monthPayments.every(({ amount, remainingCents }) =>
+    plannedPayments.every(({ amount, remainingCents }) =>
       /^\d+(\.\d{1,2})?$/.test(amount) && Number(amount) > 0 &&
       Math.round(Number(amount) * 100) <= (remainingCents ?? 0));
+  const cashBalance = collectionBalance ?? remainingForMonth(billingMonth);
+  const cashCents = Math.round(cashBalance * 100);
+  const cashPayment = Number(amount);
+  const validCashPayment = /^\d+(\.\d{1,2})?$/.test(amount) && cashPayment > 0 &&
+    Math.round(cashPayment * 100) <= cashCents;
   const currentMonth = todayValue.slice(0, 7);
 
   const utilityTypeLabels = {
@@ -218,13 +233,14 @@ export function RecordTenantRentPaymentDialog({
     const month = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`;
     return remainingForMonth(month);
   }).reduce((sum, value) => sum + value, 0);
-  const showUtilityBills = mode === "cash" && isPaymentMonth(billingMonth);
+  const showUtilityBills = !simpleCollection && mode === "cash" && isPaymentMonth(billingMonth);
   const actionMonth = mode === "advance" ? startMonth : billingMonth;
   const actionAmount =
     mode === "advance" ? advanceTotal : mode === "overdue" ? overdueValue + utilityTotal : Number(amount);
   const dialogTitle =
     mode === "multiMonth" ? t("multiMonthTitle") : mode === "advance" ? t("advanceRentPayment") : mode === "overdue" ? (arrearsPeriod ? triggerLabel ?? t("settleOverdue") : t("settleOverdue")) : t("collectRent");
   const submitLabel =
+    simpleCollection && mode === "cash" ? t("invoicePaymentSave") :
     mode === "multiMonth" ? t("multiMonthSave") :
     mode === "advance"
       ? t("recordAdvanceRentAction", { count: Number(monthsCount) || 0, amount: formatTaka(actionAmount || 0) })
@@ -245,8 +261,35 @@ export function RecordTenantRentPaymentDialog({
     );
   }
 
+  function changeCollectionMode(next: Mode) {
+    if (next === "multiMonth") {
+      setMonthOptions(null);
+      setMonthOptionsFailed(false);
+      setMonthRows([{ id: 0, month: cashCents > 0 ? billingMonth : "", amount: validCashPayment ? amount : "" }]);
+    }
+    if (next === "cash" && mode === "multiMonth") {
+      setAmount(monthRows.find((row) => row.month === billingMonth)?.amount ?? String(cashBalance || ""));
+    }
+    if (next === "downpaymentAdjustment" || mode === "downpaymentAdjustment") {
+      handleModeChange(next);
+      return;
+    }
+    setMode(next);
+  }
+
   return (
-    <Dialog onOpenChange={(open) => { if (!open) setHasUtilityDraft(false); }}>
+    <Dialog open={open} onOpenChange={(next) => {
+      if (simpleCollection && isPending) return;
+      setOpen(next);
+      if (!next) setHasUtilityDraft(false);
+      if (!next && simpleCollection) {
+        setMode("cash");
+        setAmount(String(cashBalance || ""));
+        setUtilityAmounts({});
+        setUtilityArrears(null);
+        setUtilityLoadFailed(false);
+      }
+    }}>
       <DialogTrigger
         render={
           variant === "row" ? (
@@ -278,7 +321,7 @@ export function RecordTenantRentPaymentDialog({
           </>
         )}
       </DialogTrigger>
-      <DialogContent className="sm:max-w-3xl sm:gap-5 sm:p-6">
+      <DialogContent className={simpleCollection ? "max-h-[90dvh] overflow-y-auto sm:max-w-xl" : "sm:max-w-3xl sm:gap-5 sm:p-6"}>
         <DialogHeader>
           <DialogTitle>{showUtilityBills ? t("rentAndUtilityTitle") : dialogTitle}</DialogTitle>
         </DialogHeader>
@@ -290,7 +333,7 @@ export function RecordTenantRentPaymentDialog({
                 .filter(Boolean)
                 .join(" · ")}
             </p>
-            {mode !== "multiMonth" ? <p className="mt-1 text-xs font-medium text-foreground">
+            {simpleCollection ? <p className="mt-1 text-sm font-medium">{monthLabel(billingMonth, locale)} · {t("collectionMonthBalance", { amount: formatTaka(cashCents / 100, 2) })}</p> : mode !== "multiMonth" ? <p className="mt-1 text-xs font-medium text-foreground">
               {mode === "overdue" ? dialogTitle : monthLabel(actionMonth, locale)} · {formatTaka(actionAmount || 0, 2)}
             </p> : null}
           </div>
@@ -299,13 +342,34 @@ export function RecordTenantRentPaymentDialog({
           <form
             action={(formData: FormData) =>
               startTransition(async () => {
-                if (mode === "multiMonth") {
+                if (mode === "multiMonth" || (simpleCollection && mode === "cash")) {
+                  const single = mode === "cash";
+                  if (single ? !validCashPayment : !canSubmitMultiMonth) return;
+                  if (single) {
+                    formData.set("collectionMode", "single");
+                    formData.set("multiMonthPayments", JSON.stringify([{ month: billingMonth, amount, remainingCents: cashCents }]));
+                  }
+                  if (simpleCollection && !single) {
+                    formData.set("multiMonthUtilities", JSON.stringify(utilityPayments));
+                  }
                   const result = await recordMultiMonthRentPayment(formData);
                   if (result?.reason === "changed") {
                     toast.error(t("multiMonthChanged"));
+                    if (simpleCollection) {
+                      setUtilityArrears(null);
+                      setUtilityAmounts({});
+                      setUtilityLoadFailed(false);
+                      setUtilityRefresh((version) => version + 1);
+                      router.refresh();
+                    }
                     reloadMonthOptions();
                   } else if (result?.reason === "invalid") {
                     toast.error(t("multiMonthInvalid"));
+                  } else if (simpleCollection) {
+                    setOpen(false);
+                    setMode("cash");
+                    setUtilityAmounts({});
+                    setUtilityArrears(null);
                   }
                 } else if (mode === "overdue") {
                   const result = await recordOverdueRentPayment(formData);
@@ -340,7 +404,20 @@ export function RecordTenantRentPaymentDialog({
             {arrearsPeriod ? <>
               <input type="hidden" name="arrearsFrom" value={arrearsPeriod.from} />
               <input type="hidden" name="arrearsTo" value={arrearsPeriod.to} />
-            </> : fixedBillingMonth ? null : <FormField label={t("paymentMode")} htmlFor="rentPaymentModeTabs">
+            </> : simpleCollection ? (
+              <div className="flex flex-wrap gap-2">
+                <Button type="button" variant="outline" size="sm" disabled={isPending}
+                  onClick={() => changeCollectionMode(mode === "cash" ? "multiMonth" : "cash")}>
+                  {t(mode === "cash" ? "collectionMore" : "collectionOnlySelected")}
+                </Button>
+                {mode === "multiMonth" && currentDownpaymentBalance > 0 ? (
+                  <Button type="button" variant="ghost" size="sm" disabled={isPending}
+                    onClick={() => changeCollectionMode("downpaymentAdjustment")}>
+                    {t("adjustFromDownpayment")}
+                  </Button>
+                ) : null}
+              </div>
+            ) : fixedBillingMonth ? null : <FormField label={t("paymentMode")} htmlFor="rentPaymentModeTabs">
               <Tabs value={mode} onValueChange={(v) => handleModeChange(v as Mode)}>
                 <TabsList id="rentPaymentModeTabs" className="h-auto w-full flex-wrap">
                   <TabsTrigger value="cash" className="flex-1 text-xs">
@@ -370,8 +447,8 @@ export function RecordTenantRentPaymentDialog({
               </p>
             ) : null}
 
-            {fixedBillingMonth ? (
-              <input type="hidden" name="billingMonth" value={fixedBillingMonth} />
+            {fixedBillingMonth || simpleCollection ? (
+              <input type="hidden" name="billingMonth" value={fixedBillingMonth ?? billingMonth} />
             ) : mode === "cash" || mode === "downpaymentAdjustment" ? (
               <FormField label={t("billingMonth")} htmlFor="rentBillingMonth" required>
                 <Input
@@ -394,6 +471,14 @@ export function RecordTenantRentPaymentDialog({
             {mode === "multiMonth" ? (
               <section className="space-y-3" aria-label={t("multiMonthTitle")}>
                 <p className="text-sm text-muted-foreground">{t("multiMonthHint")}</p>
+                {simpleCollection ? (
+                  <p className="rounded-lg bg-muted px-3 py-2 text-xs text-muted-foreground">
+                    {t("collectionMissingMonths", { month: monthLabel(LEDGER_START_MONTH, locale) })}{" "}
+                    <Link href={`/tenants/${tenantLeaseId}#rent-account-tools`} className="font-medium text-primary underline underline-offset-2">
+                      {t("addOldRentArrears")}
+                    </Link>
+                  </p>
+                ) : null}
                 {monthOptionsFailed ? (
                   <p role="status" className="text-sm text-destructive">
                     {t("multiMonthLoadFailed")}{" "}
@@ -410,12 +495,12 @@ export function RecordTenantRentPaymentDialog({
                         const remaining = remainingByMonth.get(month);
                         return (
                           <div key={id} className="grid gap-2 rounded-lg border p-3 sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto]">
-                            <FormField label={t("billingMonth")} htmlFor={`multiMonth-${id}`} required>
+                            <FormField label={t("billingMonth")} htmlFor={`multiMonth-${id}`} required={!simpleCollection}>
                               <select
                                 id={`multiMonth-${id}`}
                                 className="h-8 w-full rounded-lg border border-input bg-background px-2 text-sm focus-visible:outline-ring"
                                 value={month}
-                                required
+                                required={!simpleCollection}
                                 onChange={(event) => changeMonthRow(id, { month: event.target.value, amount: "" })}
                               >
                                 <option value="">{t("multiMonthChoose")}</option>
@@ -426,7 +511,7 @@ export function RecordTenantRentPaymentDialog({
                                 ))}
                               </select>
                             </FormField>
-                            <FormField label={t("amount")} htmlFor={`multiMonthAmount-${id}`} required>
+                            <FormField label={t("amount")} htmlFor={`multiMonthAmount-${id}`} required={!simpleCollection}>
                               <Input
                                 id={`multiMonthAmount-${id}`}
                                 type="number"
@@ -435,13 +520,15 @@ export function RecordTenantRentPaymentDialog({
                                 min="0.01"
                                 max={remaining == null ? undefined : remaining / 100}
                                 disabled={!month}
-                                required
+                                required={!simpleCollection}
                                 value={amount}
                                 onChange={(event) => changeMonthRow(id, { amount: event.target.value })}
                               />
                               {remaining != null ? (
                                 <p className="text-xs text-muted-foreground">
-                                  {t("multiMonthRemaining", { amount: formatTaka(remaining / 100, 2) })}
+                                  {t(simpleCollection && Number(amount) > 0 ? "overdueAfterPayment" : "multiMonthRemaining", {
+                                    amount: formatTaka(Math.max(0, remaining / 100 - (simpleCollection ? Number(amount) || 0 : 0)), 2),
+                                  })}
                                 </p>
                               ) : null}
                             </FormField>
@@ -464,10 +551,10 @@ export function RecordTenantRentPaymentDialog({
                     >
                       <Plus className="size-4" /> {t("multiMonthAdd")}
                     </Button>
-                    <div role="status" className="flex items-center justify-between gap-3 rounded-lg bg-primary/10 px-3 py-2.5 text-sm font-semibold">
+                    {!simpleCollection ? <div role="status" className="flex items-center justify-between gap-3 rounded-lg bg-primary/10 px-3 py-2.5 text-sm font-semibold">
                       <span>{t("multiMonthTotal")}</span>
                       <span className="tabular-nums">{formatTaka(multiMonthTotal, 2)}</span>
-                    </div>
+                    </div> : null}
                   </>
                 )}
               </section>
@@ -553,24 +640,24 @@ export function RecordTenantRentPaymentDialog({
                   </div>
                 ) : null}
               </>
-            ) : (
-              <FormField label={t("amount")} htmlFor="rentPaymentAmount" required>
+            ) : simpleCollection && mode === "cash" && cashCents === 0 ? null : (
+              <FormField label={t(simpleCollection && mode === "cash" ? "invoicePaymentAmount" : "amount")} htmlFor="rentPaymentAmount" required>
                 <Input
                   id="rentPaymentAmount"
                   name="amount"
                   type="number"
-                  step="any"
-                  min={fixedBillingMonth ? 0.01 : 0}
+                  step={simpleCollection ? "0.01" : "any"}
+                  min={fixedBillingMonth || simpleCollection ? 0.01 : 0}
                   max={
                     mode === "downpaymentAdjustment"
                       ? Math.min(currentDownpaymentBalance, remainingForMonth(billingMonth))
-                      : remainingForMonth(billingMonth)
+                      : cashBalance
                   }
                   required
                   value={amount}
                   onChange={(e) => setAmount(e.target.value)}
                 />
-                {serviceChargeAmount > 0 ? (
+                {!simpleCollection && serviceChargeAmount > 0 ? (
                   <p className="mt-1 text-xs text-muted-foreground">
                     {t("serviceChargeBundledHint", {
                       rent: formatTaka(selectedTerms.monthlyRentAmount),
@@ -582,23 +669,23 @@ export function RecordTenantRentPaymentDialog({
               </FormField>
             )}
 
-            {fixedBillingMonth ? (
-              <p className="text-sm text-muted-foreground">
+            {fixedBillingMonth || (simpleCollection && mode === "cash") ? (
+              <p role="status" className="rounded-lg bg-muted px-3 py-2 text-sm font-medium">
                 {t("overdueAfterPayment", {
-                  amount: formatTaka(Math.max(0, remainingForMonth(billingMonth) - Math.max(0, Number(amount) || 0))),
+                  amount: formatTaka(Math.max(0, cashCents / 100 - (simpleCollection && !validCashPayment ? 0 : Math.max(0, Number(amount) || 0))), 2),
                 })}
               </p>
             ) : null}
 
-            {mode === "overdue" ? (
-              <section className="space-y-3 rounded-lg border p-3" aria-label={t("oldUtilityBills")}>
-                <h3 className="font-semibold">{t("oldUtilityBills")}</h3>
+            {mode === "overdue" || (simpleCollection && mode === "multiMonth") ? (
+              <section className="space-y-3 rounded-lg border p-3" aria-label={t(simpleCollection ? "collectionUtilityBills" : "oldUtilityBills")}>
+                <h3 className="font-semibold">{t(simpleCollection ? "collectionUtilityBills" : "oldUtilityBills")}</h3>
                 {utilityLoadFailed ? (
                   <p role="status" className="text-xs text-destructive">{t("oldUtilityLoadFailed")}</p>
                 ) : utilityArrears == null ? (
                   <p role="status" className="text-xs text-muted-foreground">{t("oldUtilityLoading")}</p>
                 ) : utilityArrears.length === 0 ? (
-                  <p className="text-xs text-muted-foreground">{t("oldUtilityEmpty")}</p>
+                  <p className="text-xs text-muted-foreground">{t(simpleCollection ? "collectionUtilityEmpty" : "oldUtilityEmpty")}</p>
                 ) : (
                   <>
                     <p className="text-xs text-muted-foreground">{t("oldUtilityPaymentHint")}</p>
@@ -607,18 +694,26 @@ export function RecordTenantRentPaymentDialog({
                         <label htmlFor={`utility-arrears-${bill.id}`} className="text-sm">
                           {utilityTypeLabels[bill.type]} · {monthLabel(bill.month, locale)}
                           <span className="block text-xs text-muted-foreground">
+                            {simpleCollection ? `${formatDate(bill.dueDate, locale)} · ` : null}
                             {t("utilityRemainingDue", { amount: formatTaka(bill.remaining, 2) })}
                           </span>
                         </label>
-                        <Input id={`utility-arrears-${bill.id}`} name={`utilityPayment:${bill.id}`}
-                          type="number" step="any" min={0} max={bill.remaining}
-                          placeholder={t("oldUtilityPaymentAmount")}
-                          value={utilityAmounts[bill.id] ?? ""}
-                          onChange={(event) => {
-                            const value = event.target.value;
-                            setUtilityAmounts((amounts) => ({ ...amounts, [bill.id]: value }));
-                          }}
-                        />
+                        <div>
+                          <Input id={`utility-arrears-${bill.id}`} name={`utilityPayment:${bill.id}`}
+                            type="number" step={simpleCollection ? "0.01" : "any"} min={simpleCollection ? 0.01 : 0} max={simpleCollection ? Math.round(bill.remaining * 100) / 100 : bill.remaining}
+                            placeholder={t("oldUtilityPaymentAmount")}
+                            value={utilityAmounts[bill.id] ?? ""}
+                            onChange={(event) => {
+                              const value = event.target.value;
+                              setUtilityAmounts((amounts) => ({ ...amounts, [bill.id]: value }));
+                            }}
+                          />
+                          {simpleCollection && Number(utilityAmounts[bill.id]) > 0 ? (
+                            <p className="mt-1 text-xs text-muted-foreground">
+                              {t("overdueAfterPayment", { amount: formatTaka(Math.max(0, bill.remaining - Number(utilityAmounts[bill.id])), 2) })}
+                            </p>
+                          ) : null}
+                        </div>
                       </div>
                     ))}
                   </>
@@ -626,6 +721,12 @@ export function RecordTenantRentPaymentDialog({
               </section>
             ) : null}
 
+            {simpleCollection && mode === "multiMonth" ? (
+              <div role="status" className="flex items-center justify-between gap-3 rounded-lg bg-primary/10 px-3 py-2.5 text-sm font-semibold">
+                <span>{t("multiMonthTotal")}</span>
+                <span className="tabular-nums">{formatTaka(multiMonthTotal, 2)}</span>
+              </div>
+            ) : null}
             <FormField label={t("paymentDate")} htmlFor="rentPaymentDate" required>
               <Input id="rentPaymentDate" name="date" type="date" max={todayValue} defaultValue={todayValue} required />
             </FormField>
@@ -679,7 +780,7 @@ export function RecordTenantRentPaymentDialog({
                   <DialogClose render={<Button type="button" variant="outline" />}>
                     {t("cancel")}
                   </DialogClose>
-                  <Button type="submit" disabled={isPending || (mode === "overdue" && !canSubmitOverdue) || (mode === "multiMonth" && !canSubmitMultiMonth)}>
+                  <Button type="submit" disabled={isPending || (simpleCollection && mode === "cash" && !validCashPayment) || (mode === "overdue" && !canSubmitOverdue) || (mode === "multiMonth" && !canSubmitMultiMonth)}>
                     {isPending ? <Loader2 className="size-4 animate-spin" /> : null}
                     {submitLabel}
                   </Button>
