@@ -1,4 +1,4 @@
-import { dhakaISO, dhakaNow } from "@/lib/dhaka-time";
+import { dhakaISO, dhakaNow, dhakaTodayISO } from "@/lib/dhaka-time";
 import { notFound } from "next/navigation";
 import { getLocale, getTranslations } from "next-intl/server";
 import { ArrowLeft, Droplet, Flame, History, House, ReceiptText, Zap } from "lucide-react";
@@ -14,6 +14,8 @@ import { cn } from "@/lib/utils";
 import { CashMemoHandwritingRow, CashMemoHeader, CashMemoReading, CashMemoSignatures, cashMemoClassName } from "@/components/properties/cash-memo";
 import { InvoiceMonthSelect } from "@/components/properties/invoice-month-select";
 import { InvoicePaymentDialog } from "@/components/properties/invoice-payment-dialog";
+import { InvoiceElectricityFields } from "@/components/properties/invoice-electricity-fields";
+import { getPreviousTenantMeterReading } from "@/lib/actions/utility-bills";
 import { EditUtilityBillDialog } from "@/components/properties/edit-utility-bill-dialog";
 import { InvoiceAddUtilityBillDialog } from "@/components/properties/add-utility-bill-dialog";
 import { invoicePaymentSnapshot } from "@/lib/invoice-payment";
@@ -224,23 +226,44 @@ export default async function TenantInvoicePage({
       } : undefined}
     />
   ) : null;
-  const utilityEditors = fromRent && canCollect ? Object.fromEntries(
+  const currentBills = [...monthBills, ...companyBorneBills];
+  const electricityBills = currentBills.filter((bill) => bill.type === "ELECTRICITY");
+  const today = dhakaTodayISO();
+  const defaultBillDate = selectedMonth === nowMonth ? today : `${selectedMonth}-10`;
+  const newBillDate = defaultBillDate < leaseStartDay ? leaseStartDay : defaultBillDate;
+  const canEditPrintedBills = fromRent && canCollect && !(embedded && receive === "1");
+  const previousForNewBill = canEditPrintedBills && !electricityBills.length && newBillDate.startsWith(selectedMonth)
+    ? await getPreviousTenantMeterReading(id, newBillDate) : null;
+  const fixedElectricityAmount = tenant.utilityBillDefaults.find((item) => item.type === "ELECTRICITY")?.amount ?? null;
+  const utilityEditors = canEditPrintedBills ? Object.fromEntries(
     rentBillPrintKeys.filter((type) => type !== "RENT").map((type) => {
-      const bills = [...monthBills, ...companyBorneBills].filter((bill) => bill.type === type);
+      const bills = currentBills.filter((bill) => bill.type === type);
+      if (type === "ELECTRICITY" && !bills.length && newBillDate.startsWith(selectedMonth)) {
+        return [type, <InvoiceElectricityFields key="new-electricity-bill" leaseId={id} month={selectedMonth} dueDate={newBillDate}
+          fixedAmount={fixedElectricityAmount} previous={previousForNewBill?.reading ?? null} />];
+      }
       return [type, bills.length ? (
-        <ul className="mb-1 ml-6 divide-y rounded-md bg-muted/40 px-2">
-          {bills.map((bill) => (
-            <li key={bill.id} className="flex items-center justify-between gap-2 py-1 text-xs">
-              <span>{formatDate(bill.dueDate, locale)} · {formatInvoiceAmount(bill.amount)}
-                {paidByCompany(bill) ? ` · ${t("paidByCompanyLabel")}` : ""}
-              </span>
-              <EditUtilityBillDialog
-                key={JSON.stringify([bill.type, bill.amount, bill.paidAmount, bill.dueDate, bill.paidByCompany, bill.meterReading, bill.previousMeterReadingOverride])}
-                bill={bill} returnTo={invoicePath} fixedUnitId={bill.unitId}
-                invoice={{ leaseId: id, month: selectedMonth, startDate: leaseStartDay }}
-              />
-            </li>
-          ))}
+        <ul className="mb-1 divide-y rounded-md bg-muted/40 px-2">
+          {bills.map((bill) => {
+            const billKey = JSON.stringify([bill.type, bill.amount, bill.paidAmount, bill.dueDate, bill.paidByCompany,
+              bill.meterReading, bill.previousMeterReadingOverride]);
+            return (
+              <li key={bill.id} className="space-y-1 py-1 text-xs">
+                <div className="flex items-center justify-between gap-2">
+                  <span>{formatDate(bill.dueDate, locale)} · {formatInvoiceAmount(bill.amount)}
+                    {paidByCompany(bill) ? ` · ${t("paidByCompanyLabel")}` : ""}
+                  </span>
+                  <EditUtilityBillDialog
+                    key={billKey} bill={bill} returnTo={invoicePath} fixedUnitId={bill.unitId}
+                    invoice={{ leaseId: id, month: selectedMonth, startDate: leaseStartDay }}
+                  />
+                </div>
+                {type === "ELECTRICITY" ? <InvoiceElectricityFields key={billKey + "-readings"} leaseId={id}
+                  month={selectedMonth} dueDate={dhakaISO(bill.dueDate)} fixedAmount={fixedElectricityAmount}
+                  previous={bill.previousMeterReading} bill={bill} /> : null}
+              </li>
+            );
+          })}
         </ul>
       ) : null];
     }),
