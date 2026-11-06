@@ -186,27 +186,29 @@ export default async function TenantInvoicePage({
 
   return (
     <div data-tenant-invoice-page className="mx-auto flex w-full max-w-4xl min-w-0 flex-1 flex-col gap-4">
-      <div className="flex flex-wrap items-center justify-end gap-2 print:hidden">
+      <div className="flex flex-wrap items-center gap-2 print:hidden">
         <InvoiceMonthSelect leaseId={id} months={availableMonths} selectedMonth={selectedMonth} />
-        <InvoicePrintButton />
       </div>
 
-      {tenant.leaseStatus === "ACTIVE" && selectedMonth <= nowMonth ? (
-        <div className="flex flex-wrap items-center gap-2 print:hidden">
-          {paymentLines.length > 0 ? (
-            <InvoicePaymentDialog
-              key={invoicePaymentSnapshot(paymentLines)}
-              tenantLeaseId={tenant.id}
-              tenantName={tenant.tenantName}
-              propertyId={tenant.propertyId}
-              month={selectedMonth}
-              lines={paymentLines}
-              returnTo={invoicePath}
-            />
-          ) : null}
-          <InvoiceAddUtilityBillDialog key={selectedMonth} leaseId={id} month={selectedMonth} />
-        </div>
-      ) : null}
+      <div className="flex flex-wrap items-center gap-2 print:hidden">
+        <InvoicePrintButton label={t("invoicePrintBill")} />
+        {tenant.leaseStatus === "ACTIVE" && selectedMonth <= nowMonth ? (
+          <>
+            {paymentLines.length > 0 ? (
+              <InvoicePaymentDialog
+                key={invoicePaymentSnapshot(paymentLines)}
+                tenantLeaseId={tenant.id}
+                tenantName={tenant.tenantName}
+                propertyId={tenant.propertyId}
+                month={selectedMonth}
+                lines={paymentLines}
+                returnTo={invoicePath}
+              />
+            ) : null}
+            <InvoiceAddUtilityBillDialog key={selectedMonth} leaseId={id} month={selectedMonth} />
+          </>
+        ) : null}
+      </div>
 
       <div data-testid="invoice" className="print-invoice-a4">
       <div
