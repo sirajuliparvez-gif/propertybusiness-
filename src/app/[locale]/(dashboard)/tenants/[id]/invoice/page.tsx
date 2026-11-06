@@ -2,6 +2,8 @@ import { dhakaISO, dhakaNow } from "@/lib/dhaka-time";
 import { notFound } from "next/navigation";
 import { getLocale, getTranslations } from "next-intl/server";
 import { Droplet, Flame, House, ReceiptText, Zap } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Link } from "@/i18n/navigation";
 import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { getTenantProfile } from "@/lib/tenants-data";
@@ -13,7 +15,7 @@ import { CashMemoHeader, CashMemoReading, CashMemoSignatures, cashMemoClassName 
 import { InvoiceMonthSelect } from "@/components/properties/invoice-month-select";
 import { InvoicePaymentDialog } from "@/components/properties/invoice-payment-dialog";
 import { InvoiceAddUtilityBillDialog } from "@/components/properties/add-utility-bill-dialog";
-import { invoicePaymentSnapshot } from "@/lib/invoice-payment";
+import { invoicePaymentSnapshot, orderInvoicePaymentLines } from "@/lib/invoice-payment";
 import { InvoicePrintButton } from "@/components/properties/invoice-print-button";
 import { rentTermsDueAmount, resolveRentTermsForMonth } from "@/lib/rent-terms";
 
@@ -34,10 +36,10 @@ export default async function TenantInvoicePage({
   searchParams,
 }: {
   params: Promise<{ id: string }>;
-  searchParams: Promise<{ month?: string; bill?: string }>;
+  searchParams: Promise<{ month?: string; bill?: string; view?: string }>;
 }) {
   const { id } = await params;
-  const { month: requestedMonth, bill: highlightedBillId } = await searchParams;
+  const { month: requestedMonth, bill: highlightedBillId, view } = await searchParams;
   const t = await getTranslations("Properties");
   const tNav = await getTranslations("Nav");
   const locale = await getLocale();
@@ -158,6 +160,76 @@ export default async function TenantInvoicePage({
   ].map(({ remaining, ...line }) => ({ ...line, remainingCents: Math.round(remaining * 100) }))
     .filter(({ remainingCents }) => remainingCents > 0);
 
+  const invoiceQuery = new URLSearchParams({
+    month: selectedMonth,
+    ...(highlightedBillId ? { bill: highlightedBillId } : {}),
+  });
+  const invoicePath = `/tenants/${id}/invoice?${invoiceQuery}`;
+  const billNumber = `R-${selectedMonth.replace("-", "")}-${tenant.id.slice(-10).toUpperCase()}`;
+  const memoHeader = {
+    brand: tNav("brand"),
+    month: monthLabel(selectedMonth, locale),
+    property: tenant.propertyName,
+    unit: tenant.unitLabel,
+    name: tenant.tenantName,
+    date: formatDate(billDate, locale),
+    billNumber,
+    companyAddress: t("cashMemoCompanyAddress"),
+    companyPhone: t("cashMemoCompanyPhone"),
+    labels: {
+      unit: t("cashMemoUnit"), name: t("cashMemoName"), month: t("invoiceBillMonth"),
+      date: t("cashMemoDate"), billNumber: t("cashMemoBillNumber"),
+    },
+  };
+
+  if (view === "send") {
+    const electricityBills = new Map(statementBills.filter((bill) => bill.type === "ELECTRICITY").map((bill) => [bill.id, bill]));
+    return (
+      <div className="mx-auto w-full max-w-2xl">
+        <div className="mb-4 flex flex-wrap items-center justify-between gap-2 print:hidden">
+          <Button variant="outline" render={<Link href={invoicePath} />} nativeButton={false}>{t("receiptBack")}</Button>
+          <InvoicePrintButton />
+        </div>
+        <article data-testid="payment-request-copy" className="print-invoice-a4 space-y-4 rounded-lg border border-sky-900/40 bg-card p-4 text-sm sm:p-6 print:p-4">
+          <CashMemoHeader {...memoHeader} title={t("paymentRequestTitle")} />
+          {paymentLines.length ? (
+            <table className="w-full">
+              <thead className="bg-muted/60 print:table-header-group">
+                <tr>
+                  <th scope="col" className="px-2 py-1.5 text-start">{t("cashMemoCharge")}</th>
+                  <th scope="col" className="px-2 py-1.5 text-end">{t("cashMemoShortBalance")}</th>
+                </tr>
+              </thead>
+              <tbody>
+                {orderInvoicePaymentLines(paymentLines).map((line) => {
+                  const bill = electricityBills.get(line.id);
+                  return (
+                    <tr key={line.id} className="break-inside-avoid border-b">
+                      <td className="px-2 py-1.5">
+                        {line.label} · {monthLabel(line.month, locale)}
+                        {bill?.meterReading != null ? (
+                          <CashMemoReading current={bill.meterReading} previous={bill.previousMeterReading} units={bill.consumptionUnits}
+                            label={t("cashMemoReading")} unitLabel={t("cashMemoUnits")} missing={t("cashMemoReadingMissing")} locale={locale} />
+                        ) : null}
+                      </td>
+                      <td className="whitespace-nowrap px-2 py-1.5 text-end tabular-nums">{formatInvoiceAmount(line.remainingCents / 100)}</td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          ) : null}
+          <div className="flex break-inside-avoid items-center justify-between gap-3 rounded-md border bg-muted/30 px-3 py-2">
+            <span className="font-semibold">{t("paymentRequestTotal")}</span>
+            <strong data-testid="payment-request-total" className="text-xl tabular-nums">
+              {formatInvoiceAmount(paymentLines.reduce((sum, line) => sum + line.remainingCents, 0) / 100)}
+            </strong>
+          </div>
+        </article>
+      </div>
+    );
+  }
+
   const highlightedShown = highlightedBillId
     ? [...statementBills, ...companyBorneBills].some((b) => b.id === highlightedBillId)
     : false;
@@ -166,6 +238,9 @@ export default async function TenantInvoicePage({
     <div data-tenant-invoice-page className="mx-auto flex w-full max-w-4xl min-w-0 flex-1 flex-col gap-4">
       <div className="flex flex-wrap items-center justify-end gap-2 print:hidden">
         <InvoiceMonthSelect leaseId={id} months={availableMonths} selectedMonth={selectedMonth} />
+        <Button variant="outline" render={<Link href={`${invoicePath}&view=send`} />} nativeButton={false}>
+          {t("paymentRequestOpen")}
+        </Button>
         <InvoicePrintButton />
       </div>
 
@@ -179,10 +254,7 @@ export default async function TenantInvoicePage({
               propertyId={tenant.propertyId}
               month={selectedMonth}
               lines={paymentLines}
-              returnTo={`/tenants/${id}/invoice?${new URLSearchParams({
-                month: selectedMonth,
-                ...(highlightedBillId ? { bill: highlightedBillId } : {}),
-              })}`}
+              returnTo={invoicePath}
             />
           ) : null}
           <InvoiceAddUtilityBillDialog key={selectedMonth} leaseId={id} month={selectedMonth} />
@@ -194,23 +266,7 @@ export default async function TenantInvoicePage({
         data-testid="invoice-copy"
         className={cn(cashMemoClassName, "tenant-bill gap-6 rounded-xl border-primary/25 p-4 sm:gap-8 sm:p-8 lg:p-10")}
       >
-        <CashMemoHeader
-          brand={tNav("brand")}
-          title={t("cashMemoRentTitle")}
-          month={monthLabel(selectedMonth, locale)}
-          property={tenant.propertyName}
-          unit={tenant.unitLabel}
-          name={tenant.tenantName}
-          contact={tenant.contactInfo}
-          date={formatDate(billDate, locale)}
-          billNumber={`R-${selectedMonth.replace("-", "")}-${tenant.id.slice(-10).toUpperCase()}`}
-          companyAddress={t("cashMemoCompanyAddress")}
-          companyPhone={t("cashMemoCompanyPhone")}
-          labels={{
-            unit: t("cashMemoUnit"), name: t("cashMemoName"), month: t("invoiceBillMonth"),
-            date: t("cashMemoDate"), billNumber: t("cashMemoBillNumber"),
-          }}
-        />
+        <CashMemoHeader {...memoHeader} title={t("cashMemoRentTitle")} contact={tenant.contactInfo} />
 
         <section className="tenant-bill-summary overflow-hidden rounded-lg border border-primary/25 bg-primary/[0.045]" aria-label={t("cashMemoSummary")}>
           <dl className="tenant-bill-summary-main grid grid-cols-2 items-center gap-x-4 gap-y-4 px-4 py-4 sm:grid-cols-[1.25fr_1fr_1fr] sm:px-6 sm:py-5">

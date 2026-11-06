@@ -5,7 +5,7 @@ export type InvoicePaymentLine = {
   remainingCents: number;
 };
 
-export function orderInvoicePaymentLines(lines: InvoicePaymentLine[]) {
+export function orderInvoicePaymentLines<T extends InvoicePaymentLine>(lines: T[]) {
   return [...lines].sort((a, b) =>
     a.month.localeCompare(b.month) || a.kind.localeCompare(b.kind) || a.id.localeCompare(b.id)
   );
