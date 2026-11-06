@@ -1,7 +1,7 @@
 import { dhakaISO, dhakaNow } from "@/lib/dhaka-time";
 import { notFound } from "next/navigation";
 import { getLocale, getTranslations } from "next-intl/server";
-import { ArrowLeft, Droplet, Flame, House, ReceiptText, Zap } from "lucide-react";
+import { ArrowLeft, Droplet, Flame, History, House, ReceiptText, Zap } from "lucide-react";
 import { Link } from "@/i18n/navigation";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -43,6 +43,7 @@ export default async function TenantInvoicePage({
   const { month: requestedMonth, bill: highlightedBillId, tenant: tenantScope, print } = await searchParams;
   const t = await getTranslations("Properties");
   const tNav = await getTranslations("Nav");
+  const history = await getTranslations("TenantHistory");
   const locale = await getLocale();
 
   const tenant = await getTenantProfile(id);
@@ -90,6 +91,11 @@ export default async function TenantInvoicePage({
   const [selectedYear, selectedMonthNumber] = selectedMonth.split("-").map(Number);
   const rentDeadline = new Date(selectedYear, selectedMonthNumber - 1, RENT_DUE_DAY);
   const adjustment = tenant.downpaymentAdjustments.find((a) => a.month === selectedMonth) ?? null;
+  const earlierRent = tenant.payments.filter((entry) => entry.month < selectedMonth).map((entry) => ({
+    ...entry,
+    remaining: Math.max(0, entry.dueAmount - entry.paidAmount),
+  }));
+  const earlierRentDue = earlierRent.reduce((sum, entry) => sum + entry.remaining, 0);
 
   const rentStatusLabels: Record<string, string> = {
     PAID: t("paid"),
@@ -439,6 +445,58 @@ export default async function TenantInvoicePage({
         <CashMemoSignatures tenant={t("cashMemoTenantSignature")} company={t("cashMemoCompanySignature")} />
       </div>
       </div>
+
+      <section aria-labelledby="earlier-rent-heading" className="mt-2 rounded-lg border bg-card print:hidden">
+        <div className="flex flex-wrap items-start justify-between gap-3 border-b px-4 py-3">
+          <div>
+            <h2 id="earlier-rent-heading" className="flex items-center gap-2 text-base font-semibold">
+              <History className="size-4 text-muted-foreground" aria-hidden="true" />
+              {t("invoiceEarlierRentHistory")}
+            </h2>
+            <p className="mt-1 text-xs text-muted-foreground">{t("invoiceHistoryScreenOnly")}</p>
+          </div>
+          <Button variant="outline" size="sm" render={<Link href={`/tenants/${id}/history`} />} nativeButton={false}>
+            {history("open")}
+          </Button>
+        </div>
+        <div className="flex flex-wrap items-baseline justify-between gap-2 bg-muted/30 px-4 py-3">
+          <p className="text-sm font-medium">{t("invoicePreviousRentDue")}</p>
+          <strong className={cn("text-lg tabular-nums", earlierRentDue > 0 ? "text-destructive" : "text-success")}>
+            {formatInvoiceAmount(earlierRentDue)}
+          </strong>
+        </div>
+        {earlierRent.length ? (
+          <Table className="text-xs sm:text-sm">
+            <TableHeader>
+              <TableRow>
+                <TableHead scope="col" className="px-4">{t("invoiceBillMonth")}</TableHead>
+                <TableHead scope="col" className="text-right">{t("invoiceSimpleBillTotal")}</TableHead>
+                <TableHead scope="col" className="text-right">{t("invoiceSimplePaid")}</TableHead>
+                <TableHead scope="col" className="px-4 text-right">{t("remaining")}</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {earlierRent.map((entry) => (
+                <TableRow key={entry.month}>
+                  <TableCell className="whitespace-normal px-4 font-medium">
+                    {monthLabel(entry.month, locale)}
+                    {entry.paidAt ? (
+                      <p className="mt-0.5 text-xs font-normal text-muted-foreground">{formatDate(entry.paidAt, locale)}</p>
+                    ) : null}
+                  </TableCell>
+                  <TableCell className="text-right tabular-nums">{formatInvoiceAmount(entry.dueAmount)}</TableCell>
+                  <TableCell className="text-right tabular-nums">{formatInvoiceAmount(entry.paidAmount)}</TableCell>
+                  <TableCell className={cn("px-4 text-right tabular-nums", entry.remaining > 0 && "font-semibold text-destructive")}>
+                    {formatInvoiceAmount(entry.remaining)}
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        ) : (
+          <p className="px-4 py-3 text-sm text-muted-foreground">{t("invoiceNoEarlierRent")}</p>
+        )}
+      </section>
     </div>
   );
 }
