@@ -127,6 +127,7 @@ export function RecordTenantRentPaymentDialog({
   const todayValue = dhakaTodayISO();
   const [mode, setMode] = useState<Mode>(arrearsPeriod ? "overdue" : monthSettled && !initialBillingMonth ? "advance" : "cash");
   const [method, setMethod] = useState("NONE");
+  const [paymentDate, setPaymentDate] = useState(todayValue);
   const [billingMonth, setBillingMonth] = useState(initialBillingMonth ?? todayValue.slice(0, 7));
   const fallbackTerms = { monthlyRentAmount, serviceChargeType, serviceChargeValue };
   const termsForMonth = (month: string) => resolveRentTermsForMonth(fallbackTerms, rentRates, month);
@@ -218,6 +219,19 @@ export function RecordTenantRentPaymentDialog({
   const validCashPayment = /^\d+(\.\d{1,2})?$/.test(amount) && cashPayment > 0 &&
     Math.round(cashPayment * 100) <= cashCents;
   const noRentPayment = amount === "" || cashPayment === 0;
+  const basicPayment = simpleCollection && mode === "cash";
+  const rentAmountRequired = mode !== "cash" || (!addingBill && !utilityPayments.length);
+  const UtilityPaymentSection = basicPayment ? "details" : "section";
+  const PaymentDetails = basicPayment ? "details" : "div";
+  const paymentMethods = [
+    { value: "NONE", label: t("noPaymentRecord") },
+    { value: "CASH", label: t("paymentMethodCash") },
+    { value: "BKASH", label: t("paymentMethodBkash") },
+    { value: "NAGAD", label: t("paymentMethodNagad") },
+    { value: "BANK", label: t("paymentMethodBank") },
+    { value: "BANK_CHECK", label: t("paymentMethodBankCheck") },
+    { value: "OTHER", label: t("paymentMethodOther") },
+  ];
   const currentMonth = todayValue.slice(0, 7);
 
   const utilityTypeLabels = {
@@ -453,7 +467,6 @@ export function RecordTenantRentPaymentDialog({
             }
             className="flex min-w-0 flex-col gap-3"
           >
-            {showUtilityBills ? <h3 className="text-sm font-semibold">{t("collectRent")}</h3> : null}
             <input type="hidden" name="propertyId" value={propertyId} />
             <input type="hidden" name="tenantLeaseId" value={tenantLeaseId} />
             <input type="hidden" name="mode" value={mode} />
@@ -465,7 +478,7 @@ export function RecordTenantRentPaymentDialog({
             {arrearsPeriod ? <>
               <input type="hidden" name="arrearsFrom" value={arrearsPeriod.from} />
               <input type="hidden" name="arrearsTo" value={arrearsPeriod.to} />
-            </> : simpleCollection ? (
+            </> : simpleCollection && !basicPayment ? (
               <div className="flex flex-wrap gap-2">
                 <Button type="button" variant="outline" size="sm" disabled={isPending}
                   onClick={() => changeCollectionMode(mode === "cash" ? "multiMonth" : "cash")}>
@@ -478,7 +491,7 @@ export function RecordTenantRentPaymentDialog({
                   </Button>
                 ) : null}
               </div>
-            ) : fixedBillingMonth ? null : <FormField label={t("paymentMode")} htmlFor="rentPaymentModeTabs">
+            ) : fixedBillingMonth || basicPayment ? null : <FormField label={t("paymentMode")} htmlFor="rentPaymentModeTabs">
               <Tabs value={mode} onValueChange={(v) => handleModeChange(v as Mode)}>
                 <TabsList id="rentPaymentModeTabs" className="h-auto w-full flex-wrap">
                   <TabsTrigger value="cash" className="flex-1 text-xs">
@@ -518,7 +531,7 @@ export function RecordTenantRentPaymentDialog({
                   type="month"
                   max={todayValue.slice(0, 7)}
                   readOnly={hasUtilityDraft}
-                  required={mode !== "cash" || (!addingBill && !utilityPayments.length)}
+                  required
                   value={billingMonth}
                   onChange={(e) => {
                     setBillingMonth(e.target.value);
@@ -707,19 +720,19 @@ export function RecordTenantRentPaymentDialog({
                 ) : null}
               </>
             ) : simpleCollection && mode === "cash" && cashCents === 0 ? null : (
-              <FormField label={t(simpleCollection && mode === "cash" ? "invoicePaymentAmount" : "amount")} htmlFor="rentPaymentAmount" required>
+              <FormField label={t(basicPayment ? "collectionRentReceived" : "amount")} htmlFor="rentPaymentAmount" required={rentAmountRequired}>
                 <Input
                   id="rentPaymentAmount"
                   name="amount"
                   type="number"
                   step={simpleCollection ? "0.01" : "any"}
-                  min={fixedBillingMonth || simpleCollection ? 0.01 : 0}
+                  min={(fixedBillingMonth || simpleCollection) && rentAmountRequired ? 0.01 : 0}
                   max={
                     mode === "downpaymentAdjustment"
                       ? Math.min(currentDownpaymentBalance, remainingForMonth(billingMonth))
                       : cashBalance
                   }
-                  required
+                  required={rentAmountRequired}
                   value={amount}
                   onChange={(e) => setAmount(e.target.value)}
                 />
@@ -744,8 +757,13 @@ export function RecordTenantRentPaymentDialog({
             ) : null}
 
             {mode === "overdue" || (simpleCollection && (mode === "multiMonth" || (mode === "cash" && utilityArrears?.length))) ? (
-              <section className="space-y-3 rounded-lg border p-3" aria-label={t(simpleCollection ? "collectionUtilityBills" : "oldUtilityBills")}>
-                <h3 className="font-semibold">{t(simpleCollection ? "collectionUtilityBills" : "oldUtilityBills")}</h3>
+              <UtilityPaymentSection className="space-y-3 rounded-lg border p-3" aria-label={t(simpleCollection ? "collectionUtilityBills" : "oldUtilityBills")}>
+                {basicPayment ? (
+                  <summary className="cursor-pointer text-sm font-medium">
+                    {t("collectionUtilityBills")}
+                    {utilityPayments.length ? ` · ${formatTaka(utilityTotal, 2)}` : null}
+                  </summary>
+                ) : <h3 className="font-semibold">{t(simpleCollection ? "collectionUtilityBills" : "oldUtilityBills")}</h3>}
                 {utilityLoadFailed ? (
                   <p role="status" className="text-xs text-destructive">{t("oldUtilityLoadFailed")}</p>
                 ) : utilityArrears == null ? (
@@ -784,7 +802,7 @@ export function RecordTenantRentPaymentDialog({
                     ))}
                   </>
                 )}
-              </section>
+              </UtilityPaymentSection>
             ) : null}
 
             {simpleCollection && mode === "multiMonth" ? (
@@ -793,36 +811,33 @@ export function RecordTenantRentPaymentDialog({
                 <span className="tabular-nums">{formatTaka(multiMonthTotal, 2)}</span>
               </div>
             ) : null}
-            <FormField label={t("paymentDate")} htmlFor="rentPaymentDate" required>
-              <Input id="rentPaymentDate" name="date" type="date" max={todayValue} defaultValue={todayValue} required />
-            </FormField>
+            <PaymentDetails className={basicPayment ? "rounded-lg border px-3 py-2 text-sm" : undefined}>
+              {basicPayment ? (
+                <summary className="cursor-pointer text-muted-foreground">
+                  {t("invoicePaymentDetails")} · {paymentDate ? formatDate(paymentDate, locale) : "—"}
+                  {method !== "NONE" ? ` · ${paymentMethods.find(({ value }) => value === method)?.label}` : null}
+                </summary>
+              ) : null}
+              <div className={basicPayment ? "mt-2 grid gap-3 sm:grid-cols-2" : "grid gap-3"}>
+                <FormField label={t("paymentDate")} htmlFor="rentPaymentDate" required>
+                  <Input id="rentPaymentDate" name="date" type="date" max={todayValue}
+                    value={paymentDate} onChange={(event) => setPaymentDate(event.target.value)} required />
+                </FormField>
 
             {mode !== "downpaymentAdjustment" ? (
               <FormField label={t("paymentMethod")} htmlFor="rentPaymentMethod">
                 <Select
                   value={method}
                   onValueChange={(v) => setMethod(v ?? "NONE")}
-                  items={[
-                    { value: "NONE", label: t("noPaymentRecord") },
-                    { value: "CASH", label: t("paymentMethodCash") },
-                    { value: "BKASH", label: t("paymentMethodBkash") },
-                    { value: "NAGAD", label: t("paymentMethodNagad") },
-                    { value: "BANK", label: t("paymentMethodBank") },
-                    { value: "BANK_CHECK", label: t("paymentMethodBankCheck") },
-                    { value: "OTHER", label: t("paymentMethodOther") },
-                  ]}
+                  items={paymentMethods}
                 >
                   <SelectTrigger id="rentPaymentMethod" className="w-full">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="NONE">{t("noPaymentRecord")}</SelectItem>
-                    <SelectItem value="CASH">{t("paymentMethodCash")}</SelectItem>
-                    <SelectItem value="BKASH">{t("paymentMethodBkash")}</SelectItem>
-                    <SelectItem value="NAGAD">{t("paymentMethodNagad")}</SelectItem>
-                    <SelectItem value="BANK">{t("paymentMethodBank")}</SelectItem>
-                    <SelectItem value="BANK_CHECK">{t("paymentMethodBankCheck")}</SelectItem>
-                    <SelectItem value="OTHER">{t("paymentMethodOther")}</SelectItem>
+                    {paymentMethods.map(({ value, label }) => (
+                      <SelectItem key={value} value={value}>{label}</SelectItem>
+                    ))}
                   </SelectContent>
                 </Select>
               </FormField>
@@ -831,6 +846,15 @@ export function RecordTenantRentPaymentDialog({
                 <Input id="rentPaymentNotes" name="notes" />
               </FormField>
             )}
+              </div>
+            </PaymentDetails>
+
+            {basicPayment ? (
+              <Button type="button" variant="ghost" size="sm" className="self-start" disabled={isPending}
+                onClick={() => changeCollectionMode("multiMonth")}>
+                {t("collectionMore")}
+              </Button>
+            ) : null}
 
             {showUtilityBills ? (
               <section className="grid min-w-0 gap-3 rounded-lg border p-3">
@@ -849,7 +873,7 @@ export function RecordTenantRentPaymentDialog({
                 ) : (
                   <Button type="button" variant="outline" size="sm" className="justify-self-start" disabled={isPending}
                     onClick={() => setAddingBill(true)}>
-                    <Plus className="size-4" />{t("collectionCreateBill")}
+                    <Plus className="size-4" />{t("invoiceAddBill")}
                   </Button>
                 )}
               </section>
@@ -862,7 +886,7 @@ export function RecordTenantRentPaymentDialog({
                     !validCashPayment && !(noRentPayment && utilityPayments.length)) ||
                     (mode === "overdue" && !canSubmitOverdue) || (!addingBill && mode === "multiMonth" && !canSubmitMultiMonth)}>
                     {isPending ? <Loader2 className="size-4 animate-spin" /> : null}
-                    {showUtilityBills ? t("collectionReceivedAction") : submitLabel}
+                    {simpleCollection && showUtilityBills ? t("invoicePaymentSave") : showUtilityBills ? t("collectionReceivedAction") : submitLabel}
                   </Button>
                   {showUtilityBills && addingBill ? (
                     <Button type="submit" variant="outline" formAction={createBillsOnly} formNoValidate disabled={isPending}>
