@@ -3,7 +3,7 @@
 import { dhakaTodayISO } from "@/lib/dhaka-time";
 import { useEffect, useState, useTransition } from "react";
 import { useLocale, useTranslations } from "next-intl";
-import { Loader2, Wallet } from "lucide-react";
+import { Loader2, Plus, Wallet } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -31,6 +31,8 @@ import {
   recordAdvanceRentPayment,
   recordOverdueRentPayment,
   getTenantUtilityArrears,
+  getMultiMonthRentOptions,
+  recordMultiMonthRentPayment,
 } from "@/lib/actions/tenant-rent";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
@@ -39,7 +41,8 @@ import { allocateRentPayment } from "@/lib/rent-ledger";
 import { computeServiceChargeAmount } from "@/lib/service-charge";
 import { rentTermsDueAmount, resolveRentTermsForMonth, type EffectiveRentTerms } from "@/lib/rent-terms";
 
-type Mode = "cash" | "downpaymentAdjustment" | "advance" | "overdue";
+type Mode = "cash" | "downpaymentAdjustment" | "advance" | "overdue" | "multiMonth";
+type MultiMonthRow = { id: number; month: string; amount: string };
 const ADVANCE_MONTH_PRESETS = [3, 6, 12];
 const ADVANCE_MONTHS_MIN = 1;
 const ADVANCE_MONTHS_MAX = 36;
@@ -152,6 +155,52 @@ export function RecordTenantRentPaymentDialog({
     return () => { active = false; };
   }, [mode, tenantLeaseId, utilityRefresh]);
 
+  const [monthOptions, setMonthOptions] = useState<Awaited<ReturnType<typeof getMultiMonthRentOptions>> | null>(null);
+  const [monthOptionsFailed, setMonthOptionsFailed] = useState(false);
+  const [monthOptionsRefresh, setMonthOptionsRefresh] = useState(0);
+  const [monthRows, setMonthRows] = useState<MultiMonthRow[]>([]);
+  useEffect(() => {
+    if (mode !== "multiMonth") return;
+    let active = true;
+    getMultiMonthRentOptions(tenantLeaseId).then(
+      (options) => {
+        if (!active) return;
+        setMonthOptions(options);
+        setMonthRows((rows) => rows.length ? rows : [{
+          id: 0,
+          month: options.find(({ month }) => month === billingMonth)?.month ?? options[0]?.month ?? "",
+          amount: "",
+        }]);
+      },
+      () => { if (active) setMonthOptionsFailed(true); },
+    );
+    return () => { active = false; };
+  }, [mode, tenantLeaseId, billingMonth, monthOptionsRefresh]);
+
+  function reloadMonthOptions() {
+    setMonthOptions(null);
+    setMonthRows([]);
+    setMonthOptionsFailed(false);
+    setMonthOptionsRefresh((version) => version + 1);
+  }
+
+  function changeMonthRow(id: number, change: Partial<Omit<MultiMonthRow, "id">>) {
+    setMonthRows((rows) => rows.map((row) => row.id === id ? { ...row, ...change } : row));
+  }
+
+  const remainingByMonth = new Map(monthOptions?.map(({ month, remainingCents }) => [month, remainingCents]));
+  const monthPayments = monthRows.map(({ month, amount }) => ({
+    month, amount, remainingCents: remainingByMonth.get(month),
+  }));
+  const multiMonthTotal = monthPayments.reduce((sum, { amount }) =>
+    sum + (Number.isFinite(Number(amount)) ? Math.round(Number(amount) * 100) : 0), 0) / 100;
+  const canSubmitMultiMonth = monthPayments.length > 0 &&
+    new Set(monthPayments.map(({ month }) => month)).size === monthPayments.length &&
+    monthPayments.every(({ amount, remainingCents }) =>
+      /^\d+(\.\d{1,2})?$/.test(amount) && Number(amount) > 0 &&
+      Math.round(Number(amount) * 100) <= (remainingCents ?? 0));
+  const currentMonth = todayValue.slice(0, 7);
+
   const utilityTypeLabels = {
     GAS: t("utilityTypeGas"),
     ELECTRICITY: t("utilityTypeElectricity"),
@@ -174,8 +223,9 @@ export function RecordTenantRentPaymentDialog({
   const actionAmount =
     mode === "advance" ? advanceTotal : mode === "overdue" ? overdueValue + utilityTotal : Number(amount);
   const dialogTitle =
-    mode === "advance" ? t("advanceRentPayment") : mode === "overdue" ? (arrearsPeriod ? triggerLabel ?? t("settleOverdue") : t("settleOverdue")) : t("collectRent");
+    mode === "multiMonth" ? t("multiMonthTitle") : mode === "advance" ? t("advanceRentPayment") : mode === "overdue" ? (arrearsPeriod ? triggerLabel ?? t("settleOverdue") : t("settleOverdue")) : t("collectRent");
   const submitLabel =
+    mode === "multiMonth" ? t("multiMonthSave") :
     mode === "advance"
       ? t("recordAdvanceRentAction", { count: Number(monthsCount) || 0, amount: formatTaka(actionAmount || 0) })
       : mode === "overdue"
@@ -186,6 +236,7 @@ export function RecordTenantRentPaymentDialog({
           });
 
   function handleModeChange(next: Mode) {
+    if (next === "multiMonth" && mode !== "multiMonth") reloadMonthOptions();
     setMode(next);
     setAmount(
       next === "downpaymentAdjustment"
@@ -239,16 +290,24 @@ export function RecordTenantRentPaymentDialog({
                 .filter(Boolean)
                 .join(" · ")}
             </p>
-            <p className="mt-1 text-xs font-medium text-foreground">
+            {mode !== "multiMonth" ? <p className="mt-1 text-xs font-medium text-foreground">
               {mode === "overdue" ? dialogTitle : monthLabel(actionMonth, locale)} · {formatTaka(actionAmount || 0, 2)}
-            </p>
+            </p> : null}
           </div>
         ) : null}
         <div className={showUtilityBills ? "grid min-w-0 gap-5 sm:grid-cols-2 sm:items-start sm:gap-6" : undefined}>
           <form
             action={(formData: FormData) =>
               startTransition(async () => {
-                if (mode === "overdue") {
+                if (mode === "multiMonth") {
+                  const result = await recordMultiMonthRentPayment(formData);
+                  if (result?.reason === "changed") {
+                    toast.error(t("multiMonthChanged"));
+                    reloadMonthOptions();
+                  } else if (result?.reason === "invalid") {
+                    toast.error(t("multiMonthInvalid"));
+                  }
+                } else if (mode === "overdue") {
                   const result = await recordOverdueRentPayment(formData);
                   if (result?.reason === "changed") {
                     toast.error(t(utilityTotal > 0 ? "overdueUtilityBalanceChanged" : "overdueBalanceChanged"));
@@ -276,15 +335,19 @@ export function RecordTenantRentPaymentDialog({
             <input type="hidden" name="method" value={mode !== "downpaymentAdjustment" ? method : ""} />
             {returnTo ? <input type="hidden" name="returnTo" value={returnTo} /> : null}
 
+            {mode === "multiMonth" ? <input type="hidden" name="multiMonthPayments" value={JSON.stringify(monthPayments)} /> : null}
             {mode === "overdue" ? <input type="hidden" name="rentAllocation" value={JSON.stringify(allocations)} /> : null}
             {arrearsPeriod ? <>
               <input type="hidden" name="arrearsFrom" value={arrearsPeriod.from} />
               <input type="hidden" name="arrearsTo" value={arrearsPeriod.to} />
             </> : fixedBillingMonth ? null : <FormField label={t("paymentMode")} htmlFor="rentPaymentModeTabs">
               <Tabs value={mode} onValueChange={(v) => handleModeChange(v as Mode)}>
-                <TabsList className="h-8 w-full flex-wrap">
+                <TabsList id="rentPaymentModeTabs" className="h-auto w-full flex-wrap">
                   <TabsTrigger value="cash" className="flex-1 text-xs">
                     {t("cashPayment")}
+                  </TabsTrigger>
+                  <TabsTrigger value="multiMonth" disabled={hasUtilityDraft} className="flex-1 text-xs">
+                    {t("multiMonthTab")}
                   </TabsTrigger>
                   <TabsTrigger value="overdue" disabled={hasUtilityDraft} className="flex-1 text-xs">
                     {t("settleOverdue")}
@@ -328,7 +391,87 @@ export function RecordTenantRentPaymentDialog({
               </FormField>
             ) : null}
 
-            {mode === "advance" ? (
+            {mode === "multiMonth" ? (
+              <section className="space-y-3" aria-label={t("multiMonthTitle")}>
+                <p className="text-sm text-muted-foreground">{t("multiMonthHint")}</p>
+                {monthOptionsFailed ? (
+                  <p role="status" className="text-sm text-destructive">
+                    {t("multiMonthLoadFailed")}{" "}
+                    <button type="button" className="underline" onClick={reloadMonthOptions}>{t("multiMonthRetry")}</button>
+                  </p>
+                ) : monthOptions == null ? (
+                  <p role="status" className="text-sm text-muted-foreground">{t("multiMonthLoading")}</p>
+                ) : monthOptions.length === 0 ? (
+                  <p role="status" className="text-sm text-muted-foreground">{t("multiMonthEmpty")}</p>
+                ) : (
+                  <>
+                    <div className="space-y-2">
+                      {monthRows.map(({ id, month, amount }) => {
+                        const remaining = remainingByMonth.get(month);
+                        return (
+                          <div key={id} className="grid gap-2 rounded-lg border p-3 sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto]">
+                            <FormField label={t("billingMonth")} htmlFor={`multiMonth-${id}`} required>
+                              <select
+                                id={`multiMonth-${id}`}
+                                className="h-8 w-full rounded-lg border border-input bg-background px-2 text-sm focus-visible:outline-ring"
+                                value={month}
+                                required
+                                onChange={(event) => changeMonthRow(id, { month: event.target.value, amount: "" })}
+                              >
+                                <option value="">{t("multiMonthChoose")}</option>
+                                {monthOptions.map(({ month: option }) => (
+                                  <option key={option} value={option} disabled={monthRows.some((row) => row.id !== id && row.month === option)}>
+                                    {monthLabel(option, locale)} · {t(option < currentMonth ? "multiMonthPrevious" : option === currentMonth ? "multiMonthCurrent" : "multiMonthAdvance")}
+                                  </option>
+                                ))}
+                              </select>
+                            </FormField>
+                            <FormField label={t("amount")} htmlFor={`multiMonthAmount-${id}`} required>
+                              <Input
+                                id={`multiMonthAmount-${id}`}
+                                type="number"
+                                inputMode="decimal"
+                                step="0.01"
+                                min="0.01"
+                                max={remaining == null ? undefined : remaining / 100}
+                                disabled={!month}
+                                required
+                                value={amount}
+                                onChange={(event) => changeMonthRow(id, { amount: event.target.value })}
+                              />
+                              {remaining != null ? (
+                                <p className="text-xs text-muted-foreground">
+                                  {t("multiMonthRemaining", { amount: formatTaka(remaining / 100, 2) })}
+                                </p>
+                              ) : null}
+                            </FormField>
+                            {monthRows.length > 1 ? (
+                              <Button type="button" variant="ghost" size="sm" className="justify-self-start sm:mt-5"
+                                onClick={() => setMonthRows((rows) => rows.filter((row) => row.id !== id))}>
+                                {t("multiMonthRemove")}
+                              </Button>
+                            ) : null}
+                          </div>
+                        );
+                      })}
+                    </div>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      disabled={monthRows.length >= Math.min(36, monthOptions.length)}
+                      onClick={() => setMonthRows((rows) => [...rows, { id: (rows.at(-1)?.id ?? 0) + 1, month: "", amount: "" }])}
+                    >
+                      <Plus className="size-4" /> {t("multiMonthAdd")}
+                    </Button>
+                    <div role="status" className="flex items-center justify-between gap-3 rounded-lg bg-primary/10 px-3 py-2.5 text-sm font-semibold">
+                      <span>{t("multiMonthTotal")}</span>
+                      <span className="tabular-nums">{formatTaka(multiMonthTotal, 2)}</span>
+                    </div>
+                  </>
+                )}
+              </section>
+            ) : mode === "advance" ? (
               <>
                 <FormField label={t("advanceStartMonth")} htmlFor="rentAdvanceStartMonth" required>
                   <Input
@@ -536,7 +679,7 @@ export function RecordTenantRentPaymentDialog({
                   <DialogClose render={<Button type="button" variant="outline" />}>
                     {t("cancel")}
                   </DialogClose>
-                  <Button type="submit" disabled={isPending || (mode === "overdue" && !canSubmitOverdue)}>
+                  <Button type="submit" disabled={isPending || (mode === "overdue" && !canSubmitOverdue) || (mode === "multiMonth" && !canSubmitMultiMonth)}>
                     {isPending ? <Loader2 className="size-4 animate-spin" /> : null}
                     {submitLabel}
                   </Button>

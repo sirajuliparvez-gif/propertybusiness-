@@ -5,7 +5,7 @@ import { revalidatePath } from "next/cache";
 import { getLocale } from "next-intl/server";
 import { prisma } from "@/lib/prisma";
 import { redirect } from "@/i18n/navigation";
-import { allocateRentPayment, buildRentLedger, overdueEntries, RENT_DUE_DAY } from "@/lib/rent-ledger";
+import { allocateRentPayment, buildRentLedger, overdueEntries, LEDGER_START_MONTH, RENT_DUE_DAY } from "@/lib/rent-ledger";
 import { applyRentInstallment, isRentPaymentSettled } from "@/lib/payment-progress";
 import {
   isPaymentMonth,
@@ -541,7 +541,7 @@ export async function recordTenantRentPayment(formData: FormData) {
       });
     }
     return true;
-  });
+  }, { isolationLevel: "Serializable" });
 
   // Reachable from both the per-property page and the cross-property global
   // Tenants page — each redirects back to wherever it was submitted from.
@@ -744,6 +744,137 @@ function addMonthsToMonthStr(monthStr: string, offset: number) {
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`;
 }
 
+const multiMonthLeaseInclude = {
+  rentRates: true,
+  rentPayments: { select: { id: true, month: true, dueAmount: true, paidAmount: true } },
+  unit: { select: { unitType: { select: { property: { select: { id: true, deletedAt: true } } } } } },
+} as const;
+
+type MultiMonthLease = NonNullable<Awaited<ReturnType<typeof findMultiMonthLease>>>;
+
+function findMultiMonthLease(id: string) {
+  return prisma.tenantLease.findUnique({ where: { id }, include: multiMonthLeaseInclude });
+}
+
+function multiMonthBalances(lease: MultiMonthLease, currentMonth: string) {
+  const start = dhakaISO(lease.startDate).slice(0, 7);
+  const firstTracked = start > LEDGER_START_MONTH ? start : LEDGER_START_MONTH;
+  const lastAdvance = addMonthsToMonthStr(currentMonth, 36);
+  const endDate = lease.movedOutAt ?? lease.endDate;
+  const lastEligible = lease.status === "ACTIVE"
+    ? lastAdvance
+    : endDate ? dhakaISO(endDate).slice(0, 7) : currentMonth;
+  const last = lastEligible < lastAdvance ? lastEligible : lastAdvance;
+  const recorded = new Map(lease.rentPayments.map((payment) => [payment.month, payment]));
+  const months = new Set([
+    ...(firstTracked <= last ? paymentMonthRange(firstTracked, last, 600) : []),
+    ...recorded.keys(),
+  ]);
+  const rates = numericRentRates(lease.rentRates);
+  const terms = leaseFallbackTerms(lease);
+  return [...months].sort().flatMap((month) => {
+    if (!isPaymentMonth(month) || month < start || month > last) return [];
+    const payment = recorded.get(month);
+    const due = payment ? Number(payment.dueAmount) : rentTermsDueAmount(resolveRentTermsForMonth(terms, rates, month));
+    const dueCents = Math.round(due * 100);
+    const paidCents = Math.round(Number(payment?.paidAmount ?? 0) * 100);
+    const remainingCents = dueCents - paidCents;
+    return remainingCents > 0 ? [{ month, payment, dueCents, remainingCents }] : [];
+  });
+}
+
+export async function getMultiMonthRentOptions(tenantLeaseId: string) {
+  await requireCurrentUser();
+  const lease = await findMultiMonthLease(tenantLeaseId);
+  if (!lease || lease.unit.unitType.property.deletedAt) return [];
+  return multiMonthBalances(lease, dhakaTodayISO().slice(0, 7)).map(({ month, remainingCents }) => ({ month, remainingCents }));
+}
+
+export async function recordMultiMonthRentPayment(formData: FormData) {
+  const user = await requireCurrentUser();
+  const propertyId = str(formData, "propertyId");
+  const tenantLeaseId = str(formData, "tenantLeaseId");
+  const date = str(formData, "date");
+  const today = dhakaTodayISO();
+  const invalid = { ok: false, reason: "invalid" } as const;
+  const changed = { ok: false, reason: "changed" } as const;
+  if (!propertyId || !tenantLeaseId || !date || !isValidTransactionDate(date) || date > today) return invalid;
+
+  const methodRaw = str(formData, "method");
+  const method =
+    methodRaw === "CASH" || methodRaw === "BKASH" || methodRaw === "NAGAD" ||
+    methodRaw === "BANK" || methodRaw === "BANK_CHECK" || methodRaw === "OTHER" ? methodRaw : null;
+
+  let input: unknown;
+  try {
+    input = JSON.parse(str(formData, "multiMonthPayments") ?? "null");
+  } catch {
+    return invalid;
+  }
+  if (!Array.isArray(input) || input.length < 1 || input.length > 36) return invalid;
+  const requested = new Map<string, { amountCents: number; remainingCents: number }>();
+  for (const row of input) {
+    if (!row || typeof row.month !== "string" || !isPaymentMonth(row.month) || requested.has(row.month) ||
+        typeof row.amount !== "string" || !/^\d+(\.\d{1,2})?$/.test(row.amount) ||
+        !Number.isSafeInteger(row.remainingCents)) return invalid;
+    const amountCents = Math.round(Number(row.amount) * 100);
+    if (!Number.isSafeInteger(amountCents) || amountCents <= 0 || amountCents > row.remainingCents) return invalid;
+    requested.set(row.month, { amountCents, remainingCents: row.remainingCents });
+  }
+
+  const paidDate = new Date(date);
+  try {
+    const saved = await prisma.$transaction(async (tx) => {
+      const lease = await tx.tenantLease.findUnique({ where: { id: tenantLeaseId }, include: multiMonthLeaseInclude });
+      if (!lease || lease.unit.unitType.property.id !== propertyId || lease.unit.unitType.property.deletedAt) return false;
+      const selected = multiMonthBalances(lease, today.slice(0, 7)).flatMap((balance) => {
+        const request = requested.get(balance.month);
+        return request && request.remainingCents === balance.remainingCents
+          ? [{ ...balance, amountCents: request.amountCents }]
+          : [];
+      });
+      // Verify every month before writing anything, including retries of partially paid months.
+      if (selected.length !== requested.size) return false;
+      for (const { month, payment, amountCents, remainingCents, dueCents } of selected) {
+        const amount = amountCents / 100;
+        const status = amountCents === remainingCents ? "PAID" : "PARTIAL";
+        const rentPayment = payment
+          ? await tx.rentPayment.update({
+              where: { id: payment.id },
+              data: { paidAmount: { increment: amount }, paidAt: paidDate, status },
+            })
+          : await tx.rentPayment.create({
+              data: {
+                tenantLeaseId, month, dueDate: paymentMonthDueDate(month, RENT_DUE_DAY),
+                dueAmount: dueCents / 100, paidAmount: amount, paidAt: paidDate, status,
+              },
+            });
+        await tx.transaction.create({
+          data: {
+            propertyId, tenantLeaseId, rentPaymentId: rentPayment.id, amount, method,
+            type: "RENT_RECEIVED_FROM_TENANT", direction: "INCOMING", date: paidDate, recordedByUserId: user.id,
+          },
+        });
+      }
+      return true;
+    }, { isolationLevel: "Serializable" });
+    if (!saved) return changed;
+  } catch (error) {
+    if (error instanceof Error && "code" in error && (error.code === "P2034" || error.code === "P2002")) return changed;
+    throw error;
+  }
+
+  const locale = await getLocale();
+  const returnTo = str(formData, "returnTo") ?? "/rent";
+  for (const path of new Set([
+    new URL(returnTo, "http://local").pathname,
+    "/dashboard", "/rent", "/rent/arrears", "/rent/report", "/reports/market", "/transactions", "/tenants",
+    `/properties/${propertyId}`, `/tenants/${tenantLeaseId}`, `/tenants/${tenantLeaseId}/invoice`, `/tenants/${tenantLeaseId}/history`,
+  ])) revalidateLocalizedPath(locale, path);
+  const totalCents = [...requested.values()].reduce((sum, row) => sum + row.amountCents, 0);
+  redirect({ href: withRentActionFeedback(returnTo, "multiMonth", { count: requested.size, amount: totalCents / 100 }), locale });
+}
+
 // A tenant sometimes pays several months of rent in one go (any number of
 // months, not just round numbers — 1, 7, 9, whatever they hand over)
 // instead of monthly. We create one RentPayment PER covered month so each
@@ -840,7 +971,7 @@ export async function recordAdvanceRentPayment(formData: FormData) {
       totalRecorded += payNow;
     }
     return totalRecorded;
-  });
+  }, { isolationLevel: "Serializable" });
 
   const returnTo = str(formData, "returnTo") ?? `/properties/${propertyId}`;
   revalidateLocalizedPath(locale, returnTo);

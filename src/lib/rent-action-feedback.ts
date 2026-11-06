@@ -1,6 +1,7 @@
 export type RentActionResult =
   | "recorded"
   | "alreadyPaid"
+  | "multiMonth"
   | "advance"
   | "overdue"
   | "overdueWithUtilities"
