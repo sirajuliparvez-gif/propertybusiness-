@@ -41,9 +41,12 @@ export default async function TenantInvoicePage({
 
   // Only the bills dated while this tenant rented the unit are theirs (an earlier tenant's unpaid bill is not).
   const leaseEnd = tenant.leaseStatus === "ACTIVE" ? null : (tenant.movedOutAt ?? tenant.endDate ?? null);
-  const unitBills = tenant.utilityBills.filter(
-    (b) => b.dueDate >= tenant.startDate && (!leaseEnd || b.dueDate <= leaseEnd)
-  );
+  const leaseStartDay = dhakaISO(tenant.startDate);
+  const leaseEndDay = leaseEnd ? dhakaISO(leaseEnd) : null;
+  const unitBills = tenant.utilityBills.filter((bill) => {
+    const dueDay = dhakaISO(bill.dueDate);
+    return dueDay >= leaseStartDay && (!leaseEndDay || dueDay <= leaseEndDay);
+  });
 
   const nowMonth = currentMonthKey();
   const availableMonths = Array.from(
@@ -265,38 +268,44 @@ export default async function TenantInvoicePage({
                   {rentTracked ? formatTaka(rentRemaining) : "—"}
                 </TableCell>
               </TableRow>
-              {monthUtilityRows.map(({ type, label, icon: Icon, bills, companyBills, due, remaining }) => (
-                <TableRow key={type} className={cn(
-                  [...bills, ...companyBills].some((b) => b.id === highlightedBillId) && "bg-primary/5 print:bg-transparent"
-                )}>
-                  <th scope="row" className="p-2 text-left align-middle font-medium">
-                    <span className="flex items-center gap-1.5 font-semibold">
-                      <Icon aria-hidden="true" className="size-3.5 shrink-0 text-primary" />
-                      {label}
-                    </span>
-                    {!bills.length && !companyBills.length ? (
-                      <span className="block text-xs font-normal text-muted-foreground">{t("cashMemoNoCharge")}</span>
-                    ) : null}
-                    {companyBills.length > 0 ? (
-                      <span className="block text-[0.7rem] font-normal text-muted-foreground">
-                        {t("cashMemoCompanyShare", { amount: formatTaka(companyBills.reduce((sum, b) => sum + b.amount, 0)) })}
+              {monthUtilityRows.map(({ type, label, icon: Icon, bills, companyBills, due, remaining }) => {
+                const noBill = bills.length === 0 && companyBills.length === 0;
+                const missingAmount = noBill ? <span className="print:hidden">—</span> : "—";
+
+                return (
+                  <TableRow key={type} className={cn(
+                    noBill && "print:h-[10mm] print:[&>td]:bg-transparent",
+                    [...bills, ...companyBills].some((b) => b.id === highlightedBillId) && "bg-primary/5 print:bg-transparent"
+                  )}>
+                    <th scope="row" className="p-2 text-left align-middle font-medium">
+                      <span className="flex items-center gap-1.5 font-semibold">
+                        <Icon aria-hidden="true" className="size-3.5 shrink-0 text-primary" />
+                        {label}
                       </span>
-                    ) : null}
-                    {type === "ELECTRICITY" ? [...bills, ...companyBills].map((b) => b.meterReading != null ? (
-                      <CashMemoReading key={b.id}
-                        current={b.meterReading} previous={b.previousMeterReading} units={b.consumptionUnits}
-                        label={t("cashMemoReading")} unitLabel={t("cashMemoUnits")} missing={t("cashMemoReadingMissing")}
-                        locale={locale}
-                      />
-                    ) : null) : null}
-                  </th>
-                  <TableCell className="text-right tabular-nums">{bills.length ? formatTaka(due) : "—"}</TableCell>
-                  <TableCell className="text-right tabular-nums">{bills.length ? formatTaka(due - remaining) : "—"}</TableCell>
-                  <TableCell className={cn("bg-muted/30 text-right tabular-nums", remaining > 0 ? "font-semibold text-destructive" : "text-muted-foreground")}>
-                    {bills.length ? formatTaka(remaining) : "—"}
-                  </TableCell>
-                </TableRow>
-              ))}
+                      {noBill ? (
+                        <span className="block text-xs font-normal text-muted-foreground print:hidden">{t("cashMemoNoCharge")}</span>
+                      ) : null}
+                      {companyBills.length > 0 ? (
+                        <span className="block text-[0.7rem] font-normal text-muted-foreground">
+                          {t("cashMemoCompanyShare", { amount: formatTaka(companyBills.reduce((sum, b) => sum + b.amount, 0)) })}
+                        </span>
+                      ) : null}
+                      {type === "ELECTRICITY" ? [...bills, ...companyBills].map((b) => b.meterReading != null ? (
+                        <CashMemoReading key={b.id}
+                          current={b.meterReading} previous={b.previousMeterReading} units={b.consumptionUnits}
+                          label={t("cashMemoReading")} unitLabel={t("cashMemoUnits")} missing={t("cashMemoReadingMissing")}
+                          locale={locale}
+                        />
+                      ) : null) : null}
+                    </th>
+                    <TableCell className="text-right tabular-nums">{bills.length ? formatTaka(due) : missingAmount}</TableCell>
+                    <TableCell className="text-right tabular-nums">{bills.length ? formatTaka(due - remaining) : missingAmount}</TableCell>
+                    <TableCell className={cn("bg-muted/30 text-right tabular-nums", remaining > 0 ? "font-semibold text-destructive" : "text-muted-foreground")}>
+                      {bills.length ? formatTaka(remaining) : missingAmount}
+                    </TableCell>
+                  </TableRow>
+                );
+              })}
             </TableBody>
           </Table>
           {rentTracked ? (

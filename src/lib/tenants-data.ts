@@ -395,6 +395,7 @@ export async function getTenantProfile(leaseId: string) {
     orderBy: { dueDate: "desc" },
     select: {
       id: true,
+      tenantLeaseId: true,
       type: true,
       month: true,
       dueDate: true,
@@ -603,7 +604,7 @@ export async function getTenantProfile(leaseId: string) {
       label: d.label,
       uploadedAt: d.uploadedAt,
     })),
-    utilityBills: unitUtilityBills.map((b) => {
+    utilityBills: unitUtilityBills.filter((b) => b.tenantLeaseId == null || b.tenantLeaseId === lease.id).map((b) => {
       const split = splitUtilityBillTransactions(
         b.transactions.map((t) => ({ type: t.type, amount: Number(t.amount), method: t.method }))
       );
