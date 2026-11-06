@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
 import { Loader2, Pencil } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -58,14 +59,20 @@ export function EditUtilityBillDialog({
   bill,
   returnTo,
   fixedUnitId,
+  invoice,
 }: {
   bill: EditableUtilityBill;
   returnTo: string;
   // Same meaning as in AddUtilityBillDialog: the bill stays on this unit,
   // so the unit picker isn't rendered at all.
   fixedUnitId?: string;
+  invoice?: { leaseId: string; month: string; startDate: string };
 }) {
   const t = useTranslations("Properties");
+  const router = useRouter();
+  const monthStart = invoice ? `${invoice.month}-01` : undefined;
+  const [year, month] = invoice?.month.split("-").map(Number) ?? [];
+  const monthEnd = invoice ? `${invoice.month}-${new Date(Date.UTC(year, month, 0)).getUTCDate()}` : undefined;
   const [open, setOpen] = useState(false);
   const [isPending, startTransition] = useTransition();
   const [type, setType] = useState<UtilityType>(bill.type);
@@ -166,8 +173,13 @@ export function EditUtilityBillDialog({
         <form
           action={(formData: FormData) =>
             startTransition(async () => {
-              const res = await updateUtilityBill(formData);
-              if (!res.ok) setError(res.error);
+              const res = await updateUtilityBill(formData, invoice);
+              if (!res.ok) {
+                setError(res.error);
+              } else if (invoice) {
+                setOpen(false);
+                router.refresh();
+              }
             })
           }
           className="grid gap-3 sm:grid-cols-2"
@@ -231,6 +243,8 @@ export function EditUtilityBillDialog({
               name="dueDate"
               type="date"
               defaultValue={dhakaISO(bill.dueDate)}
+              min={invoice && monthStart ? (invoice.startDate > monthStart ? invoice.startDate : monthStart) : undefined}
+              max={monthEnd}
               required
             />
           </FormField>

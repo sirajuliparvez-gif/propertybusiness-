@@ -308,15 +308,19 @@ export async function payUtilityBill(formData: FormData) {
 // Edits a bill in place — type, unit, amount, due date, who pays it and the
 // meter reading — without disturbing the payments already recorded against
 // it. Every way it can be refused comes back as a code (the dialog shows the
-// translated message); a successful edit redirects back to `returnTo` like
-// every other action in this file.
+// translated message). Invoice edits refresh the open print dialog; other edits
+// redirect back to their list.
 //
 // Refusals:
 //  - amount dropping below paidAmount — that money is already in the ledger,
 //    so a lower amount would understate what was collected;
 //  - a unit that isn't part of this bill's property (bills move unit, never
 //    property).
-export async function updateUtilityBill(formData: FormData): Promise<UtilityBillActionResult> {
+export async function updateUtilityBill(
+  formData: FormData,
+  invoice?: { leaseId: string; month: string },
+): Promise<UtilityBillActionResult> {
+  await requireCurrentUser();
   const locale = await getLocale();
   const billId = str(formData, "billId");
   const propertyId = str(formData, "propertyId");
@@ -328,7 +332,9 @@ export async function updateUtilityBill(formData: FormData): Promise<UtilityBill
   const unitId = str(formData, "unitId");
   const amount = str(formData, "amount");
   const dueDate = str(formData, "dueDate");
-  if (!billId || !propertyId || !amount || !dueDate) return { ok: false, error: "missingFields" };
+  if (!billId || !propertyId || !amount || !Number.isFinite(Number(amount)) || Number(amount) < 0 || !dueDate) {
+    return { ok: false, error: "missingFields" };
+  }
   // Same two company rules as addUtilityBill, re-applied server-side here
   // (stale/tampered form can't make a WATER bill tenant-paid, or smuggle a
   // meter reading onto a gas bill).
@@ -342,9 +348,23 @@ export async function updateUtilityBill(formData: FormData): Promise<UtilityBill
   const problem = await prisma.$transaction(async (tx) => {
     const bill = await tx.utilityBill.findUnique({
       where: { id: billId },
-      select: { unitId: true, paidAmount: true, previousMeterReadingOverride: true },
+      select: {
+        unitId: true, propertyId: true, tenantLeaseId: true, month: true, dueDate: true,
+        paidAmount: true, previousMeterReadingOverride: true,
+      },
     });
-    if (!bill) return "notFound" as const;
+    if (!bill || bill.propertyId !== propertyId) return "notFound" as const;
+    if (invoice) {
+      const lease = await tx.tenantLease.findUnique({
+        where: { id: invoice.leaseId, status: "ACTIVE" },
+        select: { unitId: true, startDate: true },
+      });
+      if (!lease || !unitId || lease.unitId !== unitId || bill.unitId !== unitId ||
+          (bill.tenantLeaseId != null && bill.tenantLeaseId !== invoice.leaseId) ||
+          bill.month !== invoice.month || dhakaISO(bill.dueDate) < dhakaISO(lease.startDate)) return "notFound" as const;
+      if (!isValidTransactionDate(dueDate) || !dueDate.startsWith(`${invoice.month}-`) ||
+          dueDate < dhakaISO(lease.startDate)) return "missingFields" as const;
+    }
     if (unitId) {
       const unit = await tx.unit.findUnique({
         where: { id: unitId },
@@ -397,6 +417,14 @@ export async function updateUtilityBill(formData: FormData): Promise<UtilityBill
   });
   if (problem) return { ok: false, error: problem };
 
+  if (invoice) {
+    revalidatePath(`/${locale}/rent/${invoice.leaseId}/invoice`);
+    revalidatePath(`/${locale}/tenants/${invoice.leaseId}`);
+    revalidatePath(`/${locale}/tenants/${invoice.leaseId}/invoice`);
+    revalidatePath(`/${locale}/properties/${propertyId}`);
+    revalidatePath(`/${locale}/utility-bills`);
+    return { ok: true };
+  }
   revalidatePath(returnTo);
   redirect({ href: returnTo, locale });
   // Unreachable — redirect() throws — but TypeScript can't see that through

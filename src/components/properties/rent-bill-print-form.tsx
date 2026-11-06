@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition, type ComponentProps } from "react";
+import { useState, useTransition, type ComponentProps, type ReactNode } from "react";
 import { useLocale, useTranslations } from "next-intl";
 import { Printer } from "lucide-react";
 import { toast } from "sonner";
@@ -14,7 +14,7 @@ import type { RentBillPrintKey, RentBillPrintRow } from "@/lib/rent-bill-print";
 const money = (cents: number) => formatTaka(cents / 100, 2);
 
 export function RentBillPrintForm({
-  leaseId, month, rows, printed, printedDate, revision, header, prepare, returnTo, embedded = false,
+  leaseId, month, rows, printed, printedDate, revision, header, prepare, returnTo, embedded = false, addUtilityBill, utilityEditors,
 }: {
   leaseId: string;
   month: string;
@@ -26,12 +26,14 @@ export function RentBillPrintForm({
   prepare: boolean;
   returnTo: string;
   embedded?: boolean;
+  addUtilityBill?: ReactNode;
+  utilityEditors?: Partial<Record<RentBillPrintKey, ReactNode>>;
 }) {
   const t = useTranslations("Properties");
   const locale = useLocale();
   const router = useRouter();
   const [open, setOpen] = useState(prepare);
-  const [sentToPrint, setSentToPrint] = useState(false);
+  const [printedDraft, setPrintedDraft] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
   const [selected, setSelected] = useState<RentBillPrintKey[]>(() => (printed ?? rows).map(({ key }) => key));
   const labels = {
@@ -39,19 +41,21 @@ export function RentBillPrintForm({
     WATER: t("utilityTypeWater"), OTHER: t("cashMemoOtherCharges"),
   };
   const draft = rows.filter(({ key }) => selected.includes(key));
+  const draftSnapshot = JSON.stringify(draft);
   const copy = open ? draft : printed ?? rows;
   const expected = copy.reduce((sum, row) => sum + row.remainingCents, 0);
 
   async function print() {
     await document.fonts.ready;
     window.print();
-    if (open) setSentToPrint(true);
+    if (open) setPrintedDraft(draftSnapshot);
   }
 
   function confirm() {
+    if (printedDraft !== draftSnapshot) return;
     startTransition(async () => {
       try {
-        if (await confirmRentBillPrint(leaseId, month, revision, selected, JSON.stringify(draft))) {
+        if (await confirmRentBillPrint(leaseId, month, revision, selected, printedDraft)) {
           toast.success(t("rentBillPrinted"));
           if (embedded && window.parent !== window) {
             window.parent.postMessage("rent-bill-print-saved", window.location.origin);
@@ -64,7 +68,7 @@ export function RentBillPrintForm({
         // Keep the selection available if saving fails.
       }
       toast.error(t("rentBillPrintChanged"));
-      setSentToPrint(false);
+      setPrintedDraft(null);
       router.refresh();
     });
   }
@@ -73,23 +77,29 @@ export function RentBillPrintForm({
     <>
       <div className="print:hidden">
         {open ? (
-          <form className="space-y-3 rounded-lg border bg-card p-4" onSubmit={(event) => { event.preventDefault(); void print(); }}>
-            <div>
-              <h2 className="font-semibold">{t(revision ? "rentBillCorrection" : "rentBillPrintOptions")}</h2>
-              <p className="text-xs text-muted-foreground">{t("rentBillChooseLines")}</p>
+          <section className="space-y-3 rounded-lg border bg-card p-4">
+            <div className="flex flex-wrap items-start justify-between gap-2">
+              <div>
+                <h2 className="font-semibold">{t(revision ? "rentBillCorrection" : "rentBillPrintOptions")}</h2>
+                <p className="text-xs text-muted-foreground">{t("rentBillChooseLines")}</p>
+              </div>
+              {addUtilityBill}
             </div>
             <fieldset disabled={pending} className="divide-y">
               {rows.map((row) => (
-                <label key={row.key} className="flex cursor-pointer items-center gap-3 py-2 text-sm">
-                  <input type="checkbox" checked={selected.includes(row.key)}
-                    onChange={(event) => {
-                      const checked = event.target.checked;
-                      setSelected((previous) => checked ? [...previous, row.key] : previous.filter((key) => key !== row.key));
-                      setSentToPrint(false);
-                    }} />
-                  <span className="flex-1">{labels[row.key]}</span>
-                  <span className="tabular-nums">{row.dueCents == null ? "—" : money(row.remainingCents)}</span>
-                </label>
+                <div key={row.key} className="py-1">
+                  <label className="flex cursor-pointer items-center gap-3 py-1 text-sm">
+                    <input type="checkbox" checked={selected.includes(row.key)}
+                      onChange={(event) => {
+                        const checked = event.target.checked;
+                        setSelected((previous) => checked ? [...previous, row.key] : previous.filter((key) => key !== row.key));
+                        setPrintedDraft(null);
+                      }} />
+                    <span className="flex-1">{labels[row.key]}</span>
+                    <span className="tabular-nums">{row.dueCents == null ? "—" : money(row.remainingCents)}</span>
+                  </label>
+                  {utilityEditors?.[row.key]}
+                </div>
               ))}
             </fieldset>
             <p className="flex justify-between border-t pt-2 text-sm font-semibold">
@@ -98,16 +108,16 @@ export function RentBillPrintForm({
             <div className="flex flex-wrap justify-end gap-2">
               <Button type="button" variant="ghost" disabled={pending} onClick={() => {
                 if (embedded && window.parent !== window) window.parent.postMessage("rent-bill-print-cancelled", window.location.origin);
-                else { setOpen(false); setSentToPrint(false); }
+                else { setOpen(false); setPrintedDraft(null); }
               }}>
                 {t("cancel")}
               </Button>
-              <Button type="submit" disabled={!draft.length || pending}><Printer className="size-4" />{t("invoicePrintBill")}</Button>
-              {sentToPrint ? (
+              <Button type="button" onClick={() => void print()} disabled={!draft.length || pending}><Printer className="size-4" />{t("invoicePrintBill")}</Button>
+              {printedDraft === draftSnapshot ? (
                 <Button type="button" variant="outline" disabled={pending} onClick={confirm}>{t("rentBillConfirmPrinted")}</Button>
               ) : null}
             </div>
-          </form>
+          </section>
         ) : (
           <div className="flex flex-wrap gap-2">
             {printed ? <Button type="button" variant="outline" onClick={() => void print()}>{t("rentBillReprint")}</Button> : null}

@@ -14,13 +14,14 @@ import { cn } from "@/lib/utils";
 import { CashMemoHandwritingRow, CashMemoHeader, CashMemoReading, CashMemoSignatures, cashMemoClassName } from "@/components/properties/cash-memo";
 import { InvoiceMonthSelect } from "@/components/properties/invoice-month-select";
 import { InvoicePaymentDialog } from "@/components/properties/invoice-payment-dialog";
+import { EditUtilityBillDialog } from "@/components/properties/edit-utility-bill-dialog";
 import { InvoiceAddUtilityBillDialog } from "@/components/properties/add-utility-bill-dialog";
 import { invoicePaymentSnapshot } from "@/lib/invoice-payment";
 import { InvoicePrintButton } from "@/components/properties/invoice-print-button";
 import { rentTermsDueAmount, resolveRentTermsForMonth } from "@/lib/rent-terms";
 import { RentBillPrintForm } from "@/components/properties/rent-bill-print-form";
 import { RecordTenantRentPaymentDialog } from "@/components/properties/record-tenant-rent-payment-dialog";
-import { limitToPrintedBill, rentBillPrintRows, type RentBillPrintRow } from "@/lib/rent-bill-print";
+import { limitToPrintedBill, rentBillPrintKeys, rentBillPrintRows, type RentBillPrintRow } from "@/lib/rent-bill-print";
 import { prisma } from "@/lib/prisma";
 
 function formatInvoiceAmount(amount: number) {
@@ -223,10 +224,33 @@ export default async function TenantInvoicePage({
       } : undefined}
     />
   ) : null;
+  const utilityEditors = fromRent && canCollect ? Object.fromEntries(
+    rentBillPrintKeys.filter((type) => type !== "RENT").map((type) => {
+      const bills = [...monthBills, ...companyBorneBills].filter((bill) => bill.type === type);
+      return [type, bills.length ? (
+        <ul className="mb-1 ml-6 divide-y rounded-md bg-muted/40 px-2">
+          {bills.map((bill) => (
+            <li key={bill.id} className="flex items-center justify-between gap-2 py-1 text-xs">
+              <span>{formatDate(bill.dueDate, locale)} · {formatInvoiceAmount(bill.amount)}
+                {paidByCompany(bill) ? ` · ${t("paidByCompanyLabel")}` : ""}
+              </span>
+              <EditUtilityBillDialog
+                key={JSON.stringify([bill.type, bill.amount, bill.paidAmount, bill.dueDate, bill.paidByCompany, bill.meterReading, bill.previousMeterReadingOverride])}
+                bill={bill} returnTo={invoicePath} fixedUnitId={bill.unitId}
+                invoice={{ leaseId: id, month: selectedMonth, startDate: leaseStartDay }}
+              />
+            </li>
+          ))}
+        </ul>
+      ) : null];
+    }),
+  ) : undefined;
   const printForm = fromRent ? (
     <RentBillPrintForm key={`${selectedMonth}:${printIssue?.revision ?? 0}:${print ?? ""}`}
       leaseId={id} month={selectedMonth} rows={rentBillPrintRows(tenant, selectedMonth)}
       printed={printed} revision={printIssue?.revision ?? 0} prepare={print === "1"} returnTo={rentListPath}
+      addUtilityBill={canCollect ? <InvoiceAddUtilityBillDialog leaseId={id} month={selectedMonth} compact /> : undefined}
+      utilityEditors={utilityEditors}
       printedDate={printIssue ? formatDate(printIssue.printedAt, locale) : undefined}
       header={{ ...memoHeader, title: t("cashMemoRentTitle"), contact: tenant.contactInfo }} embedded={embedded} />
   ) : null;
