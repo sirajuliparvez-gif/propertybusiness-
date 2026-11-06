@@ -308,11 +308,11 @@
   .marketPrint .summary { margin-bottom:10px; padding-block:9px; }
   .marketPrint .sectionTitle { padding-block:12px 7px; }
   .marketPrint .footer { padding-top:9px; }
-  .marketPrint .signatures { margin-top:16px; }
+  .marketPrint .signatures { margin-top:10px; }
   .marketPrint .logo { width:36px; height:36px; }
   .marketPrint .title { font-size:17px; }
   .marketPrint thead { display:table-header-group; }
-  .marketPrint .table th,.marketPrint .table td { padding-block:5px; }
+  .marketPrint .table th,.marketPrint .table td { padding-block:4px; }
   .marketPrint .table .rentBillStart { border-color:#bbb; padding-inline-start:10px; }
   .marketPrint tfoot { display:table-row-group; }
   .marketPrint tr { break-inside:avoid; }
