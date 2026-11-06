@@ -1,5 +1,6 @@
 "use server";
 
+import { randomUUID } from "node:crypto";
 import { dhakaISO, dhakaNow, dhakaTodayISO } from "@/lib/dhaka-time";
 import { revalidatePath } from "next/cache";
 import { getLocale } from "next-intl/server";
@@ -633,6 +634,7 @@ export async function recordOverdueRentPayment(formData: FormData) {
       ? methodRaw
       : null;
 
+  const paymentReceiptId = randomUUID();
   const expected = str(formData, "rentAllocation");
   let saved: boolean;
   try {
@@ -747,7 +749,7 @@ export async function recordOverdueRentPayment(formData: FormData) {
           data: {
             propertyId, type: "RENT_RECEIVED_FROM_TENANT", direction: "INCOMING",
             amount: allocation.amount, method, tenantLeaseId, rentPaymentId: rentPayment.id,
-            date: paidDate, recordedByUserId: user.id,
+            date: paidDate, recordedByUserId: user.id, paymentReceiptId,
           },
         });
       }
@@ -764,7 +766,7 @@ export async function recordOverdueRentPayment(formData: FormData) {
           data: {
             propertyId, unitId: lease.unitId, tenantLeaseId, utilityBillId: bill.id,
             type: "UTILITY_REIMBURSEMENT_FROM_TENANT", direction: "INCOMING",
-            amount, method, date: paidDate, recordedByUserId: user.id,
+            amount, method, date: paidDate, recordedByUserId: user.id, paymentReceiptId,
           },
         });
       }
@@ -784,8 +786,14 @@ export async function recordOverdueRentPayment(formData: FormData) {
     ...["/rent/arrears", "/rent/report", "/transactions", "/utility-bills", `/tenants/${tenantLeaseId}`, `/tenants/${tenantLeaseId}/invoice`].map((path) => `/${locale}${path}`),
   ])) revalidatePath(path);
   const utilityTotal = [...utilityPayments.values()].reduce((sum, amount) => sum + amount, 0);
-  const result = invoiceMonth ? "invoicePaid" : utilityPayments.size ? "overdueWithUtilities" : "overdue";
-  redirect({ href: withRentActionFeedback(returnTo, result, { amount: invoiceMonth ? paymentAmount : paymentAmount + utilityTotal }), locale });
+  if (invoiceMonth) {
+    redirect({
+      href: `/tenants/${tenantLeaseId}/receipts/${paymentReceiptId}?from=invoice&month=${invoiceMonth}`,
+      locale,
+    });
+  }
+  const result = utilityPayments.size ? "overdueWithUtilities" : "overdue";
+  redirect({ href: withRentActionFeedback(returnTo, result, { amount: paymentAmount + utilityTotal }), locale });
 }
 
 function addMonthsToMonthStr(monthStr: string, offset: number) {
@@ -881,6 +889,7 @@ export async function recordMultiMonthRentPayment(formData: FormData) {
   if (!requested || !utilities || requested.size > 36 || (!requested.size && !utilities.size)) return invalid;
 
   const paidDate = new Date(date);
+  const paymentReceiptId = randomUUID();
   try {
     const saved = await prisma.$transaction(async (tx) => {
       const lease = await tx.tenantLease.findUnique({ where: { id: tenantLeaseId }, include: multiMonthLeaseInclude });
@@ -921,7 +930,7 @@ export async function recordMultiMonthRentPayment(formData: FormData) {
         await tx.transaction.create({
           data: {
             propertyId, tenantLeaseId, rentPaymentId: rentPayment.id, amount, method,
-            type: "RENT_RECEIVED_FROM_TENANT", direction: "INCOMING", date: paidDate, recordedByUserId: user.id,
+            type: "RENT_RECEIVED_FROM_TENANT", direction: "INCOMING", date: paidDate, recordedByUserId: user.id, paymentReceiptId,
           },
         });
       }
@@ -939,7 +948,7 @@ export async function recordMultiMonthRentPayment(formData: FormData) {
         await tx.transaction.create({
           data: {
             propertyId, unitId: lease.unitId, tenantLeaseId, utilityBillId: bill.id, amount, method,
-            type: "UTILITY_REIMBURSEMENT_FROM_TENANT", direction: "INCOMING", date: paidDate, recordedByUserId: user.id,
+            type: "UTILITY_REIMBURSEMENT_FROM_TENANT", direction: "INCOMING", date: paidDate, recordedByUserId: user.id, paymentReceiptId,
           },
         });
       }
@@ -958,6 +967,14 @@ export async function recordMultiMonthRentPayment(formData: FormData) {
     "/dashboard", "/rent", "/rent/arrears", "/rent/report", "/reports/market", "/transactions", "/tenants", "/utility-bills",
     `/properties/${propertyId}`, `/tenants/${tenantLeaseId}`, `/tenants/${tenantLeaseId}/invoice`, `/tenants/${tenantLeaseId}/history`,
   ])) revalidateLocalizedPath(locale, path);
+  const returnUrl = new URL(returnTo, "http://local");
+  if (returnUrl.pathname === "/rent") {
+    const month = returnUrl.searchParams.get("month");
+    redirect({
+      href: `/tenants/${tenantLeaseId}/receipts/${paymentReceiptId}?from=rent${isPaymentMonth(month) ? `&month=${month}` : ""}`,
+      locale,
+    });
+  }
   const totalCents = [...requested.values(), ...utilities.values()].reduce((sum, row) => sum + row.amountCents, 0);
   const feedback = utilities.size || str(formData, "collectionMode") === "single" ? "invoicePaid" : "multiMonth";
   redirect({ href: withRentActionFeedback(returnTo, feedback, { count: requested.size, amount: totalCents / 100 }), locale });

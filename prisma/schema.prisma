@@ -683,6 +683,7 @@ model Transaction {
   recordedBy         User?                @relation(fields: [recordedByUserId], references: [id])
   date               DateTime             @default(now())
   notes              String?
+  paymentReceiptId   String?
   createdAt          DateTime             @default(now())
   // Only ever set for bulk-imported ad-hoc expenses (ImportEntityType.EXPENSE)
   // — every other Transaction is a side effect of some other action (rent
@@ -701,6 +702,7 @@ model Transaction {
   @@index([type, date])
   @@index([direction, date])
   @@index([tenantLeaseId])
+  @@index([paymentReceiptId])
 }
 
 // Polymorphic file reference (agreement copies, utility bill images, tenant ID docs).
