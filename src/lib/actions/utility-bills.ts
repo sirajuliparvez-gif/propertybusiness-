@@ -155,6 +155,7 @@ export async function addTenantUtilityBills(
   const locale = await getLocale();
   revalidatePath(`/${locale}/tenants/${tenantLeaseId}`);
   revalidatePath(`/${locale}/tenants/${tenantLeaseId}/invoice`);
+  revalidatePath(`/${locale}/rent/${tenantLeaseId}/invoice`);
   revalidatePath(`/${locale}/utility-bills`);
   revalidatePath(`/${locale}/properties/${lease.unit.unitType.propertyId}`);
   return { ok: true } as const;

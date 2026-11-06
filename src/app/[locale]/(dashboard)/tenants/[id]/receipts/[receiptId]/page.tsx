@@ -53,6 +53,7 @@ export default async function MoneyReceiptPage({ params, searchParams }: {
   const selectedMonth = isPaymentMonth(month) ? `?month=${month}` : "";
   const rentScope = tenant === "1" ? `${selectedMonth ? "&" : "?"}tenant=${encodeURIComponent(id)}` : "";
   const backHref = from === "invoice" ? `/tenants/${id}/invoice${selectedMonth}`
+    : from === "rent-invoice" ? `/rent/${id}/invoice${selectedMonth}${tenant === "1" ? `${selectedMonth ? "&" : "?"}tenant=1` : ""}`
     : from === "rent" ? `/rent${selectedMonth}${rentScope}` : `/transactions?month=${dhakaISO(first.date).slice(0, 7)}`;
 
   return (

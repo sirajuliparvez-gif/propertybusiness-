@@ -183,7 +183,9 @@ export function MobileRentList({
                       </div>
                       <div className="shrink-0 text-right">
                         <p className="font-mono text-sm font-semibold tabular-nums">
-                          {formatTaka(p.monthlyRentAmount + p.serviceChargeAmount)}
+                          {p.overdueAmount > 0
+                            ? `${t("remaining")} ${formatTaka(p.overdueAmount, 2)}`
+                            : formatTaka(p.selectedDueAmount, 2)}
                         </p>
                         <StatusPill status={rentPillStatus(p.rentStatus, p.rentPastDue)} labels={rentStatusLabels} />
                         <p className="mt-0.5 text-[10px] text-muted-foreground">
@@ -200,12 +202,13 @@ export function MobileRentList({
                 />
                 </div>
                 <Link
-                  href={`/tenants/${p.id}/invoice?month=${selectedMonth}`}
-                  title={t("invoiceLabel")}
+                  href={`/rent/${p.id}/invoice?month=${selectedMonth}&print=1${tenantLeaseId ? "&tenant=1" : ""}`}
+                  prefetch={false}
+                  title={t("invoicePrintBill")}
                   className="flex w-12 shrink-0 items-center justify-center border-l text-primary transition-colors active:bg-muted/60"
                 >
                   <Printer className="size-4" />
-                  <span className="sr-only">{t("invoiceLabel")}</span>
+                  <span className="sr-only">{t("invoicePrintBill")}</span>
                 </Link>
               </li>
               );

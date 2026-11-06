@@ -1028,6 +1028,8 @@
     "tenantLeaseStatus": "চুক্তির অবস্থা",
     "activeLeaseLabel": "চলমান",
     "openRentCollection": "ভাড়া আদায় পেজে যান",
+    "backToRentCollection": "ভাড়া আদায়ে ফিরুন",
+    "rentFiltersApplied": "ফিল্টার চালু আছে",
     "rentSelectedTenant": "নির্বাচিত ভাড়াটিয়া",
     "rentShowAllTenants": "সব ভাড়াটিয়া দেখুন",
     "activeTenantsCount": "সক্রিয় ভাড়াটিয়া",

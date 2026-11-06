@@ -780,15 +780,18 @@ export async function recordOverdueRentPayment(formData: FormData) {
   if (!saved) return { ok: false as const, reason: "changed" as const };
 
   const returnTo = str(formData, "returnTo") ?? `/properties/${propertyId}`;
-  const returnPath = new URL(returnTo, "http://local").pathname;
+  const returnUrl = new URL(returnTo, "http://local");
+  const returnPath = returnUrl.pathname;
   for (const path of new Set([
     ...localizedMutationPaths(locale, returnPath),
     ...["/rent/arrears", "/rent/report", "/transactions", "/utility-bills", `/tenants/${tenantLeaseId}`, `/tenants/${tenantLeaseId}/invoice`].map((path) => `/${locale}${path}`),
   ])) revalidatePath(path);
   const utilityTotal = [...utilityPayments.values()].reduce((sum, amount) => sum + amount, 0);
   if (invoiceMonth) {
+    const fromRentInvoice = returnPath === `/rent/${tenantLeaseId}/invoice`;
+    const scoped = fromRentInvoice && returnUrl.searchParams.get("tenant") === "1";
     redirect({
-      href: `/tenants/${tenantLeaseId}/receipts/${paymentReceiptId}?from=invoice&month=${invoiceMonth}`,
+      href: `/tenants/${tenantLeaseId}/receipts/${paymentReceiptId}?from=${fromRentInvoice ? "rent-invoice" : "invoice"}&month=${invoiceMonth}${scoped ? "&tenant=1" : ""}`,
       locale,
     });
   }

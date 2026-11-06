@@ -1028,6 +1028,8 @@
     "tenantLeaseStatus": "Lease status",
     "activeLeaseLabel": "Active",
     "openRentCollection": "Go to rent collection",
+    "backToRentCollection": "Back to rent collection",
+    "rentFiltersApplied": "Filters applied",
     "rentSelectedTenant": "Selected tenant",
     "rentShowAllTenants": "Show all tenants",
     "activeTenantsCount": "Active Tenants",
