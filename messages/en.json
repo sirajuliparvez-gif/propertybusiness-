@@ -696,6 +696,7 @@
     "invoiceRentLabel": "Rent",
     "invoiceUtilityLabel": "Other bills",
     "invoiceSimpleBalance": "Total left to pay",
+    "invoiceMonthlyPrintTotal": "Total for this month",
     "invoiceSimpleBillTotal": "Bill amount",
     "invoiceSimplePaid": "Paid",
     "invoiceUtilityBillAmount": "Bill amount",

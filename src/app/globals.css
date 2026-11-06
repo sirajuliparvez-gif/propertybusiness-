@@ -286,13 +286,7 @@
   .tenant-bill .tenant-bill-section-label { padding-block: 3px; }
   .tenant-bill thead { display: table-header-group; }
   .tenant-bill .cash-memo-reading { font-size: 8pt; }
-  .tenant-bill-summary { break-inside: avoid; }
-  .tenant-bill-summary-main { grid-template-columns: 1.25fr 1fr 1fr; padding: 6px 10px; }
-  .tenant-bill-summary-main > :first-child { grid-column: auto; }
-  .tenant-bill-summary-main dt, .tenant-bill-summary-main dd { font-size: 9pt; }
-  .tenant-bill-summary-main .tenant-bill-balance { font-size: 15pt; }
-  .tenant-bill-breakdown { padding: 4px 10px; }
-  .tenant-bill-detail td:nth-child(2) > div { display: none; }
+  .tenant-bill-charges :is(th, td):nth-child(n + 3) { display: none; }
   .cash-memo-handwriting-row { height: 12mm; break-inside: avoid; }
   .cash-memo-handwriting-row > td { min-width: 60mm; vertical-align: middle; }
   .cash-memo-handwriting-line {

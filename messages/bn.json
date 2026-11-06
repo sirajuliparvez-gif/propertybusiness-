@@ -698,6 +698,7 @@
     "invoiceRentLabel": "ভাড়া",
     "invoiceUtilityLabel": "অন্য বিল",
     "invoiceSimpleBalance": "সব মিলিয়ে বাকি",
+    "invoiceMonthlyPrintTotal": "এই মাসের মোট বিল",
     "invoiceSimpleBillTotal": "বিল কত",
     "invoiceSimplePaid": "দিয়েছেন",
     "invoiceUtilityBillAmount": "বিল কত টাকা",

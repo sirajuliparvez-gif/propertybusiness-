@@ -75,11 +75,11 @@ export function CashMemoReading({ current, previous, units, label, unitLabel, mi
   );
 }
 
-export function CashMemoHandwritingRow({ label, amountColumns = 1 }: { label: string; amountColumns?: number }) {
+export function CashMemoHandwritingRow({ label }: { label: string }) {
   return (
     <tr className="cash-memo-handwriting-row hidden print:table-row">
       <th scope="row" className="px-2 text-start font-semibold">{label}</th>
-      <td colSpan={amountColumns} className="px-2">
+      <td className="px-2">
         <span aria-hidden="true" className="cash-memo-handwriting-line" />
       </td>
     </tr>

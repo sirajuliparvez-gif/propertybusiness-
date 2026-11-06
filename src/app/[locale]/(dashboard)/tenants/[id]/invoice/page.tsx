@@ -217,7 +217,7 @@ export default async function TenantInvoicePage({
       >
         <CashMemoHeader {...memoHeader} title={t("cashMemoRentTitle")} contact={tenant.contactInfo} />
 
-        <section className="tenant-bill-summary overflow-hidden rounded-lg border border-primary/25 bg-primary/[0.045]" aria-label={t("cashMemoSummary")}>
+        <section className="print:hidden tenant-bill-summary overflow-hidden rounded-lg border border-primary/25 bg-primary/[0.045]" aria-label={t("cashMemoSummary")}>
           <dl className="tenant-bill-summary-main grid grid-cols-2 items-center gap-x-3 gap-y-2 px-3 py-3 sm:grid-cols-[1.25fr_1fr_1fr]">
             <div className="col-span-2 sm:col-span-1">
               <dt className="text-sm font-semibold">{t("invoiceSimpleBalance")}</dt>
@@ -285,7 +285,7 @@ export default async function TenantInvoicePage({
               </TableRow>
               {monthUtilityRows.map(({ type, label, icon: Icon, bills, companyBills, due, remaining }) => {
                 if (bills.length === 0 && companyBills.length === 0) {
-                  return <CashMemoHandwritingRow key={type} label={label} amountColumns={3} />;
+                  return <CashMemoHandwritingRow key={type} label={label} />;
                 }
 
                 return (
@@ -322,14 +322,14 @@ export default async function TenantInvoicePage({
           </Table>
           {rentTracked ? (
             <p className="mt-3 flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground">
-              <span>{t("invoiceRentSection")}: <strong data-testid="invoice-status">{rentStatusLabels[rentStatus] ?? rentStatus}</strong></span>
+              <span className="print:hidden">{t("invoiceRentSection")}: <strong data-testid="invoice-status">{rentStatusLabels[rentStatus] ?? rentStatus}</strong></span>
               <span>{t("invoiceDueDateLabel")}: {formatDate(rentDeadline, locale)}</span>
-              {payment?.paidAt ? <span>{t("paidDate")}: {formatDate(payment.paidAt, locale)}</span> : null}
-              {payment?.method ? <span>{t("paymentMethod")}: {paymentMethodLabel(t, payment.method)}</span> : null}
+              {payment?.paidAt ? <span className="print:hidden">{t("paidDate")}: {formatDate(payment.paidAt, locale)}</span> : null}
+              {payment?.method ? <span className="print:hidden">{t("paymentMethod")}: {paymentMethodLabel(t, payment.method)}</span> : null}
             </p>
           ) : null}
           {adjustment ? (
-            <div className="mt-3 rounded-lg border border-primary/30 bg-primary/5 p-3 text-xs">
+            <div className="mt-3 rounded-lg border border-primary/30 bg-primary/5 p-3 text-xs print:hidden">
               <p className="font-medium text-primary">{t("adjustedFromDownpaymentNote")}</p>
               <div className="mt-1.5 flex flex-wrap items-center gap-x-4 gap-y-1 text-muted-foreground">
                 <span>
@@ -347,7 +347,7 @@ export default async function TenantInvoicePage({
         </section>
 
         {earlierRent.length > 0 ? (
-          <section className="min-w-0" data-testid="invoice-rent-arrears">
+          <section className="min-w-0 print:hidden" data-testid="invoice-rent-arrears">
             <div className="flex flex-wrap items-center justify-between gap-2 tenant-bill-section-label rounded-t-md border-b bg-muted/60 px-3 py-2.5 text-sm print:break-after-avoid">
               <h2 className="font-semibold">{t("invoicePreviousRentDue")}</h2>
               <span data-testid="invoice-previous-rent" className="font-mono text-sm font-semibold tabular-nums text-destructive">
@@ -378,7 +378,7 @@ export default async function TenantInvoicePage({
         ) : null}
 
         {detailBills.length > 0 ? (
-          <section className="min-w-0">
+          <section className="min-w-0 print:hidden">
             <h2 className="mb-1 tenant-bill-section-label rounded-t-md border-b bg-muted/60 px-3 py-2.5 text-sm font-semibold print:break-after-avoid">
               {t(detailBills.some((b) => b.month === selectedMonth) ? "invoiceUtilitySection" : "cashMemoEarlierUtilities")}
             </h2>
@@ -453,6 +453,13 @@ export default async function TenantInvoicePage({
         {highlightedShown ? (
           <p className="text-xs text-muted-foreground print:hidden">{t("invoiceBillHighlightNote")}</p>
         ) : null}
+
+        <div className="hidden items-center justify-between gap-3 border-t px-2 pt-2 font-semibold print:flex print:break-inside-avoid">
+          <span>{t("invoiceMonthlyPrintTotal")}</span>
+          <strong data-testid="invoice-monthly-print-total" className="text-lg tabular-nums">
+            {formatInvoiceAmount(rentDue + monthUtilityRows.reduce((sum, row) => sum + row.due, 0))}
+          </strong>
+        </div>
 
         <CashMemoSignatures tenant={t("cashMemoTenantSignature")} company={t("cashMemoCompanySignature")} />
       </div>
