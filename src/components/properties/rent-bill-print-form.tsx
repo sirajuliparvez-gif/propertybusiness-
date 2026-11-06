@@ -1,5 +1,6 @@
 "use client";
 
+import { flushSync } from "react-dom";
 import { useState, useTransition, type ComponentProps, type ReactNode } from "react";
 import { useLocale, useTranslations } from "next-intl";
 import { Printer, Scissors } from "lucide-react";
@@ -7,7 +8,7 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { CashMemoHeader, CashMemoReading, CashMemoSignatures, cashMemoClassName } from "@/components/properties/cash-memo";
 import { useRouter } from "@/i18n/navigation";
-import { confirmRentBillPrint } from "@/lib/actions/rent-bill-print";
+import { confirmRentBillPrint, reserveRentBillNumber } from "@/lib/actions/rent-bill-print";
 import { formatTaka } from "@/lib/format";
 import type { RentBillPrintKey, RentBillPrintRow } from "@/lib/rent-bill-print";
 
@@ -32,6 +33,7 @@ export function RentBillPrintForm({
   const locale = useLocale();
   const router = useRouter();
   const [open, setOpen] = useState(prepare);
+  const [billNumber, setBillNumber] = useState(header.billNumber);
   const [printedDraft, setPrintedDraft] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
   const [selected, setSelected] = useState<RentBillPrintKey[]>(() => (printed ?? rows).map(({ key }) => key));
@@ -45,10 +47,24 @@ export function RentBillPrintForm({
   const copy = open ? draft : printed ?? rows;
   const expected = copy.reduce((sum, row) => sum + row.remainingCents, 0);
 
-  async function print() {
-    await document.fonts.ready;
-    window.print();
-    if (open) setPrintedDraft(draftSnapshot);
+  function print() {
+    startTransition(async () => {
+      try {
+        if (!billNumber) {
+          const assigned = await reserveRentBillNumber(leaseId, month);
+          if (!assigned) {
+            toast.error(t("rentBillNumberFailed"));
+            return;
+          }
+          flushSync(() => setBillNumber(assigned));
+        }
+        await document.fonts.ready;
+        window.print();
+        if (open) setPrintedDraft(draftSnapshot);
+      } catch {
+        toast.error(t("rentBillNumberFailed"));
+      }
+    });
   }
 
   function confirm() {
@@ -73,9 +89,10 @@ export function RentBillPrintForm({
     });
   }
 
+  const correction = open ? revision : revision - 1;
   const copyContents = (
     <>
-      <CashMemoHeader {...header} date={!open && printedDate ? printedDate : header.date} />
+      <CashMemoHeader {...header} billNumber={billNumber || "—"} date={!open && printedDate ? printedDate : header.date} />
       <table className="w-full border-collapse text-sm">
         <thead><tr className="border-b">
           <th scope="col" className="p-2 text-start">{t("cashMemoCharge")}</th>
@@ -111,7 +128,10 @@ export function RentBillPrintForm({
 
   return (
     <>
-      <div className="print:hidden">
+      <div className="space-y-2 print:hidden">
+        {billNumber ? <p className="text-xs text-muted-foreground">
+          {t("cashMemoBillNumber")} <strong className="tabular-nums text-foreground">{billNumber}</strong>
+        </p> : null}
         {open ? (
           <section className="space-y-2 rounded-lg border bg-card p-3">
             <div>
@@ -148,7 +168,7 @@ export function RentBillPrintForm({
               }}>
                 {t("cancel")}
               </Button>
-              <Button type="button" onClick={() => void print()} disabled={!draft.length || pending}><Printer className="size-4" />{t("invoicePrintBill")}</Button>
+              <Button type="button" onClick={print} disabled={!draft.length || pending}><Printer className="size-4" />{t("invoicePrintBill")}</Button>
               {printedDraft === draftSnapshot ? (
                 <Button type="button" variant="outline" disabled={pending} onClick={confirm}>{t("rentBillConfirmPrinted")}</Button>
               ) : null}
@@ -156,7 +176,7 @@ export function RentBillPrintForm({
           </section>
         ) : (
           <div className="flex flex-wrap gap-2">
-            {printed ? <Button type="button" variant="outline" onClick={() => void print()}>{t("rentBillReprint")}</Button> : null}
+            {printed ? <Button type="button" variant="outline" disabled={pending} onClick={print}>{t("rentBillReprint")}</Button> : null}
             <Button type="button" variant="outline" onClick={() => setOpen(true)}>
               {revision ? t("rentBillCorrection") : t("rentBillPrintOptions")}
             </Button>
@@ -165,12 +185,12 @@ export function RentBillPrintForm({
       </div>
       <div data-testid="issued-rent-bill-copy" className="print-invoice-a4 hidden print:block">
         <section className={`${cashMemoClassName} rent-bill-paper-copy`}>
-          <p className="rent-bill-copy-label">{t("rentBillTenantCopy")}</p>
+          <p className="rent-bill-copy-label">{t("rentBillTenantCopy")}{correction > 0 ? ` · ${t("rentBillRevisionLabel", { count: correction })}` : ""}</p>
           {copyContents}
         </section>
         <div className="rent-bill-cut-line" aria-hidden="true"><Scissors /></div>
         <section className={`${cashMemoClassName} rent-bill-paper-copy`}>
-          <p className="rent-bill-copy-label">{t("rentBillOfficeCopy")}</p>
+          <p className="rent-bill-copy-label">{t("rentBillOfficeCopy")}{correction > 0 ? ` · ${t("rentBillRevisionLabel", { count: correction })}` : ""}</p>
           {copyContents}
         </section>
       </div>

@@ -4,10 +4,11 @@ import { getLocale } from "next-intl/server";
 import { revalidatePath } from "next/cache";
 import { isDeepStrictEqual } from "node:util";
 import { requireCurrentUser } from "@/lib/auth/session";
-import { dhakaTodayISO } from "@/lib/dhaka-time";
+import { dhakaISO, dhakaTodayISO } from "@/lib/dhaka-time";
 import { isPaymentMonth } from "@/lib/payment-month";
 import { prisma } from "@/lib/prisma";
 import { rentBillPrintRows, type RentBillPrintKey } from "@/lib/rent-bill-print";
+import { formatRentBillNumber, legacyRentBillNumber } from "@/lib/rent-bill-number";
 import { getTenantProfile } from "@/lib/tenants-data";
 
 export async function confirmRentBillPrint(
@@ -42,4 +43,43 @@ export async function confirmRentBillPrint(
   revalidatePath(`/${locale}/rent`);
   revalidatePath(`/${locale}/rent/${tenantLeaseId}/invoice`);
   return true;
+}
+
+export async function reserveRentBillNumber(tenantLeaseId: string, month: string) {
+  await requireCurrentUser();
+  if (!isPaymentMonth(month) || month !== month.trim() || month > dhakaTodayISO().slice(0, 7)) return null;
+
+  return prisma.$transaction(async (tx) => {
+    const lease = await tx.tenantLease.findUnique({
+      where: { id: tenantLeaseId },
+      select: { status: true, startDate: true, unit: { select: { unitType: { select: { propertyId: true } } } } },
+    });
+    if (!lease) return null;
+    const propertyId = lease.unit.unitType.propertyId;
+    // All number assignments in this market share this lock. Read committed
+    // lets a waiting transaction see the assignment made by the previous one.
+    const [market] = await tx.$queryRaw<{ billMarketCode: number }[]>`
+      SELECT "billMarketCode" FROM "Property" WHERE id = ${propertyId} AND "deletedAt" IS NULL FOR UPDATE
+    `;
+    if (!market) return null;
+    const billKey = { tenantLeaseId, month };
+    const assigned = await tx.rentBillNumber.findUnique({
+      where: { tenantLeaseId_month: billKey },
+      select: { serial: true, property: { select: { billMarketCode: true } } },
+    });
+    if (assigned) return formatRentBillNumber(assigned.property.billMarketCode, month, assigned.serial);
+
+    const oldPrint = await tx.rentBillPrint.findFirst({ where: billKey, select: { revision: true } });
+    if (oldPrint) return legacyRentBillNumber(tenantLeaseId, month);
+    if (lease.status !== "ACTIVE" || month < dhakaISO(lease.startDate).slice(0, 7)) return null;
+
+    const counter = await tx.rentBillCounter.upsert({
+      where: { propertyId_month: { propertyId, month } },
+      create: { propertyId, month, serial: 1 },
+      update: { serial: { increment: 1 } },
+      select: { serial: true },
+    });
+    await tx.rentBillNumber.create({ data: { ...billKey, propertyId, serial: counter.serial } });
+    return formatRentBillNumber(market.billMarketCode, month, counter.serial);
+  }, { isolationLevel: "ReadCommitted" });
 }

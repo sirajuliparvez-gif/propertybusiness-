@@ -212,6 +212,7 @@ model PropertyOwner {
 }
 
 model Property {
+  billMarketCode Int           @unique @default(autoincrement())
   id            String         @id @default(cuid())
   ownerId       String
   owner         PropertyOwner  @relation(fields: [ownerId], references: [id])
@@ -225,6 +226,8 @@ model Property {
   importBatchId String?
   importBatch   ImportBatch?   @relation(fields: [importBatchId], references: [id])
 
+  rentBillNumbers      RentBillNumber[]
+  rentBillCounters     RentBillCounter[]
   ownerLeaseAgreements OwnerLeaseAgreement[]
   unitTypes            UnitType[]
   employees            Employee[]
@@ -437,12 +440,34 @@ model TenantLease {
   transactions           Transaction[]
   utilityBills           UtilityBill[]
   utilityBillDefaults    TenantUtilityBillDefault[]
+  rentBillNumbers        RentBillNumber[]
   rentBillPrints         RentBillPrint[]
   rentBillReceiptChecks  RentBillReceiptCheck[]
 
   @@index([unitId])
   @@index([tenantId])
   @@index([status])
+}
+
+model RentBillNumber {
+  tenantLeaseId String
+  tenantLease   TenantLease @relation(fields: [tenantLeaseId], references: [id], onDelete: Cascade)
+  propertyId    String
+  property      Property @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+  month         String
+  serial        Int
+
+  @@id([tenantLeaseId, month])
+  @@unique([propertyId, month, serial])
+}
+
+model RentBillCounter {
+  propertyId String
+  property   Property @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+  month      String
+  serial     Int
+
+  @@id([propertyId, month])
 }
 
 model RentBillPrint {

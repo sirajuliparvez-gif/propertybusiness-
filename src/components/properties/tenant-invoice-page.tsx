@@ -24,6 +24,7 @@ import { rentTermsDueAmount, resolveRentTermsForMonth } from "@/lib/rent-terms";
 import { RentBillPrintForm } from "@/components/properties/rent-bill-print-form";
 import { RecordTenantRentPaymentDialog } from "@/components/properties/record-tenant-rent-payment-dialog";
 import { limitToPrintedBill, rentBillPrintKeys, rentBillPrintRows, type RentBillPrintRow } from "@/lib/rent-bill-print";
+import { formatRentBillNumber, legacyRentBillNumber } from "@/lib/rent-bill-number";
 import { prisma } from "@/lib/prisma";
 
 function formatInvoiceAmount(amount: number) {
@@ -181,9 +182,15 @@ export default async function TenantInvoicePage({
   const invoiceBasePath = `/${fromRent ? "rent" : "tenants"}/${id}/invoice`;
   const invoicePath = `${invoiceBasePath}?${invoiceQuery}`;
   const rentListPath = `/rent?month=${selectedMonth}${tenantScope === "1" ? `&tenant=${encodeURIComponent(id)}` : ""}`;
-  const printIssue = fromRent ? await prisma.rentBillPrint.findFirst({
-    where: { tenantLeaseId: id, month: selectedMonth }, orderBy: { revision: "desc" },
-  }) : null;
+  const [printIssue, assignedNumber] = await Promise.all([
+    fromRent ? prisma.rentBillPrint.findFirst({
+      where: { tenantLeaseId: id, month: selectedMonth }, orderBy: { revision: "desc" },
+    }) : null,
+    prisma.rentBillNumber.findUnique({
+      where: { tenantLeaseId_month: { tenantLeaseId: id, month: selectedMonth } },
+      select: { serial: true, property: { select: { billMarketCode: true } } },
+    }),
+  ]);
   const printed = printIssue ? printIssue.rows as RentBillPrintRow[] : null;
   const monthlyLines = paymentLines.filter((line) => line.month === selectedMonth);
   const receiptLines = !fromRent ? paymentLines : printed
@@ -191,7 +198,8 @@ export default async function TenantInvoicePage({
         ...line, label: monthlyLines.find(({ id }) => id === line.id)!.label,
       }))
     : monthlyLines;
-  const billNumber = `R-${selectedMonth.replace("-", "")}-${tenant.id.slice(-10).toUpperCase()}`;
+  const billNumber = assignedNumber ? formatRentBillNumber(assignedNumber.property.billMarketCode, selectedMonth, assignedNumber.serial)
+    : printIssue || !fromRent ? legacyRentBillNumber(tenant.id, selectedMonth) : "";
   const memoHeader = {
     brand: tNav("brand"),
     month: monthLabel(selectedMonth, locale),
@@ -324,7 +332,11 @@ export default async function TenantInvoicePage({
       </div>
 
       <div className="flex flex-wrap items-center gap-2 print:hidden">
-        {!fromRent ? <InvoicePrintButton label={t("invoicePrintBill")} /> : null}
+        {!fromRent ? canCollect ? (
+          <Button variant="outline" render={<Link href={`/rent/${id}/invoice?month=${selectedMonth}&tenant=1&print=1`} />} nativeButton={false}>
+            {t("invoicePrintBill")}
+          </Button>
+        ) : <InvoicePrintButton label={t("invoicePrintBill")} /> : null}
         {(!fromRent || print !== "1") ? receiveForm : null}
         {otherCollection}
         {!fromRent && canCollect ? <InvoiceAddUtilityBillDialog key={selectedMonth} leaseId={id} month={selectedMonth} /> : null}
@@ -337,7 +349,7 @@ export default async function TenantInvoicePage({
         data-testid="invoice-copy"
         className={cn(cashMemoClassName, "tenant-bill gap-4 rounded-lg border-sky-900/40 p-4 sm:p-5")}
       >
-        <CashMemoHeader {...memoHeader} title={t("cashMemoRentTitle")} contact={tenant.contactInfo} />
+        <CashMemoHeader {...memoHeader} billNumber={billNumber || "—"} title={t("cashMemoRentTitle")} contact={tenant.contactInfo} />
 
         <section className="print:hidden tenant-bill-summary overflow-hidden rounded-lg border border-primary/25 bg-primary/[0.045]" aria-label={t("cashMemoSummary")}>
           <dl className="tenant-bill-summary-main grid grid-cols-2 items-center gap-x-3 gap-y-2 px-3 py-3 sm:grid-cols-[1.25fr_1fr_1fr]">
