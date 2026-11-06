@@ -79,6 +79,7 @@ export function AppSidebar() {
       label: t("sidebarReports"),
       items: [
         { href: "/rent/report", label: t("quickRentReport"), icon: FileText, prefetch: false },
+        { href: "/reports/market", label: t("allMarketReport"), icon: Building2, prefetch: false },
         { href: "/reports", label: t("reports"), icon: BarChart3 },
         { href: "/import-export", label: t("importExport"), icon: FileSpreadsheet },
       ],

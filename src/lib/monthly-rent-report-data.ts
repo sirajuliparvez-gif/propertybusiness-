@@ -4,7 +4,7 @@ import { isPaymentMonth } from "@/lib/payment-month";
 import { numericRentRates } from "@/lib/rent-terms";
 import { buildMonthlyRentReport } from "@/lib/monthly-rent-report";
 
-export async function getMonthlyRentReport(requestedMonth?: string, propertyId?: string) {
+export async function getMonthlyRentReport(requestedMonth?: string, propertyId?: string | string[]) {
   const now = dhakaNow();
   const currentMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
   const month = isPaymentMonth(requestedMonth) && requestedMonth <= currentMonth ? requestedMonth : currentMonth;
@@ -14,14 +14,14 @@ export async function getMonthlyRentReport(requestedMonth?: string, propertyId?:
   const [leases, recordedMonths] = await prisma.$transaction([
     prisma.tenantLease.findMany({
       where: {
-        ...(propertyId ? { unit: { unitType: { propertyId } } } : {}),
+        ...(propertyId ? { unit: { unitType: { propertyId: typeof propertyId === "string" ? propertyId : { in: propertyId } } } } : {}),
         OR: [{ startDate: { lt: nextMonth } }, { rentPayments: { some: { month } } }],
       },
       select: {
         id: true, status: true, startDate: true, endDate: true, movedOutAt: true,
         monthlyRentAmount: true, serviceChargeType: true, serviceChargeValue: true,
         tenant: { select: { name: true } },
-        unit: { select: { label: true, unitType: { select: { property: { select: { name: true, deletedAt: true } } } } } },
+        unit: { select: { label: true, unitType: { select: { property: { select: { id: true, name: true, deletedAt: true } } } } } },
         rentRates: { orderBy: { effectiveMonth: "asc" } },
         rentPayments: {
           where: { month },
@@ -34,6 +34,7 @@ export async function getMonthlyRentReport(requestedMonth?: string, propertyId?:
   const report = buildMonthlyRentReport(leases.map((lease) => ({
     ...lease,
     tenantName: lease.tenant.name,
+    propertyId: lease.unit.unitType.property.id,
     propertyName: lease.unit.unitType.property.name,
     propertyDeleted: lease.unit.unitType.property.deletedAt != null,
     unitLabel: lease.unit.label,

@@ -31,7 +31,8 @@ export default async function MonthlyMarketReportPage({
   ]);
   const { month, currentMonth, markets, market, report } = data;
   const period = monthLabel(month, locale);
-  const title = t("marketMonthlyReportTitle");
+  const title = t(market ? "marketMonthlyReportTitle" : "allMarketsMonthlyTitle");
+  const reportName = market?.name ?? t("allMarketsOption");
   const salaries = report?.otherTransactions.filter((entry) => entry.type === "PAYROLL_EXPENSE") ?? [];
   const utilities = report?.otherTransactions.filter((entry) => entry.type === "UTILITY_EXPENSE") ?? [];
   const otherTransactions = report?.otherTransactions.filter((entry) =>
@@ -52,9 +53,9 @@ export default async function MonthlyMarketReportPage({
         <Button variant="outline" render={<Link href="/reports" />} nativeButton={false}>
           <ArrowLeft className="size-4" />{t("reportsPageTitle")}
         </Button>
-        {market && <InvoicePrintButton />}
+        {report && <InvoicePrintButton />}
       </div>
-      {!market || !report ? (
+      {!report ? (
         <div className="rounded-xl border bg-card p-6">
           <h1 className="text-xl font-semibold">{title}</h1>
           <p className="mt-2 text-muted-foreground">{t("noProperties")}</p>
@@ -64,7 +65,8 @@ export default async function MonthlyMarketReportPage({
           <form action={`/${locale}/reports/market`} className="flex flex-wrap items-end gap-3 rounded-xl border bg-card p-4 print:hidden">
             <label className="grid gap-1.5 text-sm font-medium">
               {t("marketReportMarket")}
-              <select name="market" defaultValue={market.id} className={filterClass}>
+              <select name="market" defaultValue={market?.id ?? "all"} className={filterClass}>
+                <option value="all">{t("allMarketsOption")}</option>
                 {markets.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
               </select>
             </label>
@@ -83,14 +85,14 @@ export default async function MonthlyMarketReportPage({
                   <p className={styles.brandName}>{nav("brand")}</p>
                 </div>
                 <h1 className={styles.title}>{title}</h1>
-                <p className="mt-1 font-semibold">{market.name}</p>
-                {market.address && <p className="text-xs text-muted-foreground">{market.address}</p>}
+                <p className="mt-1 font-semibold">{reportName}</p>
+                {market?.address && <p className="text-xs text-muted-foreground">{market.address}</p>}
               </div>
               <div className={styles.metadata}>
                 <span className={styles.month}>{period}</span>
                 <ReportPrintMetadata initialDate={formatDate(new Date(), locale)} locale={locale}
                   dateLabel={t("monthlyReportPrintDate")} pageLabel={t("monthlyReportPage")}
-                  title={`${title} · ${market.name}`} month={period} pageName="monthlyMarketReport" />
+                  title={`${title} · ${reportName}`} month={period} pageName="monthlyMarketReport" />
               </div>
             </header>
 
@@ -108,54 +110,91 @@ export default async function MonthlyMarketReportPage({
             </dl>
             <p className={styles.note}>{t("marketReportBasis")}</p>
 
-            <h2 id="market-rent-heading" className={styles.sectionTitle}>{t("marketReportRentSection")}</h2>
-            <div className={styles.tableWrap}>
-              <table className={styles.table} aria-labelledby="market-rent-heading">
-                <colgroup span={3} />
-                <colgroup span={3} />
-                <thead>
-                  <tr>
-                    <th scope="col" rowSpan={2} className="text-left">{t("tenantName")}</th>
-                    <th scope="col" rowSpan={2} className="text-left">{t("unit")}</th>
-                    <th scope="col" rowSpan={2} className="text-right">{t("marketReportRentReceived", { month: period })}</th>
-                    <th scope="colgroup" colSpan={3} className={`${styles.rentBillStart} border-b text-center`}>
-                      {t("marketReportBillGroup", { month: period })}
-                    </th>
-                  </tr>
-                  <tr>
-                    <th scope="col" className={`${styles.rentBillStart} text-right`}>{t("marketReportMonthBilled")}</th>
-                    <th scope="col" className="text-right">{t("marketReportMonthSettled")}</th>
-                    <th scope="col" className="text-right">{t("marketReportBillRemaining")}</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {report.tenants.length === 0 && <tr><td colSpan={6} className="text-center text-muted-foreground">{t("monthlyReportEmpty")}</td></tr>}
-                  {report.tenants.map((row) => (
-                    <tr key={row.id} className={styles.tenant}>
-                      <th scope="row" className={`${styles.name} text-left`}>
-                        {row.name ?? t("marketReportUnknownTenant")}
-                        {[...row.receiptMonths.entries()].sort().map(([billMonth, cents]) => (
-                          <span key={billMonth} className={styles.billDetail}>
-                            {t("marketReportRentFromOtherMonth", { month: monthLabel(billMonth, locale), amount: money(cents / 100) })}
-                          </span>
-                        ))}
+            {market ? (<>
+              <h2 id="market-rent-heading" className={styles.sectionTitle}>{t("marketReportRentSection")}</h2>
+              <div className={styles.tableWrap}>
+                <table className={styles.table} aria-labelledby="market-rent-heading">
+                  <colgroup span={3} />
+                  <colgroup span={3} />
+                  <thead>
+                    <tr>
+                      <th scope="col" rowSpan={2} className="text-left">{t("tenantName")}</th>
+                      <th scope="col" rowSpan={2} className="text-left">{t("unit")}</th>
+                      <th scope="col" rowSpan={2} className="text-right">{t("marketReportRentReceived", { month: period })}</th>
+                      <th scope="colgroup" colSpan={3} className={`${styles.rentBillStart} border-b text-center`}>
+                        {t("marketReportBillGroup", { month: period })}
                       </th>
-                      <td className={styles.unit}>{row.unit ?? "—"}</td>
-                      <td className={`${styles.number} ${styles.collected}`}>{money(row.receivedCents / 100)}</td>
-                      <td className={`${styles.number} ${styles.rentBillStart}`}>{row.bill ? money(row.bill.due) : "—"}</td>
-                      <td className={styles.number}>{row.bill ? money(row.bill.settled) : "—"}</td>
-                      <td className={`${styles.number} ${row.bill?.remaining ? styles.remaining : ""}`}>{row.bill ? money(row.bill.remaining) : "—"}</td>
                     </tr>
-                  ))}
-                </tbody>
-                <tfoot><tr className={styles.total}>
-                  <th scope="row" colSpan={2} className="text-left">{t("total")}</th>
-                  {[report.rentReceived, report.rentTotals.due, report.rentTotals.settled, report.rentTotals.remaining].map((amount, index) => (
-                    <td key={index} className={`${styles.number} ${index === 1 ? styles.rentBillStart : ""}`}>{money(amount)}</td>
-                  ))}
-                </tr></tfoot>
-              </table>
-            </div>
+                    <tr>
+                      <th scope="col" className={`${styles.rentBillStart} text-right`}>{t("marketReportMonthBilled")}</th>
+                      <th scope="col" className="text-right">{t("marketReportMonthSettled")}</th>
+                      <th scope="col" className="text-right">{t("marketReportBillRemaining")}</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {report.tenants.length === 0 && <tr><td colSpan={6} className="text-center text-muted-foreground">{t("monthlyReportEmpty")}</td></tr>}
+                    {report.tenants.map((row) => (
+                      <tr key={row.id} className={styles.tenant}>
+                        <th scope="row" className={`${styles.name} text-left`}>
+                          {row.name ?? t("marketReportUnknownTenant")}
+                          {[...row.receiptMonths.entries()].sort().map(([billMonth, cents]) => (
+                            <span key={billMonth} className={styles.billDetail}>
+                              {t("marketReportRentFromOtherMonth", { month: monthLabel(billMonth, locale), amount: money(cents / 100) })}
+                            </span>
+                          ))}
+                        </th>
+                        <td className={styles.unit}>{row.unit ?? "—"}</td>
+                        <td className={`${styles.number} ${styles.collected}`}>{money(row.receivedCents / 100)}</td>
+                        <td className={`${styles.number} ${styles.rentBillStart}`}>{row.bill ? money(row.bill.due) : "—"}</td>
+                        <td className={styles.number}>{row.bill ? money(row.bill.settled) : "—"}</td>
+                        <td className={`${styles.number} ${row.bill?.remaining ? styles.remaining : ""}`}>{row.bill ? money(row.bill.remaining) : "—"}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                  <tfoot><tr className={styles.total}>
+                    <th scope="row" colSpan={2} className="text-left">{t("total")}</th>
+                    {[report.rentReceived, report.rentTotals.due, report.rentTotals.settled, report.rentTotals.remaining].map((amount, index) => (
+                      <td key={index} className={`${styles.number} ${index === 1 ? styles.rentBillStart : ""}`}>{money(amount)}</td>
+                    ))}
+                  </tr></tfoot>
+                </table>
+              </div>
+
+            </>) : (<>
+              <h2 id="market-breakdown-heading" className={styles.sectionTitle}>{t("allMarketsBreakdown")}</h2>
+              <div className={styles.tableWrap}>
+                <table className={styles.table} aria-labelledby="market-breakdown-heading">
+                  <thead><tr>
+                    <th scope="col" className="text-left">{t("marketReportMarket")}</th>
+                    <th scope="col" className="text-right">{t("marketReportRentReceived", { month: period })}</th>
+                    <th scope="col" className="text-right">{t("financialReportIncome")}</th>
+                    <th scope="col" className="text-right">{t("totalExpense")}</th>
+                    <th scope="col" className="text-right">{t("marketReportNet")}</th>
+                    <th scope="col" className="text-right">{t("marketReportMonthDue")}</th>
+                  </tr></thead>
+                  <tbody>
+                    {report.marketRows.map((row) => (
+                      <tr key={row.id} className={styles.tenant}>
+                        <th scope="row" className={`${styles.name} text-left`}>
+                          <a className="hover:underline" href={`/${locale}/reports/market?month=${month}&market=${encodeURIComponent(row.id)}`}>{row.name}</a>
+                        </th>
+                        <td className={styles.number}>{money(row.receivedCents / 100)}</td>
+                        <td className={styles.number}>{money(row.incomeCents / 100)}</td>
+                        <td className={styles.number}>{money(row.expenseCents / 100)}</td>
+                        <td className={styles.number}>{money((row.incomeCents - row.expenseCents) / 100)}</td>
+                        <td className={styles.number}>{money(row.rentRemaining)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                  <tfoot><tr className={styles.total}>
+                    <th scope="row" className="text-left">{t("total")}</th>
+                    {[report.rentReceived, report.totals.incoming, report.totals.outgoing, report.totals.net, report.rentTotals.remaining].map((amount, index) => (
+                      <td key={index} className={styles.number}>{money(amount)}</td>
+                    ))}
+                  </tr></tfoot>
+                </table>
+              </div>
+            </>)}
 
             <h2 id="market-payroll-heading" className={styles.sectionTitle}>{t("marketReportPayrollSection")}</h2>
             <div className={styles.tableWrap}>
@@ -264,7 +303,7 @@ export default async function MonthlyMarketReportPage({
               </table>
             </div>
             <footer className={styles.footer}>
-              <p className={styles.scope}>{t("marketReportScope")}</p>
+              <p className={styles.scope}>{t(market ? "marketReportScope" : "allMarketsScope")}</p>
               <div className={styles.signatures}><p>{t("monthlyReportPreparedBy")}</p><p>{t("monthlyReportApprovedBy")}</p></div>
             </footer>
           </article>

@@ -301,7 +301,8 @@
 }
 
 @media print {
-  .marketPrint { page:monthlyMarketReport; }
+  /* Keep one named page throughout the document to avoid a trailing blank page. */
+  :global(html):has(.marketPrint) { page:monthlyMarketReport; }
   .marketPrint .header { display:flex; padding:0 0 9px; }
   .marketPrint .metadata { display:none; }
   .marketPrint .summary { margin-bottom:10px; padding-block:9px; }
@@ -311,6 +312,7 @@
   .marketPrint .logo { width:36px; height:36px; }
   .marketPrint .title { font-size:17px; }
   .marketPrint thead { display:table-header-group; }
+  .marketPrint .table th,.marketPrint .table td { padding-block:5px; }
   .marketPrint .table .rentBillStart { border-color:#bbb; padding-inline-start:10px; }
   .marketPrint tfoot { display:table-row-group; }
   .marketPrint tr { break-inside:avoid; }

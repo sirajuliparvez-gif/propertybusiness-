@@ -18,6 +18,7 @@
     "settings": "সেটিংস",
     "quickActions": "দ্রুত কাজ",
     "quickRentArrears": "বকেয়া ভাড়া আদায়",
+    "allMarketReport": "সব মার্কেটের হিসাব",
     "quickRentReport": "মাসিক ভাড়া রিপোর্ট",
     "quickUtilityBill": "ইউটিলিটি বিল যোগ",
     "quickExpense": "খরচ যোগ",
@@ -767,6 +768,10 @@
     "transactionTypeUtilityExpense": "ইউটিলিটি খরচ",
     "transactionTypeOwnerWithdrawal": "মালিকের উত্তোলন",
 
+    "allMarketsMonthlyTitle": "সব মার্কেটের মাসিক আয়-খরচ",
+    "allMarketsOption": "সব মার্কেট",
+    "allMarketsBreakdown": "মার্কেট ধরে হিসাব",
+    "allMarketsScope": "মার্কেটের নামে দেওয়া আয়-খরচ এখানে যোগ হয়েছে। কোনো মার্কেটের নামে দেওয়া হয়নি এমন কোম্পানির খরচ, জামানত আর ইউটিলিটি বিলের ফেরত টাকা আলাদা হিসাবে থাকে।",
     "marketMonthlyReportTitle": "মার্কেটের মাসিক আয়-খরচ",
     "marketReportMarket": "মার্কেট",
     "marketReportApply": "রিপোর্ট দেখুন",

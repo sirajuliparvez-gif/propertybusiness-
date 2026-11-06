@@ -5,6 +5,7 @@ import { rentTermsDueAmount, resolveRentTermsForMonth, type RentTerms, type Effe
 export type ReportLease = RentTerms & {
   id: string;
   tenantName: string;
+  propertyId?: string;
   propertyName: string;
   unitLabel: string;
   status: string;
@@ -31,6 +32,7 @@ export function buildMonthlyRentReport(leases: ReportLease[], month: string) {
     return [{
       id: lease.id,
       tenantName: lease.tenantName,
+      propertyId: lease.propertyId,
       propertyName: lease.propertyName,
       unitLabel: lease.unitLabel,
       due,
