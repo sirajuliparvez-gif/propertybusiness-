@@ -2,8 +2,6 @@ import { dhakaISO, dhakaNow } from "@/lib/dhaka-time";
 import { notFound } from "next/navigation";
 import { getLocale, getTranslations } from "next-intl/server";
 import { Droplet, Flame, House, ReceiptText, Zap } from "lucide-react";
-import { Button } from "@/components/ui/button";
-import { Link } from "@/i18n/navigation";
 import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { getTenantProfile } from "@/lib/tenants-data";
@@ -15,7 +13,7 @@ import { CashMemoHandwritingRow, CashMemoHeader, CashMemoReading, CashMemoSignat
 import { InvoiceMonthSelect } from "@/components/properties/invoice-month-select";
 import { InvoicePaymentDialog } from "@/components/properties/invoice-payment-dialog";
 import { InvoiceAddUtilityBillDialog } from "@/components/properties/add-utility-bill-dialog";
-import { invoicePaymentSnapshot, orderInvoicePaymentLines } from "@/lib/invoice-payment";
+import { invoicePaymentSnapshot } from "@/lib/invoice-payment";
 import { InvoicePrintButton } from "@/components/properties/invoice-print-button";
 import { rentTermsDueAmount, resolveRentTermsForMonth } from "@/lib/rent-terms";
 
@@ -36,10 +34,10 @@ export default async function TenantInvoicePage({
   searchParams,
 }: {
   params: Promise<{ id: string }>;
-  searchParams: Promise<{ month?: string; bill?: string; view?: string }>;
+  searchParams: Promise<{ month?: string; bill?: string }>;
 }) {
   const { id } = await params;
-  const { month: requestedMonth, bill: highlightedBillId, view } = await searchParams;
+  const { month: requestedMonth, bill: highlightedBillId } = await searchParams;
   const t = await getTranslations("Properties");
   const tNav = await getTranslations("Nav");
   const locale = await getLocale();
@@ -135,7 +133,6 @@ export default async function TenantInvoicePage({
     const remaining = bills.reduce((sum, b) => sum + billRemaining(b), 0);
     return { type, label, icon, bills, companyBills, due, remaining };
   });
-  const missingUtilityRows = monthUtilityRows.filter(({ bills, companyBills }) => !bills.length && !companyBills.length);
   const detailBills = [
     ...earlierUnpaidBills,
     ...monthBills.filter((b) => monthUtilityRows.some((row) => row.type === b.type && row.bills.length > 1)),
@@ -183,55 +180,6 @@ export default async function TenantInvoicePage({
     },
   };
 
-  if (view === "send") {
-    const electricityBills = new Map(statementBills.filter((bill) => bill.type === "ELECTRICITY").map((bill) => [bill.id, bill]));
-    return (
-      <div className="mx-auto w-full max-w-2xl">
-        <div className="mb-4 flex flex-wrap items-center justify-between gap-2 print:hidden">
-          <Button variant="outline" render={<Link href={invoicePath} />} nativeButton={false}>{t("receiptBack")}</Button>
-          <InvoicePrintButton />
-        </div>
-        <article data-testid="payment-request-copy" className="print-invoice-a4 space-y-4 rounded-lg border border-sky-900/40 bg-card p-4 text-sm sm:p-6 print:p-4">
-          <CashMemoHeader {...memoHeader} title={t("paymentRequestTitle")} />
-          {paymentLines.length || missingUtilityRows.length ? (
-            <table className={cn("w-full", !paymentLines.length && "hidden print:table")}>
-              <thead className="bg-muted/60 print:table-header-group">
-                <tr>
-                  <th scope="col" className="px-2 py-1.5 text-start">{t("cashMemoCharge")}</th>
-                  <th scope="col" className="px-2 py-1.5 text-end">{t("cashMemoShortBalance")}</th>
-                </tr>
-              </thead>
-              <tbody>
-                {orderInvoicePaymentLines(paymentLines).map((line) => {
-                  const bill = electricityBills.get(line.id);
-                  return (
-                    <tr key={line.id} className="break-inside-avoid border-b">
-                      <td className="px-2 py-1.5">
-                        {line.label} · {monthLabel(line.month, locale)}
-                        {bill?.meterReading != null ? (
-                          <CashMemoReading current={bill.meterReading} previous={bill.previousMeterReading} units={bill.consumptionUnits}
-                            label={t("cashMemoReading")} unitLabel={t("cashMemoUnits")} missing={t("cashMemoReadingMissing")} locale={locale} />
-                        ) : null}
-                      </td>
-                      <td className="whitespace-nowrap px-2 py-1.5 text-end tabular-nums">{formatInvoiceAmount(line.remainingCents / 100)}</td>
-                    </tr>
-                  );
-                })}
-                {missingUtilityRows.map(({ type, label }) => <CashMemoHandwritingRow key={type} label={label} />)}
-              </tbody>
-            </table>
-          ) : null}
-          <div className="flex break-inside-avoid items-center justify-between gap-3 rounded-md border bg-muted/30 px-3 py-2">
-            <span className="font-semibold">{t("paymentRequestTotal")}</span>
-            <strong data-testid="payment-request-total" className="text-xl tabular-nums">
-              {formatInvoiceAmount(paymentLines.reduce((sum, line) => sum + line.remainingCents, 0) / 100)}
-            </strong>
-          </div>
-        </article>
-      </div>
-    );
-  }
-
   const highlightedShown = highlightedBillId
     ? [...statementBills, ...companyBorneBills].some((b) => b.id === highlightedBillId)
     : false;
@@ -240,9 +188,6 @@ export default async function TenantInvoicePage({
     <div data-tenant-invoice-page className="mx-auto flex w-full max-w-4xl min-w-0 flex-1 flex-col gap-4">
       <div className="flex flex-wrap items-center justify-end gap-2 print:hidden">
         <InvoiceMonthSelect leaseId={id} months={availableMonths} selectedMonth={selectedMonth} />
-        <Button variant="outline" render={<Link href={`${invoicePath}&view=send`} />} nativeButton={false}>
-          {t("paymentRequestOpen")}
-        </Button>
         <InvoicePrintButton />
       </div>
 

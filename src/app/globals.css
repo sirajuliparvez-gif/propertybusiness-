@@ -271,7 +271,7 @@
 
 @media print {
   .tenant-bill { padding: 20px 24px; font-size: 10pt; line-height: 1.4; break-inside: auto; }
-  .tenant-bill > * + * { margin-top: 18px; }
+  .tenant-bill > * + * { margin-top: 12px; }
   .tenant-bill .cash-memo-header > :first-child { flex-wrap: nowrap; padding-bottom: 12px; }
   .tenant-bill .cash-memo-header img { width: 40px; height: 40px; }
   .tenant-bill .cash-memo-header dl { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px 16px; }
