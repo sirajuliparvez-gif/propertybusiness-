@@ -7,7 +7,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { InputGroup, InputGroupAddon, InputGroupInput } from "@/components/ui/input-group";
 import { InitialAvatar } from "@/components/properties/initial-avatar";
 import { StatusPill, isRentSettled, rentPillStatus } from "@/components/properties/status-pill";
-import { RentBillRowActions } from "@/components/properties/rent-bill-row-actions";
+import { RentBillDates, RentBillRowActions } from "@/components/properties/rent-bill-row-actions";
 import { formatTaka } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import type { RentCollectionData } from "@/lib/tenants-data";
@@ -163,6 +163,7 @@ export function MobileRentList({
                     <StatusPill status={rentPillStatus(p.rentStatus, p.rentPastDue)} labels={rentStatusLabels} />
                   </div>
                 </div>
+                <RentBillDates lastPrintedAt={p.lastPrintedAt} lastReceivedAt={p.lastReceivedAt} />
                 <RentBillRowActions leaseId={p.id} month={selectedMonth} revision={p.printRevision} scoped={!!tenantLeaseId} />
               </li>
             ))}

@@ -48,7 +48,7 @@ export function InvoicePaymentDialog({
   const valid = Number.isSafeInteger(amount) && amount > 0 &&
     (reconciliation ? amount <= 2_147_483_647 : amount <= total);
   const planned = valid ? allocateInvoicePayment(onlyRent ? rent : lines, Math.min(amount, total)) : [];
-  const showSplit = Boolean(reconciliation) && valid && amount < total;
+  const showSplit = Boolean(reconciliation) && valid && amount < total && lines.length > 1;
   const suggested = new Map(planned.map(({ id, paidCents }) => [id, paidCents]));
   const splitValues = lines.map(({ id }) => split[id] ?? ((suggested.get(id) ?? 0) / 100).toFixed(2));
   const splitCents = splitValues.map((value) => value.trim() ? readCents(value) : 0);
@@ -124,9 +124,23 @@ export function InvoicePaymentDialog({
           </FormField> : null}
           {valid && (
             <section className="grid gap-2 rounded-lg border bg-muted/40 p-3 text-sm" aria-live="polite">
-              <p className="font-semibold">{amount > total
+              {reconciliation && amount < total ? (
+                <>
+                  <dl className="grid grid-cols-2 gap-3">
+                    <div>
+                      <dt className="text-xs text-muted-foreground">{t("receiptReceived")}</dt>
+                      <dd className="font-semibold tabular-nums">{money(amount)}</dd>
+                    </div>
+                    <div>
+                      <dt className="text-xs text-muted-foreground">{t("receiptCheckRemaining")}</dt>
+                      <dd className="font-semibold tabular-nums text-destructive">{money(total - amount)}</dd>
+                    </div>
+                  </dl>
+                  <p className="text-xs text-muted-foreground">{t("receiptCheckBalanceStays", { month: monthLabel(month, locale) })}</p>
+                </>
+              ) : <p className="font-semibold">{amount > total
                 ? t("rentBillExtraAdvance", { amount: money(amount - total) })
-                : t("invoicePaymentPreview", { amount: money(amount), remaining: money(total - amount) })}</p>
+                : t("invoicePaymentPreview", { amount: money(amount), remaining: money(total - amount) })}</p>}
               {onlyRent || hasEarlierUtilities ? (
                 <p className="text-xs text-muted-foreground">
                   {t(onlyRent ? "invoicePaymentOnlyRent" : "invoiceOldestFirst")}
@@ -155,7 +169,7 @@ export function InvoicePaymentDialog({
                   })}
                   {!validSplit ? <p className="text-xs text-destructive" role="status">{t("receiptCheckSplitInvalid", { amount: money(amount) })}</p> : null}
                 </fieldset>
-              ) : <details>
+              ) : reconciliation && amount < total ? null : <details>
                 <summary className="cursor-pointer text-muted-foreground">{t("invoicePaymentBreakdown")}</summary>
                 <ul className="mt-2 grid gap-1">
                   {planned.map((line) => (

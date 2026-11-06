@@ -6,8 +6,26 @@ import { Check, Pencil, Printer } from "lucide-react";
 import { useRouter } from "@/i18n/navigation";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { formatDate } from "@/lib/format";
 
 type BillPopup = "print" | "receive" | "printed";
+
+export function RentBillDates({ lastPrintedAt, lastReceivedAt }: {
+  lastPrintedAt: Date | null;
+  lastReceivedAt: Date | null;
+}) {
+  const t = useTranslations("Properties");
+  const locale = useLocale();
+
+  return (
+    <dl className="grid w-fit grid-cols-[auto_auto] gap-x-3 gap-y-0.5 whitespace-nowrap text-xs">
+      <dt className="text-muted-foreground">{t("rentBillLastPrintDate")}</dt>
+      <dd>{lastPrintedAt ? formatDate(lastPrintedAt, locale) : "—"}</dd>
+      <dt className="text-muted-foreground">{t("rentBillLastReceivedDate")}</dt>
+      <dd>{lastReceivedAt ? formatDate(lastReceivedAt, locale) : "—"}</dd>
+    </dl>
+  );
+}
 
 export function RentBillRowActions({ leaseId, month, revision, scoped }: {
   leaseId: string; month: string; revision: number; scoped: boolean;

@@ -17,7 +17,7 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { InitialAvatar } from "@/components/properties/initial-avatar";
 import { StatusPill, isRentSettled, rentPillStatus } from "@/components/properties/status-pill";
-import { RentBillRowActions } from "@/components/properties/rent-bill-row-actions";
+import { RentBillDates, RentBillRowActions } from "@/components/properties/rent-bill-row-actions";
 import { formatTaka } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import type { RentCollectionData } from "@/lib/tenants-data";
@@ -221,6 +221,7 @@ export function RentCollectionTable({
               <TableHead className="text-right">{t("invoiceSimplePaid")}</TableHead>
               <TableHead className="text-right">{t("remaining")}</TableHead>
               <TableHead>{t("status")}</TableHead>
+              <TableHead>{t("rentBillDates")}</TableHead>
               <TableHead className="sticky right-0 bg-background text-right">{t("actions")}</TableHead>
             </TableRow>
           </TableHeader>
@@ -266,6 +267,9 @@ export function RentCollectionTable({
                         </span>
                       ) : null}
                     </div>
+                  </TableCell>
+                  <TableCell>
+                    <RentBillDates lastPrintedAt={p.lastPrintedAt} lastReceivedAt={p.lastReceivedAt} />
                   </TableCell>
                   <TableCell className="sticky right-0 bg-background text-right">
                     <RentBillRowActions leaseId={p.id} month={selectedMonth} revision={p.printRevision} scoped={!!tenantLeaseId} />

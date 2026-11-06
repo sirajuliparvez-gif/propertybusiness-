@@ -273,38 +273,56 @@ export async function getRentCollectionData(requestedMonth?: string, tenantLease
   const currentMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
   const selectedMonth = isPaymentMonth(requestedMonth) && requestedMonth <= currentMonth ? requestedMonth : currentMonth;
   const activeTenants = data.tenants.filter((t) => t.leaseStatus === "ACTIVE" && (!tenantLeaseId || t.id === tenantLeaseId));
-  const selectedRows = await prisma.rentPayment.findMany({
-    where: { tenantLeaseId: { in: activeTenants.map((t) => t.id) }, month: selectedMonth },
-    select: {
-      tenantLeaseId: true,
-      dueDate: true,
-      dueAmount: true,
-      paidAmount: true,
-      paidAt: true,
-      status: true,
-      transactions: { orderBy: { date: "desc" }, take: 1, select: { method: true } },
-    },
-  });
-  const recordedMonths = await prisma.rentPayment.findMany({
-    where: { month: { lte: currentMonth } },
-    distinct: ["month"],
-    orderBy: { month: "desc" },
-    select: { month: true },
-  });
+  const leaseFilter = { in: activeTenants.map((tenant) => tenant.id) };
+  const [selectedRows, recordedMonths, printed, received] = await Promise.all([
+    prisma.rentPayment.findMany({
+      where: { tenantLeaseId: leaseFilter, month: selectedMonth },
+      select: {
+        tenantLeaseId: true,
+        dueDate: true,
+        dueAmount: true,
+        paidAmount: true,
+        paidAt: true,
+        status: true,
+        transactions: { orderBy: { date: "desc" }, take: 1, select: { method: true } },
+      },
+    }),
+    prisma.rentPayment.findMany({
+      where: { month: { lte: currentMonth } },
+      distinct: ["month"],
+      orderBy: { month: "desc" },
+      select: { month: true },
+    }),
+    prisma.rentBillPrint.groupBy({
+      by: ["tenantLeaseId"],
+      where: { month: selectedMonth, tenantLeaseId: leaseFilter },
+      _max: { revision: true, printedAt: true },
+    }),
+    prisma.transaction.groupBy({
+      by: ["tenantLeaseId"],
+      where: {
+        tenantLeaseId: leaseFilter,
+        direction: "INCOMING",
+        amount: { gt: 0 },
+        OR: [
+          { type: "RENT_RECEIVED_FROM_TENANT", rentPayment: { month: selectedMonth } },
+          { type: "UTILITY_REIMBURSEMENT_FROM_TENANT", utilityBill: { month: selectedMonth } },
+        ],
+      },
+      _max: { date: true },
+    }),
+  ]);
   const trackedMonths = currentMonth >= LEDGER_START_MONTH
     ? paymentMonthRange(LEDGER_START_MONTH, currentMonth, 600)
     : [];
   const rowByLease = new Map(selectedRows.map((row) => [row.tenantLeaseId, row]));
-  const printed = await prisma.rentBillPrint.groupBy({
-    by: ["tenantLeaseId"],
-    where: { month: selectedMonth, tenantLeaseId: { in: activeTenants.map((tenant) => tenant.id) } },
-    _max: { revision: true },
-  });
-  const printRevisions = new Map(printed.map((item) => [item.tenantLeaseId, item._max.revision ?? 0]));
+  const printByLease = new Map(printed.map((item) => [item.tenantLeaseId, item._max]));
+  const receivedByLease = new Map(received.map((item) => [item.tenantLeaseId, item._max.date]));
   const [year, monthNumber] = selectedMonth.split("-").map(Number);
 
   const payments = activeTenants.flatMap((tenant) => {
     const row = rowByLease.get(tenant.id);
+    const print = printByLease.get(tenant.id);
     // Before the ledger reset, only explicitly recorded months are real dues.
     if (!row && selectedMonth < LEDGER_START_MONTH) return [];
     const leaseStartMonth = `${tenant.startDate.getFullYear()}-${String(tenant.startDate.getMonth() + 1).padStart(2, "0")}`;
@@ -328,7 +346,9 @@ export async function getRentCollectionData(requestedMonth?: string, tenantLease
       currentPaidAt: row?.paidAt ?? null,
       selectedPaidAmount: paidAmount,
       selectedDueAmount: dueAmount,
-      printRevision: printRevisions.get(tenant.id) ?? 0,
+      printRevision: print?.revision ?? 0,
+      lastPrintedAt: print?.printedAt ?? null,
+      lastReceivedAt: receivedByLease.get(tenant.id) ?? null,
     }];
   });
   const totalDue = payments.reduce((sum, payment) => sum + payment.selectedDueAmount, 0);
