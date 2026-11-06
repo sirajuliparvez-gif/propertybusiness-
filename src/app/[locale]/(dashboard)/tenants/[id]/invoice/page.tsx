@@ -336,11 +336,11 @@ export default async function TenantInvoicePage({
               </TableRow>
               {monthUtilityRows.map(({ type, label, icon: Icon, bills, companyBills, due, remaining }) => {
                 const noBill = bills.length === 0 && companyBills.length === 0;
-                const missingAmount = noBill ? <span className="print:hidden">—</span> : "—";
+                const missingAmount = noBill ? null : "—";
 
                 return (
                   <TableRow key={type} className={cn(
-                    noBill && "print:h-[10mm] print:[&>td]:bg-transparent",
+                    noBill && "hidden print:table-row print:h-[10mm] print:[&>td]:bg-transparent",
                     [...bills, ...companyBills].some((b) => b.id === highlightedBillId) && "bg-primary/5 print:bg-transparent"
                   )}>
                     <th scope="row" className="p-2 text-left align-middle font-medium">
@@ -348,9 +348,6 @@ export default async function TenantInvoicePage({
                         <Icon aria-hidden="true" className="size-3.5 shrink-0 text-primary" />
                         {label}
                       </span>
-                      {noBill ? (
-                        <span className="block text-xs font-normal text-muted-foreground print:hidden">{t("cashMemoNoCharge")}</span>
-                      ) : null}
                       {companyBills.length > 0 ? (
                         <span className="block text-[0.7rem] font-normal text-muted-foreground">
                           {t("cashMemoCompanyShare", { amount: formatInvoiceAmount(companyBills.reduce((sum, b) => sum + b.amount, 0)) })}
