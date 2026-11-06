@@ -12,12 +12,13 @@ import { RentMonthSelect } from "@/components/properties/rent-month-select";
 export default async function RentCollectionPage({
   searchParams,
 }: {
-  searchParams: Promise<{ month?: string }>;
+  searchParams: Promise<{ month?: string; tenant?: string }>;
 }) {
   const t = await getTranslations("Properties");
   const arrears = await getTranslations("RentArrears");
-  const { month } = await searchParams;
-  const rentCollection = await getRentCollectionData(month);
+  const { month, tenant } = await searchParams;
+  const tenantLeaseId = typeof tenant === "string" && tenant ? tenant : undefined;
+  const rentCollection = await getRentCollectionData(month, tenantLeaseId);
   const { payments, totalDue, totalCollected, totalRemaining, collectionRate } = rentCollection;
 
   return (
@@ -30,14 +31,22 @@ export default async function RentCollectionPage({
         <FileText className="size-4" />{t("monthlyReportTitle")}
       </Button>
     </div>
-    <MobileRentList {...rentCollection} />
+    {tenantLeaseId ? (
+      <div className="mb-3 flex flex-wrap items-center justify-between gap-2 rounded-lg border px-3 py-2 text-sm">
+        <span>{payments[0]?.tenantName ?? t("rentSelectedTenant")}</span>
+        <Button size="sm" variant="outline" render={<Link href={`/rent?month=${rentCollection.selectedMonth}`} />} nativeButton={false}>
+          {t("rentShowAllTenants")}
+        </Button>
+      </div>
+    ) : null}
+    <MobileRentList key={tenantLeaseId ?? "all"} {...rentCollection} tenantLeaseId={tenantLeaseId} />
     <div className="hidden min-w-0 flex-1 flex-col gap-6 md:flex">
       <div className="flex items-start justify-between gap-3">
         <div>
           <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">{t("rentCollectionTitle")}</h1>
           <p className="text-sm text-muted-foreground">{t("rentPageSubtitle")}</p>
         </div>
-        <RentMonthSelect months={rentCollection.availableMonths} selectedMonth={rentCollection.selectedMonth} />
+        <RentMonthSelect months={rentCollection.availableMonths} selectedMonth={rentCollection.selectedMonth} tenantLeaseId={tenantLeaseId} />
       </div>
 
       <div className="grid grid-cols-2 gap-3 sm:gap-4 md:grid-cols-4">
@@ -67,7 +76,7 @@ export default async function RentCollectionPage({
         />
       </div>
 
-      <RentCollectionTable payments={payments} selectedMonth={rentCollection.selectedMonth} />
+      <RentCollectionTable key={tenantLeaseId ?? "all"} payments={payments} selectedMonth={rentCollection.selectedMonth} tenantLeaseId={tenantLeaseId} />
     </div>
     </>
   );

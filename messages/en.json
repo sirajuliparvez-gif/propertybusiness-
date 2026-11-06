@@ -1024,7 +1024,12 @@
 
     "currentTenantBalanceHint": "Current tenant's balance — you can correct it here",
 
-    "tenantsPageSubtitle": "See every tenant and their rent status across all properties",
+    "tenantsPageSubtitle": "Find tenants, review leases and update contact details.",
+    "tenantLeaseStatus": "Lease status",
+    "activeLeaseLabel": "Active",
+    "openRentCollection": "Go to rent collection",
+    "rentSelectedTenant": "Selected tenant",
+    "rentShowAllTenants": "Show all tenants",
     "activeTenantsCount": "Active Tenants",
     "collectedThisMonth": "Collected This Month",
     "collectionRate": "Collection Rate",
@@ -1051,7 +1056,7 @@
     "companyExpenseRowLabel": "Company Staff / Admin Expense",
 
     "rentCollectionTitle": "Rent Collection",
-    "rentPageSubtitle": "See and collect rent status across all properties by billing month",
+    "rentPageSubtitle": "Choose a month to collect rent and bills and see what is still due.",
     "rentMonthFilter": "Billing Month",
     "collectedForMonth": "Collected for Month",
     "collectionPendingAmount": "Still to Collect",

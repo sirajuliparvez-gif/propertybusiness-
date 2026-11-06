@@ -267,12 +267,12 @@ export type AllTenantsData = Awaited<ReturnType<typeof getAllTenantsData>>;
 // of this month's rent status per active lease, rather than the Tenants
 // page's full directory. Former/vacated leases don't owe current rent, so
 // they're excluded here (they still appear on the Tenants page).
-export async function getRentCollectionData(requestedMonth?: string) {
+export async function getRentCollectionData(requestedMonth?: string, tenantLeaseId?: string) {
   const data = await getAllTenantsData();
   const now = dhakaNow();
   const currentMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
   const selectedMonth = isPaymentMonth(requestedMonth) && requestedMonth <= currentMonth ? requestedMonth : currentMonth;
-  const activeTenants = data.tenants.filter((t) => t.leaseStatus === "ACTIVE");
+  const activeTenants = data.tenants.filter((t) => t.leaseStatus === "ACTIVE" && (!tenantLeaseId || t.id === tenantLeaseId));
   const selectedRows = await prisma.rentPayment.findMany({
     where: { tenantLeaseId: { in: activeTenants.map((t) => t.id) }, month: selectedMonth },
     select: {

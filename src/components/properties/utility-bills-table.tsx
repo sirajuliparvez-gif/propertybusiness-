@@ -291,12 +291,14 @@ export function UtilityBillsTable({
   bills,
   showPropertyColumn = false,
   unpaidOnly = false,
+  allowPayment = true,
   propertyOptions,
   returnTo,
 }: {
   bills: UtilityBillRow[];
   showPropertyColumn?: boolean;
   unpaidOnly?: boolean;
+  allowPayment?: boolean;
   // Every property to offer in the filter. Without it the list is derived from
   // the bills themselves, so a property with no bills yet could not be picked.
   propertyOptions?: { id: string; name: string }[];
@@ -558,7 +560,7 @@ export function UtilityBillsTable({
                       <span className="sr-only">{t("invoicePrint")}</span>
                     </Button>
                     <EditUtilityBillDialog bill={b} returnTo={rowReturnTo} />
-                    {b.status !== "PAID" ? (
+                    {allowPayment && b.status !== "PAID" ? (
                       <PayUtilityBillButton
                         billId={b.id}
                         propertyId={b.propertyId}

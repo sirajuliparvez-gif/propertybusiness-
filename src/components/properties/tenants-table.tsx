@@ -37,6 +37,7 @@ export function TenantsTable({
   const t = useTranslations("Properties");
   const [filter, setFilter] = useState<Filter>("all");
   const [propertyFilter, setPropertyFilter] = useState(ALL_PROPERTIES);
+  const [query, setQuery] = useState("");
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
 
@@ -63,8 +64,11 @@ export function TenantsTable({
   // bound, so it always overlaps any range that isn't entirely before its
   // start. Either side of the range can be left open (only one date picked).
   const filtered = useMemo(() => {
-    const byProperty =
-      propertyFilter === ALL_PROPERTIES ? tenants : tenants.filter((tn) => tn.propertyId === propertyFilter);
+    const search = query.trim().toLowerCase();
+    const byProperty = tenants.filter((tn) =>
+      (propertyFilter === ALL_PROPERTIES || tn.propertyId === propertyFilter) &&
+      (!search || `${tn.tenantName} ${tn.contactInfo ?? ""} ${tn.propertyName} ${tn.unitLabel}`.toLowerCase().includes(search))
+    );
 
     const byStatus =
       filter === "paid"
@@ -88,7 +92,7 @@ export function TenantsTable({
       const endsAfterRangeStarts = !rangeStart || !leaseEnd || leaseEnd >= rangeStart;
       return startsBeforeRangeEnds && endsAfterRangeStarts;
     });
-  }, [tenants, filter, propertyFilter, dateFrom, dateTo]);
+  }, [tenants, filter, propertyFilter, query, dateFrom, dateTo]);
 
   if (tenants.length === 0) {
     return <p className="py-8 text-center text-sm text-muted-foreground">{t("noTenants")}</p>;
@@ -105,7 +109,7 @@ export function TenantsTable({
     <div className="flex flex-col gap-3">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div className="flex flex-wrap gap-1.5">
-          {filters.map((f) => (
+          {filters.filter(({ key }) => !showPropertyColumn || key === "all" || key === "former").map((f) => (
             <button
               key={f.key}
               type="button"
@@ -123,6 +127,10 @@ export function TenantsTable({
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
+          {showPropertyColumn ? (
+            <Input value={query} onChange={(event) => setQuery(event.target.value)}
+              aria-label={t("rentSearchPlaceholder")} placeholder={t("rentSearchPlaceholder")} className="h-8 w-44" />
+          ) : null}
           <Input
             type="date"
             value={dateFrom}
@@ -188,9 +196,9 @@ export function TenantsTable({
               {showPropertyColumn ? <TableHead>{t("propertyLabel")}</TableHead> : null}
               <TableHead>{t("unit")}</TableHead>
               <TableHead className="text-right">{t("rentAmountColumn")}</TableHead>
-              <TableHead>{t("paymentMethod")}</TableHead>
-              <TableHead>{t("utilityBillStatusColumn")}</TableHead>
-              <TableHead>{t("thisMonth")}</TableHead>
+              {!showPropertyColumn ? <TableHead>{t("paymentMethod")}</TableHead> : null}
+              {!showPropertyColumn ? <TableHead>{t("utilityBillStatusColumn")}</TableHead> : null}
+              <TableHead>{t(showPropertyColumn ? "tenantLeaseStatus" : "thisMonth")}</TableHead>
               <TableHead className="text-right">{t("downpaymentBalance")}</TableHead>
               <TableHead className="text-right">{t("actions")}</TableHead>
             </TableRow>
@@ -225,7 +233,7 @@ export function TenantsTable({
                   <TableCell className="text-right font-mono tabular-nums">
                     {formatTaka(tn.monthlyRentAmount + tn.serviceChargeAmount)}
                   </TableCell>
-                  <TableCell>
+                  {!showPropertyColumn ? <TableCell>
                     {isFormer ? (
                       <span className="text-muted-foreground">—</span>
                     ) : tn.rentStatus === "ADJUSTED_FROM_DOWNPAYMENT" ? (
@@ -235,8 +243,8 @@ export function TenantsTable({
                     ) : (
                       <span className="text-muted-foreground">{paymentMethodLabel(t, tn.paymentMethod)}</span>
                     )}
-                  </TableCell>
-                  <TableCell>
+                  </TableCell> : null}
+                  {!showPropertyColumn ? <TableCell>
                     {tn.utilityBillStatus ? (
                       <Badge
                         className={cn(
@@ -251,7 +259,7 @@ export function TenantsTable({
                     ) : (
                       <span className="text-muted-foreground">—</span>
                     )}
-                  </TableCell>
+                  </TableCell> : null}
                   <TableCell>
                     {isFormer ? (
                       <div className="flex flex-col gap-0.5">
@@ -264,6 +272,8 @@ export function TenantsTable({
                           </span>
                         ) : null}
                       </div>
+                    ) : showPropertyColumn ? (
+                      <Badge variant="outline">{t("activeLeaseLabel")}</Badge>
                     ) : (
                       <div className="flex flex-col gap-0.5">
                         <StatusPill status={rentPillStatus(tn.rentStatus, tn.rentPastDue)} labels={rentStatusLabels} />
@@ -285,7 +295,7 @@ export function TenantsTable({
                   </TableCell>
                   <TableCell className="text-right">
                     <div className="flex items-center justify-end gap-1.5">
-                      <Button
+                      {!showPropertyColumn ? <Button
                         variant="outline"
                         size="icon-sm"
                         title={t("invoiceLabel")}
@@ -295,10 +305,10 @@ export function TenantsTable({
                       >
                         <Printer className="size-3.5" />
                         <span className="sr-only">{t("invoiceLabel")}</span>
-                      </Button>
+                      </Button> : null}
                       {isFormer ? null : (
                         <>
-                          <RecordTenantRentPaymentDialog
+                          {!showPropertyColumn ? <RecordTenantRentPaymentDialog
                             propertyId={tn.propertyId}
                             tenantLeaseId={tn.id}
                             tenantName={tn.tenantName}
@@ -312,14 +322,13 @@ export function TenantsTable({
                             paymentProgress={tn.paymentProgress}
                             overdueMonths={tn.overdueMonths}
                             monthSettled={isRentSettled(tn.rentStatus, tn.overdueAmount)}
-                            returnTo={showPropertyColumn ? "/tenants" : undefined}
                             iconOnly
                             triggerLabel={
                               isRentSettled(tn.rentStatus, tn.overdueAmount)
                                 ? t("advanceRentPayment")
                                 : t("collectRent")
                             }
-                          />
+                          /> : null}
                           <VacateTenantDialog
                             leaseId={tn.id}
                             propertyId={tn.propertyId}

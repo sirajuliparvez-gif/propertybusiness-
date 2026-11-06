@@ -1008,8 +1008,9 @@ export async function recordMultiMonthRentPayment(formData: FormData, newBills: 
   const returnUrl = new URL(returnTo, "http://local");
   if (returnUrl.pathname === "/rent") {
     const month = returnUrl.searchParams.get("month");
+    const scopedToTenant = returnUrl.searchParams.get("tenant") === tenantLeaseId;
     redirect({
-      href: `/tenants/${tenantLeaseId}/receipts/${paymentReceiptId}?from=rent${isPaymentMonth(month) ? `&month=${month}` : ""}`,
+      href: `/tenants/${tenantLeaseId}/receipts/${paymentReceiptId}?from=rent${isPaymentMonth(month) ? `&month=${month}` : ""}${scopedToTenant ? "&tenant=1" : ""}`,
       locale,
     });
   }

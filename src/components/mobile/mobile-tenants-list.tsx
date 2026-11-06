@@ -15,7 +15,7 @@ import type { PropertyDetail } from "@/lib/properties-data";
 
 type Filter = "all" | "paid" | "overdue" | "former";
 
-export function MobileTenantsList({ tenants }: { tenants: PropertyDetail["tenants"] }) {
+export function MobileTenantsList({ tenants, directory = false }: { tenants: PropertyDetail["tenants"]; directory?: boolean }) {
   const t = useTranslations("Properties");
   const [filter, setFilter] = useState<Filter>("all");
   const [query, setQuery] = useState("");
@@ -69,7 +69,7 @@ export function MobileTenantsList({ tenants }: { tenants: PropertyDetail["tenant
       </InputGroup>
 
       <div className="flex flex-wrap gap-1.5">
-        {filters.map((f) => (
+        {filters.filter(({ key }) => !directory || key === "all" || key === "former").map((f) => (
           <button
             key={f.key}
             type="button"
@@ -114,19 +114,21 @@ export function MobileTenantsList({ tenants }: { tenants: PropertyDetail["tenant
                         <Badge className="border-transparent bg-muted text-muted-foreground">
                           {t("vacatedLabel")}
                         </Badge>
+                      ) : directory ? (
+                        <Badge variant="outline">{t("activeLeaseLabel")}</Badge>
                       ) : (
                         <StatusPill status={rentPillStatus(tn.rentStatus, tn.rentPastDue)} labels={rentStatusLabels} />
                       )}
                     </div>
                   </Link>
-                  <Link
+                  {!directory ? <Link
                     href={`/tenants/${tn.id}/invoice`}
                     title={t("invoiceLabel")}
                     className="flex w-12 shrink-0 items-center justify-center border-l text-primary transition-colors active:bg-muted/60"
                   >
                     <Printer className="size-4" />
                     <span className="sr-only">{t("invoiceLabel")}</span>
-                  </Link>
+                  </Link> : null}
                 </li>
               );
             })}

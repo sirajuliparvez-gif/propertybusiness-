@@ -29,13 +29,15 @@ const ALL_PROPERTIES = "ALL";
 export function RentCollectionTable({
   payments,
   selectedMonth,
+  tenantLeaseId,
 }: {
   payments: RentCollectionData["payments"];
   selectedMonth: string;
+  tenantLeaseId?: string;
 }) {
   const t = useTranslations("Properties");
   const locale = useLocale();
-  const [filter, setFilter] = useState<Filter>("pending");
+  const [filter, setFilter] = useState<Filter>(tenantLeaseId ? "all" : "pending");
   const [propertyFilter, setPropertyFilter] = useState(ALL_PROPERTIES);
   const [query, setQuery] = useState("");
   const [dateFrom, setDateFrom] = useState("");
@@ -295,7 +297,7 @@ export function RentCollectionTable({
                         rentRates={p.rentRates}
                         paymentProgress={p.paymentProgress}
                         overdueMonths={p.overdueMonths}
-                        returnTo={`/rent?month=${selectedMonth}`}
+                        returnTo={`/rent?month=${selectedMonth}${tenantLeaseId ? `&tenant=${encodeURIComponent(tenantLeaseId)}` : ""}`}
                         initialBillingMonth={selectedMonth}
                         triggerLabel={t("collectRent")}
                       />

@@ -24,10 +24,12 @@ type Filter = "all" | "unpaid" | "paid";
 export function MobileUtilityBillsList({
   bills,
   unpaidOnly = false,
+  allowPayment = true,
   returnTo = "/utility-bills",
 }: {
   bills: UtilityBillRow[];
   unpaidOnly?: boolean;
+  allowPayment?: boolean;
   returnTo?: string;
 }) {
   const t = useTranslations("Properties");
@@ -126,7 +128,7 @@ export function MobileUtilityBillsList({
               return (
                 <li key={b.id} className="flex items-stretch">
                   <div className="min-w-0 flex-1">
-                    {b.status !== "PAID" ? (
+                    {allowPayment && b.status !== "PAID" ? (
                       <PayUtilityBillButton
                         billId={b.id}
                         propertyId={b.propertyId}

@@ -1024,7 +1024,12 @@
 
     "currentTenantBalanceHint": "বর্তমান ভাড়াটিয়ার ব্যালেন্স — সংশোধন করতে পারবেন",
 
-    "tenantsPageSubtitle": "সব প্রপার্টির ভাড়াটিয়া ও তাদের ভাড়ার অবস্থা একসাথে দেখুন",
+    "tenantsPageSubtitle": "ভাড়াটিয়া খুঁজুন, চুক্তি দেখুন ও যোগাযোগের তথ্য ঠিক করুন।",
+    "tenantLeaseStatus": "চুক্তির অবস্থা",
+    "activeLeaseLabel": "চলমান",
+    "openRentCollection": "ভাড়া আদায় পেজে যান",
+    "rentSelectedTenant": "নির্বাচিত ভাড়াটিয়া",
+    "rentShowAllTenants": "সব ভাড়াটিয়া দেখুন",
     "activeTenantsCount": "সক্রিয় ভাড়াটিয়া",
     "collectedThisMonth": "এই মাসে আদায়",
     "collectionRate": "আদায়ের হার",
@@ -1051,7 +1056,7 @@
     "companyExpenseRowLabel": "কোম্পানি স্টাফ / প্রশাসনিক খরচ",
 
     "rentCollectionTitle": "ভাড়া আদায়",
-    "rentPageSubtitle": "মাস বেছে নিয়ে দেখুন কার ভাড়া নেওয়া হয়েছে আর কারটা এখনো বাকি",
+    "rentPageSubtitle": "মাস বেছে ভাড়া ও বিলের টাকা নিন, আর কত বাকি দেখুন।",
     "rentMonthFilter": "যে মাসের হিসাব দেখবেন",
     "collectedForMonth": "টাকা নেওয়া হয়েছে",
     "collectionPendingAmount": "এখনো আদায় বাকি",

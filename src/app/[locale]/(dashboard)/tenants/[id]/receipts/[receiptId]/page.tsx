@@ -14,11 +14,11 @@ import { dhakaISO } from "@/lib/dhaka-time";
 
 export default async function MoneyReceiptPage({ params, searchParams }: {
   params: Promise<{ id: string; receiptId: string }>;
-  searchParams: Promise<{ from?: string; month?: string }>;
+  searchParams: Promise<{ from?: string; month?: string; tenant?: string }>;
 }) {
   await requireCurrentUser();
   const { id, receiptId } = await params;
-  const { from, month } = await searchParams;
+  const { from, month, tenant } = await searchParams;
   if (!/^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/.test(receiptId)) notFound();
 
   const entries = await prisma.transaction.findMany({
@@ -51,8 +51,9 @@ export default async function MoneyReceiptPage({ params, searchParams }: {
   })).sort((a, b) => a.month.localeCompare(b.month));
   const total = entries.slice(1).reduce((sum, entry) => sum.plus(entry.amount), first.amount);
   const selectedMonth = isPaymentMonth(month) ? `?month=${month}` : "";
+  const rentScope = tenant === "1" ? `${selectedMonth ? "&" : "?"}tenant=${encodeURIComponent(id)}` : "";
   const backHref = from === "invoice" ? `/tenants/${id}/invoice${selectedMonth}`
-    : from === "rent" ? `/rent${selectedMonth}` : `/transactions?month=${dhakaISO(first.date).slice(0, 7)}`;
+    : from === "rent" ? `/rent${selectedMonth}${rentScope}` : `/transactions?month=${dhakaISO(first.date).slice(0, 7)}`;
 
   return (
     <div className="mx-auto w-full max-w-2xl">

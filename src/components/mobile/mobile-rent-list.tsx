@@ -24,9 +24,10 @@ export function MobileRentList({
   collectionRate,
   selectedMonth,
   availableMonths,
-}: RentCollectionData) {
+  tenantLeaseId,
+}: RentCollectionData & { tenantLeaseId?: string }) {
   const t = useTranslations("Properties");
-  const [filter, setFilter] = useState<Filter>("pending");
+  const [filter, setFilter] = useState<Filter>(tenantLeaseId ? "all" : "pending");
   const [query, setQuery] = useState("");
 
   const rentStatusLabels = {
@@ -77,7 +78,7 @@ export function MobileRentList({
           <h1 className="text-2xl font-bold tracking-tight">{t("rentCollectionTitle")}</h1>
           <p className="text-sm text-muted-foreground">{t("rentPageSubtitle")}</p>
         </div>
-        <RentMonthSelect months={availableMonths} selectedMonth={selectedMonth} />
+        <RentMonthSelect months={availableMonths} selectedMonth={selectedMonth} tenantLeaseId={tenantLeaseId} />
       </div>
 
       <Card>
@@ -167,7 +168,7 @@ export function MobileRentList({
                   paymentProgress={p.paymentProgress}
                   overdueMonths={p.overdueMonths}
                   monthSettled={settled}
-                  returnTo={`/rent?month=${selectedMonth}`}
+                  returnTo={`/rent?month=${selectedMonth}${tenantLeaseId ? `&tenant=${encodeURIComponent(tenantLeaseId)}` : ""}`}
                   initialBillingMonth={selectedMonth}
                   variant="row"
                   triggerLabel={t("collectRent")}
