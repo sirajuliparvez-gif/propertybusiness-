@@ -740,6 +740,7 @@
     "receiptCheckSplit": "কোন বিলে কত পেয়েছেন মিলিয়ে নিন",
     "receiptCheckSplitInvalid": "কোনো খাতে পাওনার চেয়ে বেশি দেবেন না। সব খাতের যোগফল {amount} হতে হবে।",
     "receiptCheckRemaining": "এখনো বাকি",
+    "receiptCheckBalanceStays": "সেভ করলে বাকি টাকা {month}-এর বিলেই থাকবে।",
     "rentBillDifferent": "কম বা বেশি পেয়েছি",
     "rentBillExtraAdvance": "বাড়তি {amount} অগ্রিম জমা",
     "rentBillOriginalExpected": "ছাপা বিলে পাওনা ছিল {amount}।",

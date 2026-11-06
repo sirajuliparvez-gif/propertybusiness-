@@ -738,6 +738,7 @@
     "receiptCheckSplit": "Check how much you received for each bill",
     "receiptCheckSplitInvalid": "Each amount must fit its bill. The amounts must add up to {amount}.",
     "receiptCheckRemaining": "Still due",
+    "receiptCheckBalanceStays": "After saving, the balance stays on the bill for {month}.",
     "rentBillDifferent": "Received a different amount",
     "rentBillExtraAdvance": "Extra {amount} goes to advance balance",
     "rentBillOriginalExpected": "The printed bill showed {amount} due.",
