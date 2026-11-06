@@ -63,7 +63,8 @@ export type UtilityBillErrorCode =
   | "unitNotInProperty"
   | "amountBelowPaid"
   | "hasPayments"
-  | "invalidMeterReading";
+  | "invalidMeterReading"
+  | "billChanged";
 
 export type UtilityBillActionResult = { ok: true } | { ok: false; error: UtilityBillErrorCode };
 
@@ -318,7 +319,7 @@ export async function payUtilityBill(formData: FormData) {
 //    property).
 export async function updateUtilityBill(
   formData: FormData,
-  invoice?: { leaseId: string; month: string; electricityReading?: true },
+  invoice?: { leaseId: string; month: string; quickEdit?: true },
 ): Promise<UtilityBillActionResult> {
   await requireCurrentUser();
   const locale = await getLocale();
@@ -346,7 +347,7 @@ export async function updateUtilityBill(
       where: { id: billId },
       select: {
         unitId: true, propertyId: true, tenantLeaseId: true, month: true, dueDate: true,
-        paidAmount: true, previousMeterReadingOverride: true, type: true, paidByCompany: true, amount: true,
+        paidAmount: true, previousMeterReadingOverride: true, type: true, paidByCompany: true, amount: true, meterReading: true,
       },
     });
     if (!bill || bill.propertyId !== propertyId) return "notFound" as const;
@@ -357,7 +358,7 @@ export async function updateUtilityBill(
         where: { id: invoice.leaseId, status: "ACTIVE" },
         select: {
           unitId: true, startDate: true,
-          utilityBillDefaults: { where: { type: "ELECTRICITY" }, select: { amount: true } },
+          utilityBillDefaults: { where: { type }, select: { amount: true } },
         },
       });
       if (!lease || !unitId || lease.unitId !== unitId || bill.unitId !== unitId ||
@@ -365,13 +366,12 @@ export async function updateUtilityBill(
           bill.month !== invoice.month || dhakaISO(bill.dueDate) < dhakaISO(lease.startDate)) return "notFound" as const;
       if (!isValidTransactionDate(dueDate) || !dueDate.startsWith(`${invoice.month}-`) ||
           dueDate < dhakaISO(lease.startDate)) return "missingFields" as const;
-      if (invoice.electricityReading) {
-        if (type !== "ELECTRICITY" || bill.type !== "ELECTRICITY" || dueDate !== dhakaISO(bill.dueDate) ||
-            meterReading == null || previousMeterReadingOverride == null) return "invalidMeterReading" as const;
+      if (invoice.quickEdit) {
+        if (type !== bill.type || dueDate !== dhakaISO(bill.dueDate)) return "billChanged" as const;
         const fields = readUtilityBillFields(formData);
         if (lease.utilityBillDefaults[0]?.amount != null) {
           updatedAmount = bill.amount.toString();
-        } else if (!str(formData, "electricityUnitRate") || !fields) {
+        } else if (!fields) {
           return "invalidMeterReading" as const;
         } else {
           updatedAmount = fields.amount;
@@ -393,8 +393,12 @@ export async function updateUtilityBill(
     const paidAmount = Number(bill.paidAmount);
     if (Number(updatedAmount) < paidAmount) return "amountBelowPaid" as const;
 
-    await tx.utilityBill.update({
-      where: { id: billId },
+    const update = await tx.utilityBill.updateMany({
+      where: {
+        id: billId, paidAmount: bill.paidAmount, amount: bill.amount, type: bill.type, unitId: bill.unitId,
+        dueDate: bill.dueDate, paidByCompany: bill.paidByCompany, meterReading: bill.meterReading,
+        previousMeterReadingOverride: bill.previousMeterReadingOverride,
+      },
       data: {
         type,
         unitId,
@@ -411,6 +415,7 @@ export async function updateUtilityBill(
         status: paidAmount >= Number(updatedAmount) ? "PAID" : paidAmount > 0 ? "PARTIAL" : "UNPAID",
       },
     });
+    if (update.count !== 1) return "billChanged" as const;
     // The bill moved unit: its ledger rows move with it, otherwise unit and
     // transaction views would disagree about where this money sits (the
     // reimbursement follows whichever tenant is active on the new unit).

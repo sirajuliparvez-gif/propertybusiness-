@@ -147,6 +147,7 @@ export function EditUtilityBillDialog({
   }
 
   const errorMessages: Record<UtilityBillErrorCode, string> = {
+    billChanged: t("invoiceBillChanged"),
     missingFields: t("billErrMissingFields"),
     notFound: t("billErrNotFound"),
     unitNotInProperty: t("billErrUnitNotInProperty"),

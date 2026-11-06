@@ -37,6 +37,7 @@ export function DeleteUtilityBillButton({
   const [error, setError] = useState<UtilityBillErrorCode | null>(null);
 
   const errorMessages: Record<UtilityBillErrorCode, string> = {
+    billChanged: t("invoiceBillChanged"),
     missingFields: t("billErrMissingFields"),
     notFound: t("billErrNotFound"),
     unitNotInProperty: t("billErrUnitNotInProperty"),

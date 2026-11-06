@@ -14,7 +14,7 @@ import type { RentBillPrintKey, RentBillPrintRow } from "@/lib/rent-bill-print";
 const money = (cents: number) => formatTaka(cents / 100, 2);
 
 export function RentBillPrintForm({
-  leaseId, month, rows, printed, printedDate, revision, header, prepare, returnTo, embedded = false, addUtilityBill, utilityEditors,
+  leaseId, month, rows, printed, printedDate, revision, header, prepare, returnTo, embedded = false, utilityEditors,
 }: {
   leaseId: string;
   month: string;
@@ -26,7 +26,6 @@ export function RentBillPrintForm({
   prepare: boolean;
   returnTo: string;
   embedded?: boolean;
-  addUtilityBill?: ReactNode;
   utilityEditors?: Partial<Record<RentBillPrintKey, ReactNode>>;
 }) {
   const t = useTranslations("Properties");
@@ -79,12 +78,10 @@ export function RentBillPrintForm({
       <div className="print:hidden">
         {open ? (
           <section className="space-y-3 rounded-lg border bg-card p-4">
-            <div className="flex flex-wrap items-start justify-between gap-2">
-              <div>
-                <h2 className="font-semibold">{t(revision ? "rentBillCorrection" : "rentBillPrintOptions")}</h2>
-                <p className="text-xs text-muted-foreground">{t("rentBillChooseLines")}</p>
-              </div>
-              {addUtilityBill}
+            <div>
+              <h2 className="font-semibold">{t(revision ? "rentBillCorrection" : "rentBillPrintOptions")}</h2>
+              {utilityEditors ? <p className="text-xs text-muted-foreground">{t("invoiceInlineBillHint")}</p> : null}
+              <p className="text-xs text-muted-foreground">{t("rentBillChooseLines")}</p>
             </div>
             <fieldset disabled={pending} className="divide-y">
               {rows.map((row) => (
