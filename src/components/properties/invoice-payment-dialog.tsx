@@ -33,6 +33,7 @@ export function InvoicePaymentDialog({
   const [received, setReceived] = useState("");
   const [pending, startTransition] = useTransition();
   const rent = lines.filter((line) => line.kind === "rent" && line.month === month);
+  const hasEarlierUtilities = lines.some((line) => line.kind === "utility" && line.month < month);
   const total = lines.reduce((sum, line) => sum + line.remainingCents, 0);
   const rentTotal = rent.reduce((sum, line) => sum + line.remainingCents, 0);
   const normalizedAmount = received.replace(/[০-৯]/g, (digit) => String(digit.charCodeAt(0) - 0x09e6)).trim();
@@ -103,9 +104,11 @@ export function InvoicePaymentDialog({
           {valid && (
             <section className="grid gap-2 rounded-lg border bg-muted/40 p-3 text-sm" aria-live="polite">
               <p className="font-semibold">{t("invoicePaymentPreview", { amount: money(amount), remaining: money(total - amount) })}</p>
-              <p className="text-xs text-muted-foreground">
-                {t(onlyRent ? "invoicePaymentOnlyRent" : "invoiceOldestFirst")}
-              </p>
+              {onlyRent || hasEarlierUtilities ? (
+                <p className="text-xs text-muted-foreground">
+                  {t(onlyRent ? "invoicePaymentOnlyRent" : "invoiceOldestFirst")}
+                </p>
+              ) : null}
               <details>
                 <summary className="cursor-pointer text-muted-foreground">{t("invoicePaymentBreakdown")}</summary>
                 <ul className="mt-2 grid gap-1">

@@ -26,9 +26,8 @@ function currentMonthKey() {
   return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
 }
 
-// One statement per tenant and month: the month's rent, any rent still owed from earlier months, every utility bill
-// billed to this tenant that is dated in the month or still unpaid from before, and the balance left to pay. Printed
-// from the tenant page, the rent page or a utility bill, it always shows the same complete picture.
+// One statement per tenant and month, with the selected month's rent and utility bills.
+// The on-screen statement also shows unpaid utilities from earlier months.
 export default async function TenantInvoicePage({
   params,
   searchParams,
@@ -87,11 +86,6 @@ export default async function TenantInvoicePage({
   const [selectedYear, selectedMonthNumber] = selectedMonth.split("-").map(Number);
   const rentDeadline = new Date(selectedYear, selectedMonthNumber - 1, RENT_DUE_DAY);
   const adjustment = tenant.downpaymentAdjustments.find((a) => a.month === selectedMonth) ?? null;
-  const earlierRent = tenant.payments
-    .filter((p) => p.month < selectedMonth && p.dueAmount > p.paidAmount)
-    .map((p) => ({ ...p, remaining: p.dueAmount - p.paidAmount }))
-    .sort((a, b) => a.month.localeCompare(b.month));
-  const previousRentDue = earlierRent.reduce((sum, p) => sum + p.remaining, 0);
 
   const rentStatusLabels: Record<string, string> = {
     PAID: t("paid"),
@@ -141,16 +135,14 @@ export default async function TenantInvoicePage({
     status === "PAID" ? t("paid") : status === "PARTIAL" ? t("invoicePartiallyPaid") : t("billStatusUnpaid");
 
   // ---- totals
-  const totalDue = rentDue + earlierRent.reduce((sum, p) => sum + p.dueAmount, 0) + utilityDue;
+  const totalDue = rentDue + utilityDue;
   // An overpayment on one bill does not settle another bill.
-  const balance = rentRemaining + previousRentDue + utilityRemaining;
+  const balance = rentRemaining + utilityRemaining;
   const totalSettled = totalDue - balance;
   const previousUtilityDue = earlierUnpaidBills.reduce((sum, b) => sum + billRemaining(b), 0);
-  const previousBalance = previousRentDue + previousUtilityDue;
-  const monthlyBalance = balance - previousBalance;
+  const monthlyBalance = balance - previousUtilityDue;
 
   const paymentLines = [
-    ...earlierRent.map(({ month, remaining }) => ({ id: month, month, kind: "rent" as const, remaining, label: t("invoiceRentLabel") })),
     { id: selectedMonth, month: selectedMonth, kind: "rent" as const, remaining: rentRemaining, label: t("invoiceRentLabel") },
     ...statementBills.map((bill) => ({
       id: bill.id, month: bill.month, kind: "utility" as const, remaining: billRemaining(bill), label: utilityTypeLabels[bill.type],
@@ -234,15 +226,15 @@ export default async function TenantInvoicePage({
               <dd data-testid="invoice-total-paid" className="text-base font-semibold tabular-nums text-success">{formatInvoiceAmount(totalSettled)}</dd>
             </div>
           </dl>
-          {previousBalance > 0 ? (
+          {previousUtilityDue > 0 ? (
             <dl className="tenant-bill-breakdown flex flex-wrap gap-x-6 gap-y-2 border-t border-primary/15 px-4 py-2.5 text-xs sm:px-6">
               <div className="flex items-baseline gap-1.5">
                 <dt className="text-muted-foreground">{t("cashMemoMonthlyBalance")}</dt>
                 <dd className="font-semibold tabular-nums">{formatInvoiceAmount(monthlyBalance)}</dd>
               </div>
               <div className="flex items-baseline gap-1.5">
-                <dt className="text-muted-foreground">{t("cashMemoEarlierBalance")}</dt>
-                <dd className="font-semibold tabular-nums">{formatInvoiceAmount(previousBalance)}</dd>
+                <dt className="text-muted-foreground">{t("cashMemoEarlierUtilities")}</dt>
+                <dd className="font-semibold tabular-nums">{formatInvoiceAmount(previousUtilityDue)}</dd>
               </div>
             </dl>
           ) : null}
@@ -345,37 +337,6 @@ export default async function TenantInvoicePage({
             </div>
           ) : null}
         </section>
-
-        {earlierRent.length > 0 ? (
-          <section className="min-w-0 print:hidden" data-testid="invoice-rent-arrears">
-            <div className="flex flex-wrap items-center justify-between gap-2 tenant-bill-section-label rounded-t-md border-b bg-muted/60 px-3 py-2.5 text-sm print:break-after-avoid">
-              <h2 className="font-semibold">{t("invoicePreviousRentDue")}</h2>
-              <span data-testid="invoice-previous-rent" className="font-mono text-sm font-semibold tabular-nums text-destructive">
-                {formatInvoiceAmount(previousRentDue)}
-              </span>
-            </div>
-            <Table className="text-xs">
-              <TableHeader>
-                <TableRow>
-                  <TableHead scope="col" className="h-8 whitespace-normal">{t("invoiceBillMonth")}</TableHead>
-                  <TableHead scope="col" className="h-8 whitespace-normal text-right">{t("invoiceSimpleBillTotal")}</TableHead>
-                  <TableHead scope="col" className="h-8 whitespace-normal text-right">{t("invoiceSimplePaid")}</TableHead>
-                  <TableHead scope="col" className="h-8 whitespace-normal text-right">{t("remaining")}</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {earlierRent.map((p) => (
-                  <TableRow key={p.month}>
-                    <TableCell className="whitespace-normal font-medium">{monthLabel(p.month, locale)}</TableCell>
-                    <TableCell className="text-right tabular-nums">{formatInvoiceAmount(p.dueAmount)}</TableCell>
-                    <TableCell className="text-right tabular-nums">{formatInvoiceAmount(p.paidAmount)}</TableCell>
-                    <TableCell className="text-right font-semibold tabular-nums text-destructive">{formatInvoiceAmount(p.remaining)}</TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          </section>
-        ) : null}
 
         {detailBills.length > 0 ? (
           <section className="min-w-0 print:hidden">

@@ -658,10 +658,9 @@ export async function recordOverdueRentPayment(formData: FormData) {
       }));
       const byMonth = new Map(payments.map((payment) => [payment.month, payment]));
       const property = lease.unit.unitType.property;
-      // For report payments use its exact billing rules and displayed range,
-      // including recorded bills from earlier months.
+      // Match the monthly bill: earlier rent is collected from the arrears workflow.
       const invoiceEntries = invoiceMonth ? payments
-        .filter((payment) => payment.month <= invoiceMonth)
+        .filter((payment) => payment.month === invoiceMonth)
         .map(({ month, dueAmount, paidAmount }) => ({ month, dueAmount, paidAmount, gap: Math.max(0, dueAmount - paidAmount) })) : [];
       if (invoiceMonth && (lease.status !== "ACTIVE" || property.deletedAt)) return false;
       if (invoiceMonth && !byMonth.has(invoiceMonth) && invoiceMonth >= LEDGER_START_MONTH &&

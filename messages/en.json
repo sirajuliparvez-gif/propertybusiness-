@@ -708,7 +708,7 @@
     "invoicePaymentAmount": "Amount you’re taking",
     "invoicePaymentInvalid": "Enter a valid amount within the balance.",
     "invoicePaymentChanged": "The balance changed. Check the new amount and try again.",
-    "invoiceOldestFirst": "The oldest bills are paid first.",
+    "invoiceOldestFirst": "Earlier unpaid utility bills are paid first.",
     "invoicePaymentPreview": "Taking {amount} · Balance after payment {remaining}",
     "invoicePaymentBreakdown": "How much goes to each bill",
     "invoiceMoneyMethod": "How did you receive the money?",

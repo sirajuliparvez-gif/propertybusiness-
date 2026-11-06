@@ -710,7 +710,7 @@
     "invoicePaymentAmount": "কত টাকা নিচ্ছেন",
     "invoicePaymentInvalid": "বাকির মধ্যে সঠিক টাকার অঙ্ক লিখুন।",
     "invoicePaymentChanged": "বাকির অঙ্ক বদলেছে। নতুন হিসাব দেখে আবার চেষ্টা করুন।",
-    "invoiceOldestFirst": "আগের মাসের বাকি আগে মিটবে।",
+    "invoiceOldestFirst": "আগের মাসের বকেয়া ইউটিলিটি আগে মিটবে।",
     "invoicePaymentPreview": "নিচ্ছেন {amount} · এরপর বাকি {remaining}",
     "invoicePaymentBreakdown": "কোন বিলে কত যাবে",
     "invoiceMoneyMethod": "কীভাবে টাকা পেয়েছেন",
