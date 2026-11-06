@@ -151,14 +151,14 @@ export function RecordTenantRentPaymentDialog({
   const [utilityLoadFailed, setUtilityLoadFailed] = useState(false);
   const [utilityRefresh, setUtilityRefresh] = useState(0);
   useEffect(() => {
-    if (mode !== "overdue" && !(simpleCollection && mode === "multiMonth")) return;
+    if (!open || (mode !== "overdue" && !(simpleCollection && mode === "multiMonth"))) return;
     let active = true;
     getTenantUtilityArrears(tenantLeaseId, simpleCollection).then(
       (bills) => { if (active) setUtilityArrears(bills); },
       () => { if (active) setUtilityLoadFailed(true); },
     );
     return () => { active = false; };
-  }, [mode, simpleCollection, tenantLeaseId, utilityRefresh]);
+  }, [open, mode, simpleCollection, tenantLeaseId, utilityRefresh]);
 
   const [monthOptions, setMonthOptions] = useState<Awaited<ReturnType<typeof getMultiMonthRentOptions>> | null>(null);
   const [monthOptionsFailed, setMonthOptionsFailed] = useState(false);
@@ -223,7 +223,13 @@ export function RecordTenantRentPaymentDialog({
     OTHER: t("utilityTypeOther"),
   };
   const utilityTotal = utilityArrears?.reduce((sum, bill) => sum + Number(utilityAmounts[bill.id] || 0), 0) ?? 0;
-  const overdueValue = Number(overdueAmount);
+  const trimmedOverdueAmount = overdueAmount.trim();
+  const overdueValue = trimmedOverdueAmount === "" ? 0
+    : /^(?:\d+|\d{1,3}(?:,\d{2,3})*,\d{3})(?:\.\d+)?$/.test(trimmedOverdueAmount)
+      ? Number(trimmedOverdueAmount.replaceAll(",", ""))
+      : NaN;
+  const invalidOverdueAmount = trimmedOverdueAmount !== "" &&
+    (!Number.isFinite(overdueValue) || overdueValue > totalOverdueAmount);
   const validOverdueAmount = Number.isFinite(overdueValue) && overdueValue > 0 && overdueValue <= totalOverdueAmount;
   const canSubmitOverdue = validOverdueAmount || (overdueValue === 0 && utilityTotal > 0);
   const allocations = mode === "overdue" && validOverdueAmount ? allocateRentPayment(overdueMonths, overdueValue) : [];
@@ -236,7 +242,7 @@ export function RecordTenantRentPaymentDialog({
   const showUtilityBills = !simpleCollection && mode === "cash" && isPaymentMonth(billingMonth);
   const actionMonth = mode === "advance" ? startMonth : billingMonth;
   const actionAmount =
-    mode === "advance" ? advanceTotal : mode === "overdue" ? overdueValue + utilityTotal : Number(amount);
+    mode === "advance" ? advanceTotal : mode === "overdue" ? (Number.isFinite(overdueValue) ? overdueValue : 0) + utilityTotal : Number(amount);
   const dialogTitle =
     mode === "multiMonth" ? t("multiMonthTitle") : mode === "advance" ? t("advanceRentPayment") : mode === "overdue" ? (arrearsPeriod ? triggerLabel ?? t("settleOverdue") : t("settleOverdue")) : t("collectRent");
   const submitLabel =
@@ -372,6 +378,8 @@ export function RecordTenantRentPaymentDialog({
                     setUtilityArrears(null);
                   }
                 } else if (mode === "overdue") {
+                  if (!canSubmitOverdue || isPending) return;
+                  formData.set("amount", String(overdueValue));
                   const result = await recordOverdueRentPayment(formData);
                   if (result?.reason === "changed") {
                     toast.error(t(utilityTotal > 0 ? "overdueUtilityBalanceChanged" : "overdueBalanceChanged"));
@@ -614,14 +622,19 @@ export function RecordTenantRentPaymentDialog({
                 <FormField label={t("oldRentAmount")} htmlFor="rentOverdueAmount">
                   <Input
                     id="rentOverdueAmount"
-                    name="amount"
-                    type="number"
-                    step="any"
-                    min={0}
-                    max={totalOverdueAmount}
+                    type="text"
+                    inputMode="decimal"
+                    aria-invalid={invalidOverdueAmount}
+                    aria-describedby={invalidOverdueAmount ? "rent-overdue-amount-error" : undefined}
                     value={overdueAmount}
-                    onChange={(e) => setOverdueAmount(e.target.value)}
+                    onFocus={(event) => event.currentTarget.select()}
+                    onChange={(event) => setOverdueAmount(event.target.value)}
                   />
+                  {invalidOverdueAmount ? (
+                    <p id="rent-overdue-amount-error" className="text-xs text-destructive">
+                      {t("overdueAmountLimit", { amount: formatTaka(totalOverdueAmount, 2) })}
+                    </p>
+                  ) : null}
                 </FormField>
                 {allocations.length > 0 ? (
                   <div className="space-y-2 rounded-lg border p-3 text-sm">

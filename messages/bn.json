@@ -967,6 +967,7 @@
     "overdueAllocation": "কোন মাসে কত টাকা বসবে",
     "overdueAfterPayment": "আদায়ের পর বাকি: {amount}",
     "overdueBalanceChanged": "বকেয়ার হিসাব বদলেছে। আবার সেভ করার আগে হালনাগাদ হিসাব দেখুন।",
+    "overdueAmountLimit": "৳0 থেকে {amount} পর্যন্ত অঙ্ক ইংরেজিতে লিখুন।",
     "overdueInvalidPayment": "টাকার পরিমাণ ও তারিখ যাচাই করুন।",
     "overdueOldestFirstHint": "একাধিক মাস বকেয়া থাকলে আংশিক টাকা দিলেও সবচেয়ে পুরনো মাস আগে সেটল হবে।",
     "overdueRent": "বকেয়া ভাড়া",

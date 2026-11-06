@@ -967,6 +967,7 @@
     "overdueAllocation": "Payment by month",
     "overdueAfterPayment": "Remaining after payment: {amount}",
     "overdueBalanceChanged": "The balance changed. Review the updated account before submitting again.",
+    "overdueAmountLimit": "Enter an amount from ৳0 to {amount}.",
     "overdueInvalidPayment": "Check the payment amount and date.",
     "overdueOldestFirstHint": "If several months are overdue, a partial payment still settles the oldest one first.",
     "overdueRent": "Overdue Rent",
