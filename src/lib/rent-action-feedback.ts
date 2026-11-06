@@ -3,6 +3,7 @@ export type RentActionResult =
   | "alreadyPaid"
   | "advance"
   | "overdue"
+  | "overdueWithUtilities"
   | "arrearsAdded"
   | "arrearsAlreadyExists"
   | "historicalRentCorrected"

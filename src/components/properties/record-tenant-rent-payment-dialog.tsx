@@ -1,7 +1,7 @@
 "use client";
 
 import { dhakaTodayISO } from "@/lib/dhaka-time";
-import { useState, useTransition } from "react";
+import { useEffect, useState, useTransition } from "react";
 import { useLocale, useTranslations } from "next-intl";
 import { Loader2, Wallet } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -30,6 +30,7 @@ import {
   recordTenantRentPayment,
   recordAdvanceRentPayment,
   recordOverdueRentPayment,
+  getTenantUtilityArrears,
 } from "@/lib/actions/tenant-rent";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
@@ -137,8 +138,30 @@ export function RecordTenantRentPaymentDialog({
   const [monthsCount, setMonthsCount] = useState("3");
   const totalOverdueAmount = overdueMonths.reduce((sum, m) => sum + m.gap, 0);
   const [overdueAmount, setOverdueAmount] = useState(String(totalOverdueAmount || ""));
+  const [utilityArrears, setUtilityArrears] = useState<Awaited<ReturnType<typeof getTenantUtilityArrears>> | null>(null);
+  const [utilityAmounts, setUtilityAmounts] = useState<Record<string, string>>({});
+  const [utilityLoadFailed, setUtilityLoadFailed] = useState(false);
+  const [utilityRefresh, setUtilityRefresh] = useState(0);
+  useEffect(() => {
+    if (mode !== "overdue") return;
+    let active = true;
+    getTenantUtilityArrears(tenantLeaseId).then(
+      (bills) => { if (active) setUtilityArrears(bills); },
+      () => { if (active) setUtilityLoadFailed(true); },
+    );
+    return () => { active = false; };
+  }, [mode, tenantLeaseId, utilityRefresh]);
+
+  const utilityTypeLabels = {
+    GAS: t("utilityTypeGas"),
+    ELECTRICITY: t("utilityTypeElectricity"),
+    WATER: t("utilityTypeWater"),
+    OTHER: t("utilityTypeOther"),
+  };
+  const utilityTotal = utilityArrears?.reduce((sum, bill) => sum + Number(utilityAmounts[bill.id] || 0), 0) ?? 0;
   const overdueValue = Number(overdueAmount);
   const validOverdueAmount = Number.isFinite(overdueValue) && overdueValue > 0 && overdueValue <= totalOverdueAmount;
+  const canSubmitOverdue = validOverdueAmount || (overdueValue === 0 && utilityTotal > 0);
   const allocations = mode === "overdue" && validOverdueAmount ? allocateRentPayment(overdueMonths, overdueValue) : [];
   const advanceTotal = Array.from({ length: Number(monthsCount) || 0 }, (_, index) => {
     const [year, monthNumber] = startMonth.split("-").map(Number);
@@ -149,14 +172,14 @@ export function RecordTenantRentPaymentDialog({
   const showUtilityBills = mode === "cash" && isPaymentMonth(billingMonth);
   const actionMonth = mode === "advance" ? startMonth : billingMonth;
   const actionAmount =
-    mode === "advance" ? advanceTotal : mode === "overdue" ? Number(overdueAmount) : Number(amount);
+    mode === "advance" ? advanceTotal : mode === "overdue" ? overdueValue + utilityTotal : Number(amount);
   const dialogTitle =
     mode === "advance" ? t("advanceRentPayment") : mode === "overdue" ? (arrearsPeriod ? triggerLabel ?? t("settleOverdue") : t("settleOverdue")) : t("collectRent");
   const submitLabel =
     mode === "advance"
       ? t("recordAdvanceRentAction", { count: Number(monthsCount) || 0, amount: formatTaka(actionAmount || 0) })
       : mode === "overdue"
-        ? t("recordOverdueRentAction", { amount: formatTaka(actionAmount || 0) })
+        ? t(utilityTotal > 0 ? "recordOverdueWithUtilitiesAction" : "recordOverdueRentAction", { amount: formatTaka(actionAmount || 0, 2) })
         : t("recordRentAction", {
             month: monthLabel(actionMonth, locale),
             amount: formatTaka(actionAmount || 0),
@@ -217,7 +240,7 @@ export function RecordTenantRentPaymentDialog({
                 .join(" · ")}
             </p>
             <p className="mt-1 text-xs font-medium text-foreground">
-              {mode === "overdue" ? dialogTitle : monthLabel(actionMonth, locale)} · {formatTaka(actionAmount || 0)}
+              {mode === "overdue" ? dialogTitle : monthLabel(actionMonth, locale)} · {formatTaka(actionAmount || 0, 2)}
             </p>
           </div>
         ) : null}
@@ -228,7 +251,11 @@ export function RecordTenantRentPaymentDialog({
                 if (mode === "overdue") {
                   const result = await recordOverdueRentPayment(formData);
                   if (result?.reason === "changed") {
-                    toast.error(t("overdueBalanceChanged"));
+                    toast.error(t(utilityTotal > 0 ? "overdueUtilityBalanceChanged" : "overdueBalanceChanged"));
+                    setUtilityArrears(null);
+                    setUtilityAmounts({});
+                    setUtilityLoadFailed(false);
+                    setUtilityRefresh((version) => version + 1);
                     router.refresh();
                   } else if (result?.reason === "invalid") {
                     toast.error(t("overdueInvalidPayment"));
@@ -259,11 +286,9 @@ export function RecordTenantRentPaymentDialog({
                   <TabsTrigger value="cash" className="flex-1 text-xs">
                     {t("cashPayment")}
                   </TabsTrigger>
-                  {overdueMonths.length > 0 ? (
-                    <TabsTrigger value="overdue" disabled={hasUtilityDraft} className="flex-1 text-xs">
-                      {t("settleOverdue")}
-                    </TabsTrigger>
-                  ) : null}
+                  <TabsTrigger value="overdue" disabled={hasUtilityDraft} className="flex-1 text-xs">
+                    {t("settleOverdue")}
+                  </TabsTrigger>
                   <TabsTrigger value="advance" disabled={hasUtilityDraft} className="flex-1 text-xs">
                     {t("advanceRentPayment")}
                   </TabsTrigger>
@@ -356,7 +381,7 @@ export function RecordTenantRentPaymentDialog({
                     ? t("arrearsPeriodHint", { from: monthLabel(arrearsPeriod.from, locale), to: monthLabel(arrearsPeriod.to, locale), total: formatTaka(totalOverdueAmount) })
                     : t("overdueMonthsHint", { count: overdueMonths.length, total: formatTaka(totalOverdueAmount) })}
                 </p>
-                <FormField label={t("amount")} htmlFor="rentOverdueAmount" required>
+                <FormField label={t("oldRentAmount")} htmlFor="rentOverdueAmount">
                   <Input
                     id="rentOverdueAmount"
                     name="amount"
@@ -364,7 +389,6 @@ export function RecordTenantRentPaymentDialog({
                     step="any"
                     min={0}
                     max={totalOverdueAmount}
-                    required
                     value={overdueAmount}
                     onChange={(e) => setOverdueAmount(e.target.value)}
                   />
@@ -423,6 +447,42 @@ export function RecordTenantRentPaymentDialog({
               </p>
             ) : null}
 
+            {mode === "overdue" ? (
+              <section className="space-y-3 rounded-lg border p-3" aria-label={t("oldUtilityBills")}>
+                <h3 className="font-semibold">{t("oldUtilityBills")}</h3>
+                {utilityLoadFailed ? (
+                  <p role="status" className="text-xs text-destructive">{t("oldUtilityLoadFailed")}</p>
+                ) : utilityArrears == null ? (
+                  <p role="status" className="text-xs text-muted-foreground">{t("oldUtilityLoading")}</p>
+                ) : utilityArrears.length === 0 ? (
+                  <p className="text-xs text-muted-foreground">{t("oldUtilityEmpty")}</p>
+                ) : (
+                  <>
+                    <p className="text-xs text-muted-foreground">{t("oldUtilityPaymentHint")}</p>
+                    {utilityArrears.map((bill) => (
+                      <div key={bill.id} className="grid items-center gap-2 border-t pt-2 sm:grid-cols-[1fr_9rem]">
+                        <label htmlFor={`utility-arrears-${bill.id}`} className="text-sm">
+                          {utilityTypeLabels[bill.type]} · {monthLabel(bill.month, locale)}
+                          <span className="block text-xs text-muted-foreground">
+                            {t("utilityRemainingDue", { amount: formatTaka(bill.remaining, 2) })}
+                          </span>
+                        </label>
+                        <Input id={`utility-arrears-${bill.id}`} name={`utilityPayment:${bill.id}`}
+                          type="number" step="any" min={0} max={bill.remaining}
+                          placeholder={t("oldUtilityPaymentAmount")}
+                          value={utilityAmounts[bill.id] ?? ""}
+                          onChange={(event) => {
+                            const value = event.target.value;
+                            setUtilityAmounts((amounts) => ({ ...amounts, [bill.id]: value }));
+                          }}
+                        />
+                      </div>
+                    ))}
+                  </>
+                )}
+              </section>
+            ) : null}
+
             <FormField label={t("paymentDate")} htmlFor="rentPaymentDate" required>
               <Input id="rentPaymentDate" name="date" type="date" max={todayValue} defaultValue={todayValue} required />
             </FormField>
@@ -476,7 +536,7 @@ export function RecordTenantRentPaymentDialog({
                   <DialogClose render={<Button type="button" variant="outline" />}>
                     {t("cancel")}
                   </DialogClose>
-                  <Button type="submit" disabled={isPending || (mode === "overdue" && !validOverdueAmount)}>
+                  <Button type="submit" disabled={isPending || (mode === "overdue" && !canSubmitOverdue)}>
                     {isPending ? <Loader2 className="size-4 animate-spin" /> : null}
                     {submitLabel}
                   </Button>

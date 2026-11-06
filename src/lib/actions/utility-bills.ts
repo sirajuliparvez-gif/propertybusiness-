@@ -218,10 +218,11 @@ export async function payUtilityBill(formData: FormData) {
     if (billPortion <= 0 && companyAmount <= 0 && profitAmount <= 0) return;
     const paidDate = dhakaToday();
 
-    await tx.utilityBill.update({
-      where: { id: billId },
+    const updated = await tx.utilityBill.updateMany({
+      where: { id: billId, paidAmount: bill.paidAmount, status: bill.status },
       data: { paidAmount: newPaidAmount, status: newStatus },
     });
+    if (updated.count === 0) return;
 
     if (billPortion > 0) {
       // The company's policy: every other bill gets assigned to whichever

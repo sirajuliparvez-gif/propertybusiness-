@@ -73,11 +73,12 @@ export function AddUtilityBillForm(props: BillFormProps) {
   const [unitId, setUnitId] = useState(NONE_VALUE);
   const [paidByCompany, setPaidByCompany] = useState(false);
   const [meterReading, setMeterReading] = useState("");
+  const [unitRate, setUnitRate] = useState("");
   const [draftAmount, setDraftAmount] = useState("");
   const [draftDate, setDraftDate] = useState<string | null>(null);
   const [queuedBills, setQueuedBills] = useState<{ id: number; data: FormData }[]>([]);
   const nextBillId = useRef(0);
-  const hasDraft = isPending || !!draftAmount || !!meterReading || queuedBills.length > 0;
+  const hasDraft = isPending || !!draftAmount || !!meterReading || !!unitRate || queuedBills.length > 0;
   useEffect(() => {
     onDraftChange?.(hasDraft);
   }, [hasDraft, onDraftChange]);
@@ -129,6 +130,15 @@ export function AddUtilityBillForm(props: BillFormProps) {
   const consumption =
     meterReading && previousReading != null ? Number(meterReading) - previousReading : null;
 
+  const usingUnitRate = !!tenantBilling && type === "ELECTRICITY" && unitRate !== "";
+  const rateTotal = (consumption ?? 0) * Number(unitRate);
+  const calculatedAmount = usingUnitRate && (consumption ?? 0) > 0 &&
+    Number.isFinite(rateTotal) && rateTotal > 0
+    ? rateTotal.toFixed(2)
+    : "";
+  const billAmount = usingUnitRate ? calculatedAmount : draftAmount;
+  const invalidCalculation = usingUnitRate && (!calculatedAmount || Number(calculatedAmount) <= 0);
+
   const typeLabels: Record<UtilityType, string> = {
     GAS: t("utilityTypeGas"),
     ELECTRICITY: t("utilityTypeElectricity"),
@@ -143,6 +153,7 @@ export function AddUtilityBillForm(props: BillFormProps) {
     setType(next);
     setPaidByCompany(next === "WATER");
     setMeterReading("");
+    setUnitRate("");
   }
   const isWater = type === "WATER";
 
@@ -158,7 +169,7 @@ export function AddUtilityBillForm(props: BillFormProps) {
       <ul aria-label={t("utilityBillsToSave")} className="divide-y rounded-lg border">
         {queuedBills.map(({ id, data }) => {
           const label = typeLabels[data.get("type") as UtilityType];
-          const amount = formatTaka(Number(data.get("amount")));
+          const amount = formatTaka(Number(data.get("amount")), 2);
           const dueDate = formatDate(new Date(String(data.get("dueDate"))), locale);
           return (
             <li key={id} className="flex items-center justify-between gap-2 px-3 py-1.5">
@@ -188,7 +199,7 @@ export function AddUtilityBillForm(props: BillFormProps) {
         }
         try {
           const bills = queuedBills.map((bill) => bill.data);
-          if (draftAmount) bills.push(formData);
+          if (billAmount) bills.push(formData);
           const result = await addTenantUtilityBills(tenantBilling.leaseId, tenantBilling.month, bills);
           if (!result.ok) {
             toast.error(t(result.error));
@@ -240,7 +251,8 @@ export function AddUtilityBillForm(props: BillFormProps) {
       <FormField label={t("amount")} htmlFor="utilityBillAmount" required>
         <Input id="utilityBillAmount" name="amount" type="number" step="any" min={tenantBilling ? 0.01 : 0}
           required={!queuedBills.length || !!meterReading}
-          value={tenantBilling ? draftAmount : undefined}
+          value={tenantBilling ? billAmount : undefined}
+          readOnly={usingUnitRate}
           onChange={tenantBilling ? (event) => setDraftAmount(event.target.value) : undefined}
         />
       </FormField>
@@ -269,14 +281,23 @@ export function AddUtilityBillForm(props: BillFormProps) {
               onChange={(event) => setMeterReading(event.target.value)}
             />
           </FormField>
+          {tenantBilling ? (
+            <FormField label={t("electricityUnitRate")} htmlFor="utilityBillUnitRate" className="sm:col-span-2">
+              <Input id="utilityBillUnitRate" type="number" step="any" min={0} value={unitRate}
+                onChange={(event) => setUnitRate(event.target.value)} />
+            </FormField>
+          ) : null}
           <p aria-live="polite" className="text-xs text-muted-foreground sm:col-span-2">
-            {consumption != null
-              ? t("consumptionPreview", { units: consumption })
+            {calculatedAmount
+              ? t("electricityRateCalculation", { units: consumption ?? 0, rate: unitRate, amount: formatTaka(Number(calculatedAmount), 2) })
+              : consumption != null
+                ? t("consumptionPreview", { units: consumption })
               : previousReading == null
                 ? t(lookupForDate?.failed ? "meterReadingLookupFailed"
                   : tenantBilling && !lookupForDate && readingDate ? "meterReadingLoading" : "noPreviousMeterReading")
                 : null}
           </p>
+          {invalidCalculation ? <p className="text-xs text-destructive sm:col-span-2">{t("electricityRateNeedsReadings")}</p> : null}
         </div>
       ) : null}
 
@@ -320,7 +341,7 @@ export function AddUtilityBillForm(props: BillFormProps) {
 
       {tenantBilling ? (
         <div className="flex flex-wrap justify-end gap-2 border-t pt-3 sm:col-span-2">
-          <Button type="button" variant="outline" disabled={isPending || !draftAmount}
+          <Button type="button" variant="outline" disabled={isPending || !billAmount || invalidCalculation}
             onClick={(event) => {
               const form = event.currentTarget.form;
               if (!form?.reportValidity()) return;
@@ -331,9 +352,9 @@ export function AddUtilityBillForm(props: BillFormProps) {
             <Plus className="size-3.5" />
             {t("addAnotherUtilityBill")}
           </Button>
-          <Button type="submit" variant="secondary" disabled={isPending || (!draftAmount && !queuedBills.length)}>
+          <Button type="submit" variant="secondary" disabled={isPending || invalidCalculation || (!billAmount && !queuedBills.length)}>
             {isPending ? <Loader2 className="size-4 animate-spin" /> : null}
-            {t("saveUtilityBills", { count: queuedBills.length + Number(!!draftAmount) })}
+            {t("saveUtilityBills", { count: queuedBills.length + Number(!!billAmount) })}
           </Button>
         </div>
       ) : (

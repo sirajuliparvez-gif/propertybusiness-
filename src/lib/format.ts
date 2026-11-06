@@ -1,6 +1,6 @@
-export function formatTaka(amount: number | string): string {
+export function formatTaka(amount: number | string, maximumFractionDigits = 0): string {
   const n = typeof amount === "string" ? Number(amount) : amount;
-  return "৳" + n.toLocaleString("en-US", { maximumFractionDigits: 0 });
+  return "৳" + n.toLocaleString("en-US", { maximumFractionDigits });
 }
 
 // A fixed timeZone is required here, not optional — without one,

@@ -15,6 +15,10 @@ import { RecordTenantRentPaymentDialog } from "@/components/properties/record-te
 import { InvoicePrintButton } from "@/components/properties/invoice-print-button";
 import { rentTermsDueAmount, resolveRentTermsForMonth } from "@/lib/rent-terms";
 
+function formatInvoiceAmount(amount: number) {
+  return formatTaka(amount, 2);
+}
+
 function currentMonthKey() {
   const now = dhakaNow();
   return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
@@ -207,27 +211,27 @@ export default async function TenantInvoicePage({
             <div className="col-span-2 sm:col-span-1">
               <dt className="text-sm font-semibold">{t("cashMemoToPay")}</dt>
               <dd data-testid="invoice-balance" className={cn("tenant-bill-balance mt-1 text-3xl leading-tight sm:text-4xl font-bold tabular-nums", balance > 0 ? "text-destructive" : "text-success")}>
-                {formatTaka(balance)}
+                {formatInvoiceAmount(balance)}
               </dd>
             </div>
             <div className="sm:border-s sm:ps-4">
               <dt className="text-xs text-muted-foreground">{t("invoiceGrandDue")}</dt>
-              <dd data-testid="invoice-total-due" className="text-base font-semibold tabular-nums">{formatTaka(totalDue)}</dd>
+              <dd data-testid="invoice-total-due" className="text-base font-semibold tabular-nums">{formatInvoiceAmount(totalDue)}</dd>
             </div>
             <div className="border-s ps-3 sm:ps-4">
               <dt className="text-xs text-muted-foreground">{t("invoiceTotalSettled")}</dt>
-              <dd data-testid="invoice-total-paid" className="text-base font-semibold tabular-nums text-success">{formatTaka(totalSettled)}</dd>
+              <dd data-testid="invoice-total-paid" className="text-base font-semibold tabular-nums text-success">{formatInvoiceAmount(totalSettled)}</dd>
             </div>
           </dl>
           {previousBalance > 0 ? (
             <dl className="tenant-bill-breakdown flex flex-wrap gap-x-6 gap-y-2 border-t border-primary/15 px-4 py-2.5 text-xs sm:px-6">
               <div className="flex items-baseline gap-1.5">
                 <dt className="text-muted-foreground">{t("cashMemoMonthlyBalance")}</dt>
-                <dd className="font-semibold tabular-nums">{formatTaka(monthlyBalance)}</dd>
+                <dd className="font-semibold tabular-nums">{formatInvoiceAmount(monthlyBalance)}</dd>
               </div>
               <div className="flex items-baseline gap-1.5">
                 <dt className="text-muted-foreground">{t("cashMemoEarlierBalance")}</dt>
-                <dd className="font-semibold tabular-nums">{formatTaka(previousBalance)}</dd>
+                <dd className="font-semibold tabular-nums">{formatInvoiceAmount(previousBalance)}</dd>
               </div>
             </dl>
           ) : null}
@@ -259,13 +263,13 @@ export default async function TenantInvoicePage({
                   ) : null}
                 </th>
                 <TableCell data-testid="invoice-rent-due" className="text-right tabular-nums">
-                  {rentTracked ? formatTaka(rentDue) : "—"}
+                  {rentTracked ? formatInvoiceAmount(rentDue) : "—"}
                 </TableCell>
                 <TableCell className="text-right tabular-nums">
-                  {rentTracked ? formatTaka(Math.min(rentPaid, rentDue)) : "—"}
+                  {rentTracked ? formatInvoiceAmount(Math.min(rentPaid, rentDue)) : "—"}
                 </TableCell>
                 <TableCell className={cn("bg-muted/30 text-right tabular-nums", rentRemaining > 0 ? "font-semibold text-destructive" : "text-muted-foreground")}>
-                  {rentTracked ? formatTaka(rentRemaining) : "—"}
+                  {rentTracked ? formatInvoiceAmount(rentRemaining) : "—"}
                 </TableCell>
               </TableRow>
               {monthUtilityRows.map(({ type, label, icon: Icon, bills, companyBills, due, remaining }) => {
@@ -287,7 +291,7 @@ export default async function TenantInvoicePage({
                       ) : null}
                       {companyBills.length > 0 ? (
                         <span className="block text-[0.7rem] font-normal text-muted-foreground">
-                          {t("cashMemoCompanyShare", { amount: formatTaka(companyBills.reduce((sum, b) => sum + b.amount, 0)) })}
+                          {t("cashMemoCompanyShare", { amount: formatInvoiceAmount(companyBills.reduce((sum, b) => sum + b.amount, 0)) })}
                         </span>
                       ) : null}
                       {type === "ELECTRICITY" ? [...bills, ...companyBills].map((b) => b.meterReading != null ? (
@@ -298,10 +302,10 @@ export default async function TenantInvoicePage({
                         />
                       ) : null) : null}
                     </th>
-                    <TableCell className="text-right tabular-nums">{bills.length ? formatTaka(due) : missingAmount}</TableCell>
-                    <TableCell className="text-right tabular-nums">{bills.length ? formatTaka(due - remaining) : missingAmount}</TableCell>
+                    <TableCell className="text-right tabular-nums">{bills.length ? formatInvoiceAmount(due) : missingAmount}</TableCell>
+                    <TableCell className="text-right tabular-nums">{bills.length ? formatInvoiceAmount(due - remaining) : missingAmount}</TableCell>
                     <TableCell className={cn("bg-muted/30 text-right tabular-nums", remaining > 0 ? "font-semibold text-destructive" : "text-muted-foreground")}>
-                      {bills.length ? formatTaka(remaining) : missingAmount}
+                      {bills.length ? formatInvoiceAmount(remaining) : missingAmount}
                     </TableCell>
                   </TableRow>
                 );
@@ -321,12 +325,12 @@ export default async function TenantInvoicePage({
               <p className="font-medium text-primary">{t("adjustedFromDownpaymentNote")}</p>
               <div className="mt-1.5 flex flex-wrap items-center gap-x-4 gap-y-1 text-muted-foreground">
                 <span>
-                  {t("amount")}: <span className="font-mono font-medium text-foreground">{formatTaka(adjustment.amountAdjusted)}</span>
+                  {t("amount")}: <span className="font-mono font-medium text-foreground">{formatInvoiceAmount(adjustment.amountAdjusted)}</span>
                 </span>
                 <span>
                   {t("downpaymentBalance")}:{" "}
                   <span className="font-mono font-medium text-foreground">
-                    {formatTaka(tenant.currentDownpaymentBalance)}
+                    {formatInvoiceAmount(tenant.currentDownpaymentBalance)}
                   </span>
                 </span>
               </div>
@@ -339,7 +343,7 @@ export default async function TenantInvoicePage({
             <div className="flex flex-wrap items-center justify-between gap-2 tenant-bill-section-label rounded-t-md border-b bg-muted/60 px-3 py-2.5 text-sm print:break-after-avoid">
               <h2 className="font-semibold">{t("invoicePreviousRentDue")}</h2>
               <span data-testid="invoice-previous-rent" className="font-mono text-sm font-semibold tabular-nums text-destructive">
-                {formatTaka(previousRentDue)}
+                {formatInvoiceAmount(previousRentDue)}
               </span>
             </div>
             <Table className="text-xs">
@@ -355,9 +359,9 @@ export default async function TenantInvoicePage({
                 {earlierRent.map((p) => (
                   <TableRow key={p.month}>
                     <TableCell className="whitespace-normal font-medium">{monthLabel(p.month, locale)}</TableCell>
-                    <TableCell className="text-right tabular-nums">{formatTaka(p.dueAmount)}</TableCell>
-                    <TableCell className="text-right tabular-nums">{formatTaka(p.paidAmount)}</TableCell>
-                    <TableCell className="text-right font-semibold tabular-nums text-destructive">{formatTaka(p.remaining)}</TableCell>
+                    <TableCell className="text-right tabular-nums">{formatInvoiceAmount(p.dueAmount)}</TableCell>
+                    <TableCell className="text-right tabular-nums">{formatInvoiceAmount(p.paidAmount)}</TableCell>
+                    <TableCell className="text-right font-semibold tabular-nums text-destructive">{formatInvoiceAmount(p.remaining)}</TableCell>
                   </TableRow>
                 ))}
               </TableBody>
@@ -416,15 +420,15 @@ export default async function TenantInvoicePage({
                         </div>
                       ) : null}
                     </TableCell>
-                    <TableCell className="text-right font-mono tabular-nums">{formatTaka(b.amount)}</TableCell>
-                    <TableCell className="text-right font-mono tabular-nums text-success">{formatTaka(b.paidAmount)}</TableCell>
+                    <TableCell className="text-right font-mono tabular-nums">{formatInvoiceAmount(b.amount)}</TableCell>
+                    <TableCell className="text-right font-mono tabular-nums text-success">{formatInvoiceAmount(b.paidAmount)}</TableCell>
                     <TableCell
                       className={cn(
                         "text-right font-mono tabular-nums",
                         billRemaining(b) > 0 ? "font-semibold text-destructive" : "text-muted-foreground"
                       )}
                     >
-                      {formatTaka(billRemaining(b))}
+                      {formatInvoiceAmount(billRemaining(b))}
                     </TableCell>
                     <TableCell className="hidden sm:table-cell print:table-cell">
                       <span data-testid="invoice-bill-status">{billStatusLabel(b.status)}</span>
