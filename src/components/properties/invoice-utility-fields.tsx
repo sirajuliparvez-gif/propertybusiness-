@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useId, useState, useTransition, type ReactNode } from "react";
+import { useId, useState, useTransition, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
 import { toast } from "sonner";
@@ -9,12 +9,12 @@ import { FormField } from "@/components/properties/form-field";
 import { PreviousMeterReadingField } from "@/components/properties/previous-meter-reading-field";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { addTenantUtilityBills, getPreviousTenantMeterReading, updateUtilityBill } from "@/lib/actions/utility-bills";
+import { addTenantUtilityBills, updateUtilityBill } from "@/lib/actions/utility-bills";
 import { electricityAmountAtRate } from "@/lib/electricity-consumption";
 import { formatTaka } from "@/lib/format";
 
 export function InvoiceUtilityFields({
-  leaseId, month, dueDate, type, label, fixedAmount, previous = null, bill, chooseDate = false, leaseStart, dateLabel, editAction,
+  leaseId, month, dueDate, type, label, fixedAmount, previous = null, bill, dateLabel, editAction,
 }: {
   leaseId: string;
   month: string;
@@ -23,8 +23,6 @@ export function InvoiceUtilityFields({
   type: UtilityType;
   label: string;
   previous?: number | null;
-  chooseDate?: boolean;
-  leaseStart?: string;
   dateLabel?: string;
   editAction?: ReactNode;
   bill?: {
@@ -42,31 +40,14 @@ export function InvoiceUtilityFields({
   const id = useId();
   const [previousInput, setPreviousInput] = useState<string | null>(null);
   const [current, setCurrent] = useState(bill?.meterReading?.toString() ?? "");
-  const [billDate, setBillDate] = useState(dueDate);
-  const [year, monthNumber] = month.split("-").map(Number);
-  const monthStart = `${month}-01`;
-  const lastDay = new Date(Date.UTC(year, monthNumber, 0)).getUTCDate();
   const [manualAmount, setManualAmount] = useState(bill?.amount.toString() ?? "");
   const [rate, setRate] = useState("");
-  const [previousForDate, setPreviousForDate] = useState<{ date: string; reading: number | null } | null>(null);
   const [savedNew, setSavedNew] = useState(false);
   const [feedback, setFeedback] = useState("");
   const [pending, startTransition] = useTransition();
   const isElectricity = type === "ELECTRICITY";
   const usingRate = isElectricity && fixedAmount == null && rate !== "";
-  useEffect(() => {
-    if (!isElectricity || !chooseDate || !billDate || billDate === dueDate) return;
-    let active = true;
-    void getPreviousTenantMeterReading(leaseId, billDate).then((result) => {
-      if (active) setPreviousForDate({ date: billDate, reading: result?.reading ?? null });
-    }, () => {
-      if (active) setPreviousForDate({ date: billDate, reading: null });
-    });
-    return () => { active = false; };
-  }, [isElectricity, chooseDate, billDate, dueDate, leaseId]);
-  const automaticPrevious = billDate === dueDate ? previous
-    : previousForDate?.date === billDate ? previousForDate.reading : null;
-  const previousValue = previousInput ?? automaticPrevious?.toString() ?? "";
+  const previousValue = previousInput ?? previous?.toString() ?? "";
   const units = previousValue !== "" && current !== "" ? Number(current) - Number(previousValue) : null;
   const amount = fixedAmount != null ? String(bill?.amount ?? fixedAmount)
     : usingRate ? electricityAmountAtRate(units, rate) : manualAmount;
@@ -93,7 +74,12 @@ export function InvoiceUtilityFields({
           } else {
             const result = await addTenantUtilityBills(leaseId, month, [data]);
             if (!result.ok) {
-              setFeedback(t(result.error));
+              if (result.error === "utilityBillDuplicateMonth") {
+                toast.error(t(result.error));
+                router.refresh();
+              } else {
+                setFeedback(t(result.error));
+              }
               return;
             }
           }
@@ -106,13 +92,7 @@ export function InvoiceUtilityFields({
       });
     }}>
       <input type="hidden" name="type" value={type} />
-      {chooseDate ? (
-        <FormField label={t("billDueDate")} htmlFor={`${id}-date`}>
-          <Input id={`${id}-date`} name="dueDate" type="date" defaultValue={dueDate} disabled={pending}
-            min={leaseStart && leaseStart > monthStart ? leaseStart : monthStart} max={`${month}-${lastDay}`}
-            onInput={(event) => setBillDate(event.currentTarget.value)} required />
-        </FormField>
-      ) : <input type="hidden" name="dueDate" value={dueDate} />}
+      <input type="hidden" name="dueDate" value={dueDate} />
       {bill ? (
         <>
           <input type="hidden" name="billId" value={bill.id} />
@@ -121,7 +101,7 @@ export function InvoiceUtilityFields({
         </>
       ) : null}
       {isElectricity ? <fieldset disabled={pending} className="grid grid-cols-1 gap-2 min-[360px]:grid-cols-3">
-        <PreviousMeterReadingField id={`${id}-previous`} automatic={automaticPrevious} manual={previousInput}
+        <PreviousMeterReadingField id={`${id}-previous`} automatic={previous} manual={previousInput}
           onChange={setPreviousInput} recordAutomatic={usingRate || bill?.previousMeterReadingOverride != null} />
         <FormField label={t("invoiceElectricityCurrent")} htmlFor={`${id}-current`}>
           <Input id={`${id}-current`} name="meterReading" type="number" step="any" min={0}

@@ -1,5 +1,7 @@
 "use client";
 
+import { toast } from "sonner";
+
 import type { UtilityType } from "@/generated/prisma/client";
 import { utilityBillTypes } from "@/lib/utility-bill-defaults";
 
@@ -140,7 +142,10 @@ export function AddUtilityBillDialogGlobal({
           <DialogTitle>{t("addUtilityBill")}</DialogTitle>
         </DialogHeader>
         <form
-          action={(formData: FormData) => startTransition(() => addUtilityBill(formData))}
+          action={(formData: FormData) => startTransition(async () => {
+            const result = await addUtilityBill(formData);
+            if (result && !result.ok) toast.error(t(result.error === "billChanged" ? "invoiceBillChanged" : result.error));
+          })}
           className="grid gap-3 sm:grid-cols-2"
         >
           <input type="hidden" name="propertyId" value={propertyId} />

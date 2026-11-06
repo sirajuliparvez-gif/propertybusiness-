@@ -236,44 +236,35 @@ export default async function TenantInvoicePage({
   const newBillDate = defaultBillDate < leaseStartDay ? leaseStartDay : defaultBillDate;
   const canEditPrintedBills = fromRent && canCollect && !(embedded && receive === "1");
   const canAddBill = canEditPrintedBills && newBillDate.startsWith(selectedMonth);
-  const previousForNewBill = canAddBill ? await getPreviousTenantMeterReading(id, newBillDate) : null;
+  const previousForNewBill = canAddBill && !currentBills.some(({ type }) => type === "ELECTRICITY") ? await getPreviousTenantMeterReading(id, newBillDate) : null;
   const utilityEditors = canEditPrintedBills ? Object.fromEntries(
     rentBillPrintKeys.filter((type) => type !== "RENT").map((type) => {
       const bills = currentBills.filter((bill) => bill.type === type);
       const fixedAmount = tenant.utilityBillDefaults.find((item) => item.type === type)?.amount ?? null;
       const label = utilityTypeLabels[type];
-      const newBill = canAddBill ? <InvoiceUtilityFields key={`new-${type}-${bills.length}`}
+      const newBill = canAddBill && !bills.length ? <InvoiceUtilityFields key={`new-${type}`}
         leaseId={id} month={selectedMonth} dueDate={newBillDate} type={type} label={label}
-        fixedAmount={fixedAmount} previous={type === "ELECTRICITY" ? previousForNewBill?.reading : null}
-        chooseDate={bills.length > 0} leaseStart={leaseStartDay} /> : null;
+        fixedAmount={fixedAmount} previous={type === "ELECTRICITY" ? previousForNewBill?.reading : null} /> : null;
       if (!bills.length) return [type, newBill];
       return [type, (
-        <div key={type} className="space-y-0.5">
-          <ul className="divide-y">
-            {bills.map((bill) => {
-              const billKey = JSON.stringify([bill.type, bill.amount, bill.paidAmount, bill.dueDate, bill.paidByCompany,
-                bill.meterReading, bill.previousMeterReadingOverride]);
-              return (
-                <li key={bill.id} className="py-1">
-                  <InvoiceUtilityFields key={billKey + "-inline"} leaseId={id} month={selectedMonth}
-                    dueDate={dhakaISO(bill.dueDate)} type={type} label={label} fixedAmount={fixedAmount}
-                    previous={bill.previousMeterReading} bill={bill}
-                    dateLabel={formatDate(bill.dueDate, locale) + (paidByCompany(bill) ? ` · ${t("paidByCompanyBadge")}` : "")}
-                    editAction={<EditUtilityBillDialog
-                      bill={bill} returnTo={invoicePath} fixedUnitId={bill.unitId}
-                      invoice={{ leaseId: id, month: selectedMonth, startDate: leaseStartDay }}
-                    />} />
-                </li>
-              );
-            })}
-          </ul>
-          {newBill ? (
-            <details key={bills.length} className="pb-0.5">
-              <summary className="cursor-pointer py-0.5 text-xs font-medium text-primary">{t("invoiceAnotherUtilityBill")}</summary>
-              {newBill}
-            </details>
-          ) : null}
-        </div>
+        <ul key={type} className="divide-y">
+          {bills.map((bill) => {
+            const billKey = JSON.stringify([bill.type, bill.amount, bill.paidAmount, bill.dueDate, bill.paidByCompany,
+              bill.meterReading, bill.previousMeterReadingOverride]);
+            return (
+              <li key={bill.id} className="py-1">
+                <InvoiceUtilityFields key={billKey + "-inline"} leaseId={id} month={selectedMonth}
+                  dueDate={dhakaISO(bill.dueDate)} type={type} label={label} fixedAmount={fixedAmount}
+                  previous={bill.previousMeterReading} bill={bill}
+                  dateLabel={formatDate(bill.dueDate, locale) + (paidByCompany(bill) ? ` · ${t("paidByCompanyBadge")}` : "")}
+                  editAction={<EditUtilityBillDialog
+                    bill={bill} returnTo={invoicePath} fixedUnitId={bill.unitId}
+                    invoice={{ leaseId: id, month: selectedMonth, startDate: leaseStartDay }}
+                  />} />
+              </li>
+            );
+          })}
+        </ul>
       )];
     }),
   ) : undefined;

@@ -286,7 +286,8 @@ export function AddUtilityBillForm(props: BillFormProps) {
       action={embedded ? undefined : (formData: FormData) => startTransition(async () => {
         if (loadingDefaults) return;
         if (!tenantBilling) {
-          await addUtilityBill(formData);
+          const result = await addUtilityBill(formData);
+          if (result && !result.ok) toast.error(t(result.error === "billChanged" ? "invoiceBillChanged" : result.error));
           return;
         }
         try {

@@ -49,11 +49,14 @@ export function validateTenantUtilityBills(billingMonth: string, bills: FormData
   }
 
   const validatedBills = [];
+  const types = new Set<UtilityType>();
   for (const bill of fields) {
     if (!bill || !Number.isFinite(Number(bill.amount)) || Number(bill.amount) <= 0 ||
       !validMeterReadings(bill.meterReading, bill.previousMeterReadingOverride)) {
       return { ok: false, error: "utilityBillInvalidAmount" } as const;
     }
+    if (types.has(bill.type)) return { ok: false, error: "utilityBillDuplicateMonth" } as const;
+    types.add(bill.type);
     validatedBills.push(bill);
   }
 
@@ -87,4 +90,25 @@ export function prepareTenantUtilityBillRows(
       dueDate: new Date(bill.dueDate),
     };
   });
+}
+
+export async function hasMonthlyTenantUtilityBill(
+  tx: Pick<Prisma.TransactionClient, "utilityBill">,
+  lease: { id: string; unitId: string; startDate: Date },
+  month: string,
+  types: UtilityType[],
+  exceptId?: string,
+) {
+  const bill = await tx.utilityBill.findFirst({
+    where: {
+      unitId: lease.unitId,
+      month,
+      type: { in: types },
+      dueDate: { gte: new Date(`${dhakaISO(lease.startDate)}T00:00:00+06:00`) },
+      OR: [{ tenantLeaseId: lease.id }, { tenantLeaseId: null }],
+      ...(exceptId ? { id: { not: exceptId } } : {}),
+    },
+    select: { id: true },
+  });
+  return bill != null;
 }

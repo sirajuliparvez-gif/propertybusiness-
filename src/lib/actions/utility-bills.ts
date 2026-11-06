@@ -4,7 +4,7 @@ import { dhakaISO, dhakaToday } from "@/lib/dhaka-time";
 import { revalidatePath } from "next/cache";
 import { getLocale } from "next-intl/server";
 import type { Prisma } from "@/generated/prisma/client";
-import { prepareTenantUtilityBillRows, readUtilityBillFields, validateTenantUtilityBills, validMeterReadings } from "@/lib/utility-bill-entry";
+import { hasMonthlyTenantUtilityBill, prepareTenantUtilityBillRows, readUtilityBillFields, validateTenantUtilityBills, validMeterReadings } from "@/lib/utility-bill-entry";
 import { prisma } from "@/lib/prisma";
 import { redirect } from "@/i18n/navigation";
 import { applyUtilityBillInstallment } from "@/lib/payment-progress";
@@ -64,9 +64,14 @@ export type UtilityBillErrorCode =
   | "amountBelowPaid"
   | "hasPayments"
   | "invalidMeterReading"
-  | "billChanged";
+  | "billChanged"
+  | "utilityBillDuplicateMonth";
 
 export type UtilityBillActionResult = { ok: true } | { ok: false; error: UtilityBillErrorCode };
+
+function isUtilityBillWriteConflict(error: unknown) {
+  return error instanceof Error && "code" in error && error.code === "P2034";
+}
 
 export async function addUtilityBill(formData: FormData) {
   const locale = await getLocale();
@@ -78,24 +83,31 @@ export async function addUtilityBill(formData: FormData) {
   }
 
   const unitId = str(formData, "unitId");
-  const lease = unitId ? await prisma.tenantLease.findFirst({
-    where: { unitId, status: "ACTIVE", unit: { unitType: { propertyId } } },
-    orderBy: [{ startDate: "desc" }, { id: "asc" }],
-    select: { startDate: true, utilityBillDefaults: true },
-  }) : null;
-  const defaults = lease && fields.dueDate >= dhakaISO(lease.startDate) ? lease.utilityBillDefaults : [];
-  const locked = defaults.find((item) => item.type === fields.type);
-  await prisma.utilityBill.create({
-    data: {
-      ...fields,
-      propertyId,
-      unitId,
-      amount: locked?.amount ?? fields.amount,
-      paidByCompany: locked?.paidByCompany ?? fields.paidByCompany,
-      month: fields.dueDate.slice(0, 7),
-      dueDate: new Date(fields.dueDate),
-    },
-  });
+  const dueDate = new Date(fields.dueDate);
+  const month = fields.dueDate.slice(0, 7);
+  try {
+    const saved = await prisma.$transaction(async (tx) => {
+      const lease = unitId ? await tx.tenantLease.findFirst({
+        where: { unitId, startDate: { lte: new Date(`${fields.dueDate}T23:59:59.999+06:00`) }, status: "ACTIVE", unit: { unitType: { propertyId } } },
+        orderBy: [{ startDate: "desc" }, { id: "asc" }],
+        select: { id: true, unitId: true, startDate: true, utilityBillDefaults: true },
+      }) : null;
+      if (lease && await hasMonthlyTenantUtilityBill(tx, lease, month, [fields.type])) return false;
+      const locked = lease?.utilityBillDefaults.find((item) => item.type === fields.type);
+      await tx.utilityBill.create({
+        data: {
+          ...fields, propertyId, unitId, dueDate, month,
+          amount: locked?.amount ?? fields.amount,
+          paidByCompany: locked?.paidByCompany ?? fields.paidByCompany,
+        },
+      });
+      return true;
+    }, { isolationLevel: "Serializable" });
+    if (!saved) return { ok: false, error: "utilityBillDuplicateMonth" } as const;
+  } catch (error) {
+    if (isUtilityBillWriteConflict(error)) return { ok: false, error: "billChanged" } as const;
+    throw error;
+  }
 
   // Reachable from both the per-property page and the cross-property global
   // Utility Bills page — each redirects back to wherever it was submitted from.
@@ -142,23 +154,36 @@ export async function addTenantUtilityBills(
   const validated = validateTenantUtilityBills(billingMonth, bills);
   if (!validated.ok) return validated;
 
-  const lease = await prisma.tenantLease.findUnique({
-    where: { id: tenantLeaseId },
-    select: { id: true, status: true, startDate: true, unitId: true, utilityBillDefaults: true, unit: { select: { unitType: { select: { propertyId: true } } } } },
-  });
-  if (!lease || lease.status !== "ACTIVE") {
-    return { ok: false, error: "utilityBillOutsideLease" } as const;
+  let propertyId: string;
+  try {
+    const result = await prisma.$transaction(async (tx) => {
+      const lease = await tx.tenantLease.findUnique({
+        where: { id: tenantLeaseId },
+        select: { id: true, status: true, startDate: true, unitId: true, utilityBillDefaults: true, unit: { select: { unitType: { select: { propertyId: true } } } } },
+      });
+      if (!lease) return { ok: false, error: "utilityBillOutsideLease" } as const;
+      const propertyId = lease.unit.unitType.propertyId;
+      const rows = prepareTenantUtilityBillRows(lease, propertyId, billingMonth, validated.bills);
+      if (!rows) return { ok: false, error: "utilityBillOutsideLease" } as const;
+      if (await hasMonthlyTenantUtilityBill(tx, lease, billingMonth, rows.map(({ type }) => type))) {
+        return { ok: false, error: "utilityBillDuplicateMonth" } as const;
+      }
+      await tx.utilityBill.createMany({ data: rows });
+      return { ok: true, propertyId } as const;
+    }, { isolationLevel: "Serializable" });
+    if (!result.ok) return result;
+    propertyId = result.propertyId;
+  } catch (error) {
+    if (isUtilityBillWriteConflict(error)) return { ok: false, error: "invoiceBillChanged" } as const;
+    throw error;
   }
-  const rows = prepareTenantUtilityBillRows(lease, lease.unit.unitType.propertyId, billingMonth, validated.bills);
-  if (!rows) return { ok: false, error: "utilityBillOutsideLease" } as const;
-  await prisma.utilityBill.createMany({ data: rows });
 
   const locale = await getLocale();
   revalidatePath(`/${locale}/tenants/${tenantLeaseId}`);
   revalidatePath(`/${locale}/tenants/${tenantLeaseId}/invoice`);
   revalidatePath(`/${locale}/rent/${tenantLeaseId}/invoice`);
   revalidatePath(`/${locale}/utility-bills`);
-  revalidatePath(`/${locale}/properties/${lease.unit.unitType.propertyId}`);
+  revalidatePath(`/${locale}/properties/${propertyId}`);
   return { ok: true } as const;
 }
 
@@ -342,6 +367,7 @@ export async function updateUtilityBill(
   const previousMeterReadingOverride = type !== "ELECTRICITY" || previousRaw == null ? null : Number(previousRaw);
   const returnTo = str(formData, "returnTo") ?? `/properties/${propertyId}`;
 
+  const month = dueDate.slice(0, 7);
   const problem = await prisma.$transaction(async (tx) => {
     const bill = await tx.utilityBill.findUnique({
       where: { id: billId },
@@ -386,6 +412,21 @@ export async function updateUtilityBill(
       });
       if (!unit || unit.unitType.propertyId !== propertyId) return "unitNotInProperty" as const;
     }
+    const changesBillKey = month !== bill.month || type !== bill.type || unitId !== bill.unitId;
+    if (unitId && (changesBillKey || dueDate !== dhakaISO(bill.dueDate))) {
+      const lease = await tx.tenantLease.findFirst({
+        where: bill.tenantLeaseId && unitId === bill.unitId
+          ? { id: bill.tenantLeaseId }
+          : { unitId, startDate: { lte: new Date(`${dueDate}T23:59:59.999+06:00`) }, status: "ACTIVE" },
+        orderBy: [{ startDate: "desc" }, { id: "asc" }],
+        select: { id: true, unitId: true, startDate: true },
+      });
+      const entersLease = lease && dhakaISO(bill.dueDate) < dhakaISO(lease.startDate);
+      if (lease && (changesBillKey || entersLease) &&
+          await hasMonthlyTenantUtilityBill(tx, lease, month, [type], billId)) {
+        return "utilityBillDuplicateMonth" as const;
+      }
+    }
     const previous = type !== "ELECTRICITY" || formData.has("previousMeterReadingOverride")
       ? previousMeterReadingOverride
       : bill.previousMeterReadingOverride == null ? null : Number(bill.previousMeterReadingOverride);
@@ -403,7 +444,7 @@ export async function updateUtilityBill(
         type,
         unitId,
         ...(unitId !== bill.unitId ? { tenantLeaseId: null } : {}),
-        month: dueDate.slice(0, 7),
+        month,
         dueDate: new Date(dueDate),
         amount: updatedAmount,
         paidByCompany: updatedPayer,
@@ -433,6 +474,9 @@ export async function updateUtilityBill(
       });
     }
     return null;
+  }, { isolationLevel: "Serializable" }).catch((error: unknown) => {
+    if (isUtilityBillWriteConflict(error)) return "billChanged" as const;
+    throw error;
   });
   if (problem) return { ok: false, error: problem };
 

@@ -23,7 +23,7 @@ import { withRentActionFeedback } from "@/lib/rent-action-feedback";
 import { allocateInvoicePayment, invoicePaymentSnapshot, reconcileInvoiceAllocation, type InvoicePaymentLine, type ReceiptCheckLine } from "@/lib/invoice-payment";
 import { tenantUtilityArrearsWhere } from "@/lib/tenant-utility-arrears";
 import { limitToPrintedBill, type RentBillPrintRow } from "@/lib/rent-bill-print";
-import { prepareTenantUtilityBillRows, validateTenantUtilityBills } from "@/lib/utility-bill-entry";
+import { hasMonthlyTenantUtilityBill, prepareTenantUtilityBillRows, validateTenantUtilityBills } from "@/lib/utility-bill-entry";
 import { numericRentRates, rentTermsDueAmount, resolveRentTermsForMonth } from "@/lib/rent-terms";
 
 function leaseFallbackTerms(lease: {
@@ -942,6 +942,7 @@ export async function recordMultiMonthRentPayment(formData: FormData, newBills: 
   const today = dhakaTodayISO();
   const invalid = { ok: false, reason: "invalid" } as const;
   const changed = { ok: false, reason: "changed" } as const;
+  const duplicate = { ok: false, reason: "utility", error: "utilityBillDuplicateMonth" } as const;
   if (!propertyId || !tenantLeaseId || !date || !isValidTransactionDate(date) || date > today) return invalid;
 
   const methodRaw = str(formData, "method");
@@ -976,6 +977,9 @@ export async function recordMultiMonthRentPayment(formData: FormData, newBills: 
         const received = newUtilityPayments[index];
         return received > 0 && (bill.paidByCompany || received / 100 > Number(bill.amount));
       })) return false;
+      if (billRows.length && await hasMonthlyTenantUtilityBill(tx, lease, billingMonth!, billRows.map(({ type }) => type))) {
+        return duplicate;
+      }
       const selected = multiMonthBalances(lease, today.slice(0, 7)).flatMap((balance) => {
         const request = requested.get(balance.month);
         return request && request.remainingCents === balance.remainingCents
@@ -1056,6 +1060,7 @@ export async function recordMultiMonthRentPayment(formData: FormData, newBills: 
       }
       return true;
     }, { isolationLevel: "Serializable" });
+    if (saved === duplicate) return duplicate;
     if (!saved) return changed;
   } catch (error) {
     if (error instanceof Error && "code" in error && (error.code === "P2034" || error.code === "P2002")) return changed;

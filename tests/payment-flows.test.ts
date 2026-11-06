@@ -19,6 +19,7 @@ import { withRentActionFeedback } from "@/lib/rent-action-feedback";
 import { rentTermsDueAmount, resolveRentTermsForMonth } from "@/lib/rent-terms";
 import { allocateInvoicePayment, invoicePaymentSnapshot, reconcileInvoiceAllocation, type InvoicePaymentLine } from "@/lib/invoice-payment";
 import { allocateRentPayment, buildRentLedger } from "@/lib/rent-ledger";
+import { validateTenantUtilityBills } from "@/lib/utility-bill-entry";
 
 test("rent payment can settle September when money arrives in October", () => {
   assert.equal(resolvePaymentMonth("2026-09", "2026-10-03"), "2026-09");
@@ -262,4 +263,20 @@ test("a short receipt can pay electricity in full and leave the difference on re
     [[rent.id, 900_000.5]],
     [[rent.id, 900_001], [power.id, -1]],
   ]) assert.equal(reconcileInvoiceAllocation(lines, 900_000, input), null);
+});
+
+test("tenant billing accepts different charges but rejects the same charge twice in a month", () => {
+  function bill(type: string, dueDate: string) {
+    const form = new FormData();
+    form.set("type", type);
+    form.set("amount", "100");
+    form.set("dueDate", dueDate);
+    return form;
+  }
+
+  const gas = bill("GAS", "2026-11-07");
+  assert.equal(validateTenantUtilityBills("2026-11", [gas, bill("SECURITY", "2026-11-08")]).ok, true);
+  assert.deepEqual(validateTenantUtilityBills("2026-11", [gas, bill("GAS", "2026-11-08")]), {
+    ok: false, error: "utilityBillDuplicateMonth",
+  });
 });
