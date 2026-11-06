@@ -25,7 +25,8 @@ import {
 import { Checkbox } from "@/components/ui/checkbox";
 import { FormField } from "@/components/properties/form-field";
 import { PreviousMeterReadingField } from "@/components/properties/previous-meter-reading-field";
-import { addTenantUtilityBills, addUtilityBill, getPreviousPropertyMeterReading, getPreviousTenantMeterReading } from "@/lib/actions/utility-bills";
+import { addTenantUtilityBills, addUtilityBill, getPreviousPropertyMeterReading, getPreviousTenantMeterReading, getTenantUtilityBillDefaults } from "@/lib/actions/utility-bills";
+import type { UtilityBillDefault } from "@/lib/utility-bill-defaults";
 import { electricityAmountAtRate } from "@/lib/electricity-consumption";
 import { formatDate, formatTaka, monthLabel } from "@/lib/format";
 import { toast } from "sonner";
@@ -37,9 +38,12 @@ type UtilityType = "GAS" | "ELECTRICITY" | "WATER" | "OTHER";
 
 type PropertyBillFields = {
   propertyId: string;
-  units?: { id: string; label: string; unitTypeLabel: string; tenantName?: string | null }[];
+  units?: { id: string; label: string; unitTypeLabel: string; tenantName?: string | null;
+    leaseStart?: string | null; utilityDefaults?: UtilityBillDefault[] }[];
   fixedUnitId?: string;
   returnTo?: string;
+  utilityDefaults?: UtilityBillDefault[];
+  utilityDefaultsStart?: string;
 };
 
 type BillFormProps =
@@ -93,17 +97,17 @@ export function InvoiceAddUtilityBillDialog({ leaseId, month, compact = false }:
 export function AddUtilityBillForm(props: BillFormProps) {
   const { tenantBilling, onDraftChange, onSaved } = props;
   const property = "propertyId" in props ? props : undefined;
-  const { propertyId, units = [], fixedUnitId, returnTo } = property ?? {};
+  const { propertyId, units = [], fixedUnitId, returnTo, utilityDefaults, utilityDefaultsStart } = property ?? {};
   const t = useTranslations("Properties");
   const locale = useLocale();
   const [isPending, startTransition] = useTransition();
   const [type, setType] = useState<UtilityType>("ELECTRICITY");
   const [unitId, setUnitId] = useState(NONE_VALUE);
-  const [paidByCompany, setPaidByCompany] = useState(false);
+  const [payerOverride, setPayerOverride] = useState<boolean | null>(null);
   const [meterReading, setMeterReading] = useState("");
   const [manualPreviousReading, setManualPreviousReading] = useState<string | null>(null);
   const [unitRate, setUnitRate] = useState("");
-  const [draftAmount, setDraftAmount] = useState("");
+  const [draftAmount, setDraftAmount] = useState<string | null>(null);
   const [draftDate, setDraftDate] = useState<string | null>(null);
   const [queuedBills, setQueuedBills] = useState<{ id: number; data: FormData }[]>([]);
   const nextBillId = useRef(0);
@@ -120,6 +124,31 @@ export function AddUtilityBillForm(props: BillFormProps) {
 
   const readingDate = draftDate ?? defaultDate;
   const leaseId = tenantBilling?.leaseId;
+  const [defaultsLookup, setDefaultsLookup] = useState<{ leaseId: string; defaults: UtilityBillDefault[] } | null>(null);
+  useEffect(() => {
+    if (!leaseId) return;
+    let active = true;
+    getTenantUtilityBillDefaults(leaseId).then(
+      (defaults) => { if (active) setDefaultsLookup({ leaseId, defaults }); },
+      () => {
+        if (!active) return;
+        setDefaultsLookup({ leaseId, defaults: [] });
+        toast.error(t("utilityDefaultsLoadFailed"));
+      },
+    );
+    return () => { active = false; };
+  }, [leaseId, t]);
+  const selectedUnit = units.find((unit) => unit.id === unitId);
+  const defaults = utilityDefaults ?? selectedUnit?.utilityDefaults ??
+    (defaultsLookup?.leaseId === leaseId ? defaultsLookup?.defaults : undefined);
+  const loadingDefaults = leaseId != null && defaults == null;
+  const defaultsStart = utilityDefaultsStart ?? selectedUnit?.leaseStart;
+  const typeDefault = !defaultsStart || readingDate >= defaultsStart
+    ? defaults?.find((item) => item.type === type)
+    : undefined;
+  const paidByCompany = typeDefault?.paidByCompany ?? payerOverride ?? false;
+  const payerLocked = typeDefault?.paidByCompany != null;
+  const amountLocked = typeDefault?.amount != null;
   const effectiveUnitId = fixedUnitId ?? (unitId === NONE_VALUE ? "" : unitId);
   const readingKey = JSON.stringify([leaseId, propertyId, effectiveUnitId, readingDate]);
   const [readingRefresh, setReadingRefresh] = useState(0);
@@ -164,9 +193,10 @@ export function AddUtilityBillForm(props: BillFormProps) {
   const consumption =
     meterReading && effectivePreviousReading != null ? Number(meterReading) - effectivePreviousReading : null;
 
-  const usingUnitRate = type === "ELECTRICITY" && unitRate !== "";
+  const usingUnitRate = type === "ELECTRICITY" && !amountLocked && unitRate !== "";
   const calculatedAmount = usingUnitRate ? electricityAmountAtRate(consumption, unitRate) : "";
-  const billAmount = usingUnitRate ? calculatedAmount : draftAmount;
+  const billAmount = typeDefault?.amount ?? (usingUnitRate ? calculatedAmount : draftAmount ?? "");
+  const includeDraft = !!billAmount && !(queuedBills.length && amountLocked && draftAmount === "" && !draftDate && !meterReading);
   const invalidCalculation = usingUnitRate && (!calculatedAmount || Number(calculatedAmount) <= 0);
 
   const typeLabels: Record<UtilityType, string> = {
@@ -181,7 +211,8 @@ export function AddUtilityBillForm(props: BillFormProps) {
   // server-side in addUtilityBill. See add-utility-bill-dialog-global.tsx.
   function handleTypeChange(next: UtilityType) {
     setType(next);
-    setPaidByCompany(next === "WATER");
+    setPayerOverride(null);
+    if (defaults?.length) setDraftAmount(null);
     setMeterReading("");
     setManualPreviousReading(null);
     setUnitRate("");
@@ -224,13 +255,14 @@ export function AddUtilityBillForm(props: BillFormProps) {
     ) : null}
     <form
       action={(formData: FormData) => startTransition(async () => {
+        if (loadingDefaults) return;
         if (!tenantBilling) {
           await addUtilityBill(formData);
           return;
         }
         try {
           const bills = queuedBills.map((bill) => bill.data);
-          if (billAmount) bills.push(formData);
+          if (includeDraft) bills.push(formData);
           const result = await addTenantUtilityBills(tenantBilling.leaseId, tenantBilling.month, bills);
           if (!result.ok) {
             toast.error(t(result.error));
@@ -296,7 +328,8 @@ export function AddUtilityBillForm(props: BillFormProps) {
             />
           </FormField>
           <FormField label={t("electricityUnitRate")} htmlFor="utilityBillUnitRate" className="sm:col-span-2">
-            <Input id="utilityBillUnitRate" name="electricityUnitRate" type="number" step="any" min={0} value={unitRate}
+            <Input id="utilityBillUnitRate" name="electricityUnitRate" type="number" step="any" min={0}
+              value={amountLocked ? "" : unitRate} disabled={amountLocked}
               onChange={(event) => setUnitRate(event.target.value)} />
           </FormField>
           <p aria-live="polite" className="text-xs text-muted-foreground sm:col-span-2">
@@ -317,7 +350,7 @@ export function AddUtilityBillForm(props: BillFormProps) {
         <Input id="utilityBillAmount" name="amount" type="number" step="any" min={tenantBilling ? 0.01 : 0}
           required={!queuedBills.length || !!meterReading}
           value={billAmount}
-          readOnly={usingUnitRate}
+          readOnly={usingUnitRate || amountLocked}
           onChange={(event) => setDraftAmount(event.target.value)}
         />
       </FormField>
@@ -335,17 +368,20 @@ export function AddUtilityBillForm(props: BillFormProps) {
         <Checkbox
           id="utilityBillPaidByCompany"
           checked={isWater || paidByCompany}
-          disabled={isWater}
-          onCheckedChange={(checked) => setPaidByCompany(checked === true)}
+          disabled={isWater || payerLocked}
+          onCheckedChange={(checked) => setPayerOverride(checked === true)}
         />
         {isWater ? t("paidByCompanyWaterLocked") : t("paidByCompanyLabel")}
       </label>
+      {amountLocked || payerLocked ? (
+        <p className="text-xs text-muted-foreground sm:col-span-2">{t("utilityDefaultsLocked")}</p>
+      ) : null}
 
       {fixedUnitId || tenantBilling ? null : (
         <FormField label={t("unitOptional")} htmlFor="utilityBillUnit" className="sm:col-span-2">
           <Select
             value={unitId}
-            onValueChange={(v) => { setUnitId(v ?? NONE_VALUE); setManualPreviousReading(null); setMeterReading(""); }}
+            onValueChange={(v) => { setUnitId(v ?? NONE_VALUE); handleTypeChange(type); setDraftAmount(null); }}
             items={[
               { value: NONE_VALUE, label: t("noSpecificUnit") },
               ...units.map((u) => ({ value: u.id, label: unitPickerLabel(u) })),
@@ -368,7 +404,7 @@ export function AddUtilityBillForm(props: BillFormProps) {
 
       {tenantBilling ? (
         <div className="flex flex-wrap justify-end gap-2 border-t pt-3 sm:col-span-2">
-          <Button type="button" variant="outline" disabled={isPending || !billAmount || invalidCalculation}
+          <Button type="button" variant="outline" disabled={isPending || loadingDefaults || !billAmount || invalidCalculation}
             onClick={(event) => {
               const form = event.currentTarget.form;
               if (!form?.reportValidity()) return;
@@ -379,9 +415,9 @@ export function AddUtilityBillForm(props: BillFormProps) {
             <Plus className="size-3.5" />
             {t("addAnotherUtilityBill")}
           </Button>
-          <Button type="submit" variant="secondary" disabled={isPending || invalidCalculation || (!billAmount && !queuedBills.length)}>
+          <Button type="submit" variant="secondary" disabled={isPending || loadingDefaults || invalidCalculation || (!includeDraft && !queuedBills.length)}>
             {isPending ? <Loader2 className="size-4 animate-spin" /> : null}
-            {t("saveUtilityBills", { count: queuedBills.length + Number(!!billAmount) })}
+            {t("saveUtilityBills", { count: queuedBills.length + Number(includeDraft) })}
           </Button>
         </div>
       ) : (

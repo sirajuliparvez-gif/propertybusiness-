@@ -434,10 +434,21 @@ model TenantLease {
   downpaymentAdjustments DownpaymentAdjustment[]
   transactions           Transaction[]
   utilityBills           UtilityBill[]
+  utilityBillDefaults    TenantUtilityBillDefault[]
 
   @@index([unitId])
   @@index([tenantId])
   @@index([status])
+}
+
+model TenantUtilityBillDefault {
+  tenantLeaseId String
+  tenantLease   TenantLease @relation(fields: [tenantLeaseId], references: [id], onDelete: Cascade)
+  type          UtilityType
+  paidByCompany Boolean?
+  amount        Decimal?
+
+  @@id([tenantLeaseId, type])
 }
 
 // Effective-dated rent terms. TenantLease keeps the latest configured values

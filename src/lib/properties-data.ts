@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { isIncomeType } from "@/lib/finance-types";
 import { computeServiceChargeAmount } from "@/lib/service-charge";
 import { attachElectricityConsumption } from "@/lib/electricity-consumption";
+import { serializeUtilityBillDefaults } from "@/lib/utility-bill-defaults";
 import {
   buildRentLedger,
   overdueEntries,
@@ -254,7 +255,7 @@ export async function getPropertyDetail(id: string) {
               // All leases (not just active) — the most recent ended one
               // supplies "last tenant" / "vacant since" info for a vacant unit.
               tenantLeases: {
-                orderBy: { startDate: "desc" },
+                orderBy: [{ startDate: "desc" }, { id: "asc" }],
                 select: {
                   id: true,
                   status: true,
@@ -267,6 +268,7 @@ export async function getPropertyDetail(id: string) {
                   endDate: true,
                   movedOutAt: true,
                   rentRates: { orderBy: { effectiveMonth: "asc" } },
+                  utilityBillDefaults: true,
                   tenant: { select: { name: true, contactInfo: true } },
                   // Full history, not just the latest month — the active
                   // lease's overdueAmount below needs every row to sum
@@ -475,6 +477,7 @@ export async function getPropertyDetail(id: string) {
               downpaymentAmount: Number(activeLease.initialDownpaymentAmount),
               currentDownpaymentBalance: Number(activeLease.currentDownpaymentBalance),
               startDate: activeLease.startDate,
+              utilityDefaults: serializeUtilityBillDefaults(activeLease.utilityBillDefaults),
               endDate: activeLease.endDate,
               // Sum of every month still owing something (real rows AND
               // months nobody ever recorded) — not just the latest month.
@@ -791,6 +794,8 @@ export async function getPropertyDetail(id: string) {
       label: u.label,
       unitTypeLabel: ut.label,
       tenantName: u.tenantName,
+      leaseStart: u.currentTenant ? dhakaISO(u.currentTenant.startDate) : null,
+      utilityDefaults: u.currentTenant?.utilityDefaults,
       ownerRentAmount: u.ownerRentAmount,
       ownerDownpaymentAmount: u.ownerDownpaymentAmount,
       tenantDefaultNightlyRateAmount: u.tenantDefaultNightlyRateAmount,

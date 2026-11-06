@@ -3,6 +3,7 @@ import { dhakaISO, dhakaNow } from "@/lib/dhaka-time";
 import { prisma } from "@/lib/prisma";
 import { computeServiceChargeAmount } from "@/lib/service-charge";
 import { attachElectricityConsumption } from "@/lib/electricity-consumption";
+import { serializeUtilityBillDefaults } from "@/lib/utility-bill-defaults";
 import {
   buildRentLedger,
   overdueEntries,
@@ -375,6 +376,7 @@ export async function getTenantProfile(leaseId: string) {
           },
         },
         rentRates: { orderBy: { effectiveMonth: "asc" } },
+        utilityBillDefaults: true,
         documents: { orderBy: { uploadedAt: "desc" } },
         downpaymentAdjustments: {
           orderBy: { createdAt: "desc" },
@@ -541,6 +543,7 @@ export async function getTenantProfile(leaseId: string) {
     nidNumber: lease.tenant.nidNumber,
     businessRegistrationNumber: lease.tenant.businessRegistrationNumber,
     leaseStatus: lease.status,
+    utilityBillDefaults: serializeUtilityBillDefaults(lease.utilityBillDefaults),
     propertyId: lease.unit.unitType.property.id,
     propertyName: lease.unit.unitType.property.name,
     unitId: lease.unitId,

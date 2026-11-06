@@ -48,12 +48,12 @@ export function AddUtilityBillDialogGlobal({
   const [type, setType] = useState<UtilityType>("ELECTRICITY");
   const [propertyId, setPropertyId] = useState(properties[0]?.id ?? "");
   const [unitId, setUnitId] = useState(NONE_VALUE);
-  const [paidByCompany, setPaidByCompany] = useState(false);
+  const [payerOverride, setPayerOverride] = useState<boolean | null>(null);
   const [meterReading, setMeterReading] = useState("");
   const [manualPreviousReading, setManualPreviousReading] = useState<string | null>(null);
   const [open, setOpen] = useState(dismissTo != null);
   const [unitRate, setUnitRate] = useState("");
-  const [amount, setAmount] = useState("");
+  const [amountOverride, setAmountOverride] = useState<string | null>(null);
   const [dueDate, setDueDate] = useState(dhakaTodayISO);
   const [readingLookup, setReadingLookup] = useState<{ key: string; reading: number | null; failed?: boolean } | null>(null);
 
@@ -75,8 +75,6 @@ export function AddUtilityBillDialogGlobal({
   const consumption =
     meterReading && effectivePreviousReading != null ? Number(meterReading) - effectivePreviousReading : null;
 
-  const usingUnitRate = type === "ELECTRICITY" && unitRate !== "";
-  const calculatedAmount = usingUnitRate ? electricityAmountAtRate(consumption, unitRate) : "";
 
   const typeLabels: Record<UtilityType, string> = {
     GAS: t("utilityTypeGas"),
@@ -87,10 +85,7 @@ export function AddUtilityBillDialogGlobal({
 
   function handleTypeChange(next: UtilityType) {
     setType(next);
-    setPaidByCompany(next === "WATER");
-    setMeterReading("");
-    setManualPreviousReading(null);
-    setUnitRate("");
+    resetBillFields();
   }
   const isWater = type === "WATER";
 
@@ -98,12 +93,29 @@ export function AddUtilityBillDialogGlobal({
     () => properties.find((p) => p.id === propertyId)?.units ?? [],
     [properties, propertyId]
   );
+  const unit = unitsForProperty.find((item) => item.id === unitId);
+  const typeDefault = unit?.leaseStart && dueDate >= unit.leaseStart
+    ? unit.utilityDefaults.find((item) => item.type === type)
+    : undefined;
+  const paidByCompany = typeDefault?.paidByCompany ?? payerOverride ?? false;
+  const payerLocked = typeDefault?.paidByCompany != null;
+  const amountLocked = typeDefault?.amount != null;
+  const amount = typeDefault?.amount ?? amountOverride ?? "";
+  const usingUnitRate = type === "ELECTRICITY" && !amountLocked && unitRate !== "";
+  const calculatedAmount = usingUnitRate ? electricityAmountAtRate(consumption, unitRate) : "";
+
+  function resetBillFields() {
+    setPayerOverride(null);
+    setAmountOverride(null);
+    setMeterReading("");
+    setManualPreviousReading(null);
+    setUnitRate("");
+  }
 
   function handlePropertyChange(v: string | null) {
     setPropertyId(v ?? "");
     setUnitId(NONE_VALUE);
-    setMeterReading("");
-    setManualPreviousReading(null);
+    resetBillFields();
   }
 
   return (
@@ -176,7 +188,7 @@ export function AddUtilityBillDialogGlobal({
           <FormField label={t("unitOptional")} htmlFor="utilityBillUnit" className="sm:col-span-2">
             <Select
               value={unitId}
-              onValueChange={(v) => { setUnitId(v ?? NONE_VALUE); setManualPreviousReading(null); setMeterReading(""); }}
+              onValueChange={(v) => { setUnitId(v ?? NONE_VALUE); resetBillFields(); }}
               items={[
                 { value: NONE_VALUE, label: t("noSpecificUnit") },
                 ...unitsForProperty.map((u) => ({ value: u.id, label: unitPickerLabel(u) })),
@@ -213,7 +225,8 @@ export function AddUtilityBillDialogGlobal({
               </FormField>
               <FormField label={t("electricityUnitRate")} htmlFor="utilityBillGlobalUnitRate" className="sm:col-span-2">
                 <Input id="utilityBillGlobalUnitRate" name="electricityUnitRate" type="number" min={0} step="any"
-                  value={unitRate} onChange={(event) => setUnitRate(event.target.value)} />
+                  value={amountLocked ? "" : unitRate} disabled={amountLocked}
+                  onChange={(event) => setUnitRate(event.target.value)} />
               </FormField>
               <p aria-live="polite" className="text-xs text-muted-foreground sm:col-span-2">
                 {calculatedAmount
@@ -231,8 +244,8 @@ export function AddUtilityBillDialogGlobal({
 
           <FormField label={t("invoiceUtilityBillAmount")} htmlFor="utilityBillAmount" required>
             <Input id="utilityBillAmount" name="amount" type="number" step="any" min={0}
-              value={usingUnitRate ? calculatedAmount : amount} readOnly={usingUnitRate} required
-              onChange={(event) => setAmount(event.target.value)} />
+              value={usingUnitRate ? calculatedAmount : amount} readOnly={usingUnitRate || amountLocked} required
+              onChange={(event) => setAmountOverride(event.target.value)} />
           </FormField>
           <FormField label={t("billDueDate")} htmlFor="utilityBillDueDate" required>
             <Input id="utilityBillDueDate" name="dueDate" type="date" value={dueDate} required
@@ -246,11 +259,14 @@ export function AddUtilityBillDialogGlobal({
             <Checkbox
               id="utilityBillPaidByCompanyGlobal"
               checked={isWater || paidByCompany}
-              disabled={isWater}
-              onCheckedChange={(checked) => setPaidByCompany(checked === true)}
+              disabled={isWater || payerLocked}
+              onCheckedChange={(checked) => setPayerOverride(checked === true)}
             />
             {isWater ? t("paidByCompanyWaterLocked") : t("paidByCompanyLabel")}
           </label>
+          {amountLocked || payerLocked ? (
+            <p className="text-xs text-muted-foreground sm:col-span-2">{t("utilityDefaultsLocked")}</p>
+          ) : null}
 
           <DialogFooter className="sm:col-span-2">
             <DialogClose render={<Button type="button" variant="outline" />}>

@@ -10,10 +10,47 @@ import { redirect } from "@/i18n/navigation";
 import { applyUtilityBillInstallment } from "@/lib/payment-progress";
 import { requireCurrentUser } from "@/lib/auth/session";
 import { isValidTransactionDate } from "@/lib/transaction-edit";
+import { serializeUtilityBillDefaults, utilityBillTypes } from "@/lib/utility-bill-defaults";
 
 function str(formData: FormData, key: string) {
   const v = formData.get(key);
   return typeof v === "string" && v.trim() !== "" ? v.trim() : null;
+}
+
+export async function getTenantUtilityBillDefaults(tenantLeaseId: string) {
+  await requireCurrentUser();
+  return serializeUtilityBillDefaults(await prisma.tenantUtilityBillDefault.findMany({ where: { tenantLeaseId } }));
+}
+
+export async function saveTenantUtilityBillDefaults(tenantLeaseId: string, formData: FormData) {
+  await requireCurrentUser();
+  const defaults: Prisma.TenantUtilityBillDefaultCreateManyInput[] = [];
+  for (const type of utilityBillTypes) {
+    const amount = str(formData, `amount-${type}`);
+    if (amount != null && (!/^(\d{1,12}(\.\d{1,2})?|\.\d{1,2})$/.test(amount) || Number(amount) <= 0)) return false;
+    const payer = formData.get(`payer-${type}`);
+    const paidByCompany = type === "WATER" || payer === "company" ? true : payer === "tenant" ? false : null;
+    if (amount != null || (paidByCompany != null && type !== "WATER")) {
+      defaults.push({ tenantLeaseId, type, amount, paidByCompany });
+    }
+  }
+
+  const saved = await prisma.$transaction(async (tx) => {
+    const [lease] = await tx.$queryRaw<{ id: string }[]>`
+      SELECT id FROM "TenantLease" WHERE id = ${tenantLeaseId} AND status = 'ACTIVE' FOR UPDATE
+    `;
+    if (!lease) return false;
+    await tx.tenantUtilityBillDefault.deleteMany({ where: { tenantLeaseId } });
+    await tx.tenantUtilityBillDefault.createMany({ data: defaults });
+    return true;
+  });
+
+  if (saved) {
+    revalidatePath("/[locale]/tenants/[id]", "page");
+    revalidatePath("/[locale]/utility-bills", "page");
+    revalidatePath("/[locale]/properties/[id]", "page");
+  }
+  return saved;
 }
 
 // Every reason an edit/delete can be refused, as a stable key the client
@@ -69,16 +106,26 @@ export async function addUtilityBill(formData: FormData) {
   const locale = await getLocale();
   const propertyId = str(formData, "propertyId");
   const fields = readUtilityBillFields(formData);
-  if (!propertyId || !fields) throw new Error("Missing required bill fields");
+  if (!propertyId || !fields || !isValidTransactionDate(fields.dueDate)) throw new Error("Missing required bill fields");
   if (!validMeterReadings(fields.meterReading, fields.previousMeterReadingOverride)) {
     throw new Error("Invalid electricity meter readings");
   }
 
+  const unitId = str(formData, "unitId");
+  const lease = unitId ? await prisma.tenantLease.findFirst({
+    where: { unitId, status: "ACTIVE", unit: { unitType: { propertyId } } },
+    orderBy: [{ startDate: "desc" }, { id: "asc" }],
+    select: { startDate: true, utilityBillDefaults: true },
+  }) : null;
+  const defaults = lease && fields.dueDate >= dhakaISO(lease.startDate) ? lease.utilityBillDefaults : [];
+  const locked = defaults.find((item) => item.type === fields.type);
   await prisma.utilityBill.create({
     data: {
       ...fields,
       propertyId,
-      unitId: str(formData, "unitId"),
+      unitId,
+      amount: locked?.amount ?? fields.amount,
+      paidByCompany: locked?.paidByCompany ?? fields.paidByCompany,
       month: fields.dueDate.slice(0, 7),
       dueDate: new Date(fields.dueDate),
     },
@@ -144,7 +191,7 @@ export async function addTenantUtilityBills(
 
   const lease = await prisma.tenantLease.findUnique({
     where: { id: tenantLeaseId },
-    select: { status: true, startDate: true, unitId: true, unit: { select: { unitType: { select: { propertyId: true } } } } },
+    select: { status: true, startDate: true, unitId: true, utilityBillDefaults: true, unit: { select: { unitType: { select: { propertyId: true } } } } },
   });
   if (!lease || lease.status !== "ACTIVE") {
     return { ok: false, error: "utilityBillOutsideLease" } as const;
@@ -155,14 +202,19 @@ export async function addTenantUtilityBills(
   }
 
   await prisma.utilityBill.createMany({
-    data: validatedBills.map((bill) => ({
-      ...bill,
-      propertyId: lease.unit.unitType.propertyId,
-      unitId: lease.unitId,
-      tenantLeaseId,
-      month: billingMonth,
-      dueDate: new Date(bill.dueDate),
-    })),
+    data: validatedBills.map((bill) => {
+      const locked = lease.utilityBillDefaults.find((item) => item.type === bill.type);
+      return {
+        ...bill,
+        propertyId: lease.unit.unitType.propertyId,
+        unitId: lease.unitId,
+        tenantLeaseId,
+        amount: locked?.amount ?? bill.amount,
+        paidByCompany: locked?.paidByCompany ?? bill.paidByCompany,
+        month: billingMonth,
+        dueDate: new Date(bill.dueDate),
+      };
+    }),
   });
 
   const locale = await getLocale();

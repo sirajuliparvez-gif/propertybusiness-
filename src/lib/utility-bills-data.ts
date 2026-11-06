@@ -2,6 +2,8 @@ import { resolveListMonth, listMonthOptions } from "@/lib/list-month";
 import { prisma } from "@/lib/prisma";
 import { attachElectricityConsumption } from "@/lib/electricity-consumption";
 import { splitUtilityBillTransactions } from "@/lib/utility-bill-split";
+import { serializeUtilityBillDefaults } from "@/lib/utility-bill-defaults";
+import { dhakaISO } from "@/lib/dhaka-time";
 
 function getPropertiesWithBills() {
   return prisma.property.findMany({
@@ -20,8 +22,9 @@ function getPropertiesWithBills() {
               // Who the unit's bills are billed to right now.
               tenantLeases: {
                 where: { status: "ACTIVE" },
+                orderBy: [{ startDate: "desc" }, { id: "asc" }],
                 take: 1,
-                select: { id: true, tenant: { select: { name: true } } },
+                select: { id: true, startDate: true, utilityBillDefaults: true, tenant: { select: { name: true } } },
               },
             },
           },
@@ -67,6 +70,8 @@ export async function getAllUtilityBillsData(requestedMonth?: string) {
         label: u.label,
         unitTypeLabel: ut.label,
         tenantName: u.tenantLeases[0]?.tenant.name ?? null,
+        leaseStart: u.tenantLeases[0] ? dhakaISO(u.tenantLeases[0].startDate) : null,
+        utilityDefaults: serializeUtilityBillDefaults(u.tenantLeases[0]?.utilityBillDefaults ?? []),
       }))
     ),
   }));

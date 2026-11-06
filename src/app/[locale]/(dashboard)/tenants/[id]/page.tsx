@@ -29,6 +29,7 @@ import { DeleteRentPaymentButton } from "@/components/properties/delete-rent-pay
 import { AddRentArrearsDialog } from "@/components/properties/add-rent-arrears-dialog";
 import { CorrectHistoricalRentDialog } from "@/components/properties/correct-historical-rent-dialog";
 import { AddUtilityBillDialog } from "@/components/properties/add-utility-bill-dialog";
+import { TenantUtilityDefaultsDialog } from "@/components/properties/tenant-utility-defaults-dialog";
 import { UtilityBillsTable } from "@/components/properties/utility-bills-table";
 import { MobileUtilityBillsList } from "@/components/mobile/mobile-utility-bills-list";
 import { getTenantProfile } from "@/lib/tenants-data";
@@ -514,14 +515,19 @@ export default async function TenantProfilePage({
       ) : null}
 
       <Card id="payment-history" className="scroll-mt-20">
-        <CardHeader className="flex-row items-center justify-between space-y-0">
+        <CardHeader className="flex-row flex-wrap items-center justify-between gap-2 space-y-0">
           <CardTitle className="text-base">{t("utilityBillsSection")}</CardTitle>
           {!isFormer ? (
-            <AddUtilityBillDialog
-              propertyId={tenant.propertyId}
-              fixedUnitId={tenant.unitId}
-              returnTo={`/tenants/${tenant.id}`}
-            />
+            <div className="flex flex-wrap gap-2">
+              <TenantUtilityDefaultsDialog leaseId={tenant.id} defaults={tenant.utilityBillDefaults} />
+              <AddUtilityBillDialog
+                propertyId={tenant.propertyId}
+                fixedUnitId={tenant.unitId}
+                returnTo={`/tenants/${tenant.id}`}
+                utilityDefaults={tenant.utilityBillDefaults}
+                utilityDefaultsStart={dhakaISO(tenant.startDate)}
+              />
+            </div>
           ) : null}
         </CardHeader>
         <CardContent>
