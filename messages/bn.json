@@ -22,6 +22,9 @@
     "quickRentReport": "মাসিক ভাড়া রিপোর্ট",
     "quickUtilityBill": "ইউটিলিটি বিল যোগ",
     "quickExpense": "খরচ যোগ",
+    "sidebarArrears": "বকেয়া",
+    "rentArrears": "বকেয়া ভাড়া",
+    "utilityArrears": "বকেয়া ইউটিলিটি বিল",
     "sidebarMoney": "ভাড়া, বিল ও লেনদেন",
     "sidebarManagement": "প্রপার্টি ও ব্যবস্থাপনা",
     "sidebarReports": "রিপোর্ট ও ডেটা",
@@ -747,6 +750,8 @@
     "consumptionColumn": "ব্যবহার (ইউনিট)",
 
     "propertyLabel": "প্রপার্টি",
+    "utilityArrearsSubtitle": "পুরোনো ও চলতি মাসের যেসব ইউটিলিটি বিল এখনো বাকি আছে।",
+    "noUtilityArrears": "কোনো বকেয়া ইউটিলিটি বিল পাওয়া যায়নি।",
     "utilityBillsPageSubtitle": "সব প্রপার্টির ইউটিলিটি বিল একসাথে দেখুন ও পরিশোধ করুন",
     "utilityPaidThisMonth": "এই মাসে পরিশোধিত বিল",
     "unpaidBillsCount": "বকেয়া বিল",

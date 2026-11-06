@@ -290,11 +290,13 @@ export function PayUtilityBillButton({
 export function UtilityBillsTable({
   bills,
   showPropertyColumn = false,
+  unpaidOnly = false,
   propertyOptions,
   returnTo,
 }: {
   bills: UtilityBillRow[];
   showPropertyColumn?: boolean;
+  unpaidOnly?: boolean;
   // Every property to offer in the filter. Without it the list is derived from
   // the bills themselves, so a property with no bills yet could not be picked.
   propertyOptions?: { id: string; name: string }[];
@@ -357,7 +359,7 @@ export function UtilityBillsTable({
   }, [byPropertyAndDate, filter]);
 
   if (bills.length === 0) {
-    return <p className="py-8 text-center text-sm text-muted-foreground">{t("noUtilityBills")}</p>;
+    return <p className="py-8 text-center text-sm text-muted-foreground">{t(unpaidOnly ? "noUtilityArrears" : "noUtilityBills")}</p>;
   }
 
   const filters: { key: Filter; label: string }[] = [
@@ -374,7 +376,7 @@ export function UtilityBillsTable({
   return (
     <div className="flex flex-col gap-3">
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <div className="flex flex-wrap gap-1.5">
+        {!unpaidOnly && <div className="flex flex-wrap gap-1.5">
           {filters.map((f) => (
             <button
               key={f.key}
@@ -390,7 +392,7 @@ export function UtilityBillsTable({
               {f.label}
             </button>
           ))}
-        </div>
+        </div>}
 
         <div className="flex flex-wrap items-center gap-2">
           {showPropertyColumn ? (
@@ -462,7 +464,7 @@ export function UtilityBillsTable({
       </div>
 
       {filtered.length === 0 ? (
-        <p className="py-8 text-center text-sm text-muted-foreground">{t("noUtilityBills")}</p>
+        <p className="py-8 text-center text-sm text-muted-foreground">{t(unpaidOnly ? "noUtilityArrears" : "noUtilityBills")}</p>
       ) : (
         <Table>
           <TableHeader>
@@ -472,7 +474,7 @@ export function UtilityBillsTable({
               <TableHead>{t("utilityType")}</TableHead>
               <TableHead>{t("unit")}</TableHead>
               <TableHead>{t("paymentMethod")}</TableHead>
-              <TableHead className="text-right">{t("amount")}</TableHead>
+              <TableHead className="text-right">{t(unpaidOnly ? "remaining" : "amount")}</TableHead>
               <TableHead>{t("status")}</TableHead>
               <TableHead className="text-right">{t("actions")}</TableHead>
             </TableRow>
@@ -511,8 +513,8 @@ export function UtilityBillsTable({
                   {paymentMethodLabel(t, b.paymentMethod)}
                 </TableCell>
                 <TableCell className="text-right font-mono tabular-nums">
-                  {formatTaka(b.amount)}
-                  {b.status === "PARTIAL" ? (
+                  {unpaidOnly ? formatTaka(b.amount - b.paidAmount, 2) : formatTaka(b.amount)}
+                  {!unpaidOnly && b.status === "PARTIAL" ? (
                     <p className="text-xs font-normal text-warning">
                       {t("utilityPaidOfTotal", { paid: formatTaka(b.paidAmount) })}
                     </p>
@@ -588,7 +590,7 @@ export function UtilityBillsTable({
                 {t("totalUnpaid")}
               </TableCell>
               <TableCell className="text-right font-mono font-semibold tabular-nums">
-                {formatTaka(totalUnpaid)}
+                {formatTaka(totalUnpaid, unpaidOnly ? 2 : 0)}
               </TableCell>
               <TableCell />
               <TableCell />

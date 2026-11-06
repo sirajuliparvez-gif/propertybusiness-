@@ -49,7 +49,13 @@ export function AppSidebar() {
     {
       items: [
         { href: "/", label: t("dashboard"), icon: LayoutDashboard },
-        { href: "/rent/arrears", label: t("quickRentArrears"), icon: HandCoins, prefetch: false },
+      ],
+    },
+    {
+      label: t("sidebarArrears"),
+      items: [
+        { href: "/rent/arrears", label: t("rentArrears"), icon: HandCoins, prefetch: false },
+        { href: "/utility-bills/arrears", label: t("utilityArrears"), icon: Zap, prefetch: false },
       ],
     },
     {

@@ -22,6 +22,9 @@
     "quickRentReport": "Monthly rent report",
     "quickUtilityBill": "Add utility bill",
     "quickExpense": "Add expense",
+    "sidebarArrears": "Arrears",
+    "rentArrears": "Rent arrears",
+    "utilityArrears": "Utility arrears",
     "sidebarMoney": "Rent, bills & transactions",
     "sidebarManagement": "Property & management",
     "sidebarReports": "Reports & data",
@@ -747,6 +750,8 @@
     "utilityBillPaidToast": "Bill marked as paid.",
 
     "propertyLabel": "Property",
+    "utilityArrearsSubtitle": "Unpaid utility bills from this month and previous months.",
+    "noUtilityArrears": "No unpaid utility bills found.",
     "utilityBillsPageSubtitle": "View and pay utility bills across all properties in one place",
     "utilityPaidThisMonth": "Paid This Month",
     "unpaidBillsCount": "Unpaid Bills",

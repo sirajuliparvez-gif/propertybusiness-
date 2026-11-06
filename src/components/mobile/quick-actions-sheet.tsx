@@ -23,6 +23,7 @@ export function QuickActionsSheet({
 
   const actions = [
     { href: "/rent/arrears", label: nav("quickRentArrears"), icon: HandCoins, tone: "text-amber-600 dark:text-amber-400 bg-linear-to-br from-amber-500/20 to-amber-500/5" },
+    { href: "/utility-bills/arrears", label: nav("utilityArrears"), icon: Zap, tone: "text-warning bg-linear-to-br from-warning/25 to-warning/5" },
     { href: "/properties/new", label: t("newProperty"), icon: Building2, tone: "text-blue-600 dark:text-blue-400 bg-linear-to-br from-blue-500/20 to-blue-500/5" },
     { href: "/rent", label: t("recordRent"), icon: Wallet, tone: "text-success bg-linear-to-br from-success/25 to-success/5" },
     { href: "/tenants", label: t("newTenant"), icon: Users, tone: "text-blue-600 dark:text-blue-400 bg-linear-to-br from-blue-500/20 to-blue-500/5" },
