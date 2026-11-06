@@ -253,10 +253,8 @@
 }
 
 @media screen {
-  .tenant-bill .cash-memo-header dl { row-gap: 12px; }
-  .tenant-bill .cash-memo-header dl > div { padding-bottom: 8px; }
-  .tenant-bill :is(th, td) { padding-block: 10px; }
-  .tenant-bill .cash-memo-signatures { padding-top: 24px; }
+  .tenant-bill .cash-memo-header dl { row-gap: 5px; }
+  .tenant-bill :is(th, td) { padding-block: 6px; }
 }
 
 @media screen and (max-width: 639px) {
@@ -270,25 +268,30 @@
 }
 
 @media print {
-  .tenant-bill { padding: 20px 24px; font-size: 10pt; line-height: 1.4; break-inside: auto; }
-  .tenant-bill > * + * { margin-top: 12px; }
-  .tenant-bill .cash-memo-header > :first-child { flex-wrap: nowrap; padding-bottom: 12px; }
-  .tenant-bill .cash-memo-header img { width: 40px; height: 40px; }
-  .tenant-bill .cash-memo-header dl { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px 16px; }
-  .tenant-bill .cash-memo-header dl > div { padding-bottom: 5px; }
-  .tenant-bill .cash-memo-company { font-size: 9pt; line-height: 1.35; }
-  .tenant-bill h2 { font-size: 11pt; margin-bottom: 5px; }
-  .tenant-bill .tenant-bill-section-label { padding-block: 5px; }
+  .tenant-bill {
+    width: 155mm;
+    max-width: 100%;
+    margin-inline: auto;
+    padding: 3mm 4mm;
+    font-size: 9pt;
+    line-height: 1.3;
+    break-inside: auto;
+  }
+  .tenant-bill > * + * { margin-top: 8px; }
+  .tenant-bill .cash-memo-header > :first-child { flex-wrap: nowrap; }
+  .tenant-bill .cash-memo-header > :first-child .text-lg { font-size: 12pt; }
+  .tenant-bill .cash-memo-header dl { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .tenant-bill .cash-memo-company { font-size: 8pt; }
+  .tenant-bill h2 { font-size: 10pt; margin-bottom: 3px; }
+  .tenant-bill .tenant-bill-section-label { padding-block: 3px; }
   .tenant-bill thead { display: table-header-group; }
-  .tenant-bill th, .tenant-bill td { padding-block: 6px; font-size: 9.5pt; }
-  .tenant-bill .cash-memo-reading { font-size: 8.5pt; }
-  .tenant-bill .cash-memo-signatures { padding-top: 16px; }
+  .tenant-bill .cash-memo-reading { font-size: 8pt; }
   .tenant-bill-summary { break-inside: avoid; }
-  .tenant-bill-summary-main { grid-template-columns: 1.25fr 1fr 1fr; padding: 10px 14px; }
+  .tenant-bill-summary-main { grid-template-columns: 1.25fr 1fr 1fr; padding: 6px 10px; }
   .tenant-bill-summary-main > :first-child { grid-column: auto; }
-  .tenant-bill-summary-main dt, .tenant-bill-summary-main dd { font-size: 10pt; }
-  .tenant-bill-summary-main .tenant-bill-balance { font-size: 20pt; }
-  .tenant-bill-breakdown { padding: 6px 14px; }
+  .tenant-bill-summary-main dt, .tenant-bill-summary-main dd { font-size: 9pt; }
+  .tenant-bill-summary-main .tenant-bill-balance { font-size: 15pt; }
+  .tenant-bill-breakdown { padding: 4px 10px; }
   .tenant-bill-detail td:nth-child(2) > div { display: none; }
   .cash-memo-handwriting-row { height: 12mm; break-inside: avoid; }
   .cash-memo-handwriting-row > td { min-width: 60mm; vertical-align: middle; }

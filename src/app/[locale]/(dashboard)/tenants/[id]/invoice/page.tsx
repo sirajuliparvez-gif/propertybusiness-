@@ -185,7 +185,7 @@ export default async function TenantInvoicePage({
     : false;
 
   return (
-    <div data-tenant-invoice-page className="mx-auto flex w-full max-w-4xl min-w-0 flex-1 flex-col gap-4">
+    <div data-tenant-invoice-page className="mx-auto flex w-full max-w-[155mm] min-w-0 flex-1 flex-col gap-3">
       <div className="flex flex-wrap items-center gap-2 print:hidden">
         <InvoiceMonthSelect leaseId={id} months={availableMonths} selectedMonth={selectedMonth} />
       </div>
@@ -213,15 +213,15 @@ export default async function TenantInvoicePage({
       <div data-testid="invoice" className="print-invoice-a4">
       <div
         data-testid="invoice-copy"
-        className={cn(cashMemoClassName, "tenant-bill gap-6 rounded-xl border-primary/25 p-4 sm:gap-8 sm:p-8 lg:p-10")}
+        className={cn(cashMemoClassName, "tenant-bill gap-4 rounded-lg border-sky-900/40 p-4 sm:p-5")}
       >
         <CashMemoHeader {...memoHeader} title={t("cashMemoRentTitle")} contact={tenant.contactInfo} />
 
         <section className="tenant-bill-summary overflow-hidden rounded-lg border border-primary/25 bg-primary/[0.045]" aria-label={t("cashMemoSummary")}>
-          <dl className="tenant-bill-summary-main grid grid-cols-2 items-center gap-x-4 gap-y-4 px-4 py-4 sm:grid-cols-[1.25fr_1fr_1fr] sm:px-6 sm:py-5">
+          <dl className="tenant-bill-summary-main grid grid-cols-2 items-center gap-x-3 gap-y-2 px-3 py-3 sm:grid-cols-[1.25fr_1fr_1fr]">
             <div className="col-span-2 sm:col-span-1">
               <dt className="text-sm font-semibold">{t("invoiceSimpleBalance")}</dt>
-              <dd data-testid="invoice-balance" className={cn("tenant-bill-balance mt-1 text-3xl leading-tight sm:text-4xl font-bold tabular-nums", balance > 0 ? "text-destructive" : "text-success")}>
+              <dd data-testid="invoice-balance" className={cn("tenant-bill-balance mt-1 text-2xl leading-tight font-bold tabular-nums", balance > 0 ? "text-destructive" : "text-success")}>
                 {formatInvoiceAmount(balance)}
               </dd>
             </div>
