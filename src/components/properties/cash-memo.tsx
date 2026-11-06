@@ -1,3 +1,4 @@
+import { useTranslations } from "next-intl";
 import { InvoiceHeader } from "@/components/invoice-header";
 
 export const cashMemoClassName =
@@ -63,12 +64,15 @@ export function CashMemoReading({ current, previous, units, label, unitLabel, mi
   missing: string;
   locale: string;
 }) {
+  const t = useTranslations("Properties");
   const format = new Intl.NumberFormat(locale === "bn" ? "bn-BD" : "en-US", { maximumFractionDigits: 6 });
   return (
     <p className="cash-memo-reading mt-1 whitespace-normal text-xs" data-testid="cash-memo-reading">
       <strong>{label} </strong>
       <span className="tabular-nums">
-        {format.format(current)} − {previous == null ? "—" : format.format(previous)}
+        <span className="whitespace-nowrap">{t("invoiceElectricityCurrent")} {format.format(current)}</span>
+        {" − "}
+        <span className="whitespace-nowrap">{t("previousMeterReading")} {previous == null ? "—" : format.format(previous)}</span>
         {units == null ? ` · ${missing}` : ` = ${format.format(units)} ${unitLabel}`}
       </span>
     </p>
