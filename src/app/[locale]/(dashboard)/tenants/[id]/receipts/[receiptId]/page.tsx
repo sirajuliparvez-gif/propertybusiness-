@@ -14,11 +14,12 @@ import { dhakaISO } from "@/lib/dhaka-time";
 
 export default async function MoneyReceiptPage({ params, searchParams }: {
   params: Promise<{ id: string; receiptId: string }>;
-  searchParams: Promise<{ from?: string; month?: string; tenant?: string }>;
+  searchParams: Promise<{ from?: string; month?: string; tenant?: string; embed?: string }>;
 }) {
   await requireCurrentUser();
   const { id, receiptId } = await params;
-  const { from, month, tenant } = await searchParams;
+  const { from, month, tenant, embed } = await searchParams;
+  const embedded = from === "rent-invoice" && embed === "1";
   if (!/^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/.test(receiptId)) notFound();
 
   const entries = await prisma.transaction.findMany({
@@ -59,9 +60,9 @@ export default async function MoneyReceiptPage({ params, searchParams }: {
     : from === "rent" ? `/rent${selectedMonth}${rentScope}` : `/transactions?month=${dhakaISO(first.date).slice(0, 7)}`;
 
   return (
-    <div className="mx-auto w-full max-w-2xl">
+    <div data-rent-bill-embed={embedded || undefined} className="mx-auto w-full max-w-2xl">
       <div className="mb-4 flex flex-wrap items-center justify-between gap-2 print:hidden">
-        <Button variant="outline" render={<Link href={backHref} />} nativeButton={false}>{t("receiptBack")}</Button>
+        {!embedded ? <Button variant="outline" render={<Link href={backHref} />} nativeButton={false}>{t("receiptBack")}</Button> : null}
         <InvoicePrintButton />
       </div>
       {comparison ? (

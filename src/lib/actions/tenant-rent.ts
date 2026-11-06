@@ -828,8 +828,9 @@ export async function recordOverdueRentPayment(formData: FormData) {
   if (invoiceMonth) {
     const fromRentInvoice = returnPath === `/rent/${tenantLeaseId}/invoice`;
     const scoped = fromRentInvoice && returnUrl.searchParams.get("tenant") === "1";
+    const embedded = fromRentInvoice && returnUrl.searchParams.get("embed") === "1";
     redirect({
-      href: `/tenants/${tenantLeaseId}/receipts/${paymentReceiptId}?from=${fromRentInvoice ? "rent-invoice" : "invoice"}&month=${invoiceMonth}${scoped ? "&tenant=1" : ""}`,
+      href: `/tenants/${tenantLeaseId}/receipts/${paymentReceiptId}?from=${fromRentInvoice ? "rent-invoice" : "invoice"}&month=${invoiceMonth}${scoped ? "&tenant=1" : ""}${embedded ? "&embed=1" : ""}`,
       locale,
     });
   }
@@ -1046,11 +1047,12 @@ export async function recordMultiMonthRentPayment(formData: FormData, newBills: 
     `/properties/${propertyId}`, `/tenants/${tenantLeaseId}`, `/tenants/${tenantLeaseId}/invoice`, `/tenants/${tenantLeaseId}/history`,
   ])) revalidateLocalizedPath(locale, path);
   const returnUrl = new URL(returnTo, "http://local");
-  if (returnUrl.pathname === "/rent") {
+  const embeddedInvoice = returnUrl.pathname === `/rent/${tenantLeaseId}/invoice` && returnUrl.searchParams.get("embed") === "1";
+  if (returnUrl.pathname === "/rent" || embeddedInvoice) {
     const month = returnUrl.searchParams.get("month");
-    const scopedToTenant = returnUrl.searchParams.get("tenant") === tenantLeaseId;
+    const scopedToTenant = returnUrl.searchParams.get("tenant") === (embeddedInvoice ? "1" : tenantLeaseId);
     redirect({
-      href: `/tenants/${tenantLeaseId}/receipts/${paymentReceiptId}?from=rent${isPaymentMonth(month) ? `&month=${month}` : ""}${scopedToTenant ? "&tenant=1" : ""}`,
+      href: `/tenants/${tenantLeaseId}/receipts/${paymentReceiptId}?from=${embeddedInvoice ? "rent-invoice" : "rent"}${isPaymentMonth(month) ? `&month=${month}` : ""}${scopedToTenant ? "&tenant=1" : ""}${embeddedInvoice ? "&embed=1" : ""}`,
       locale,
     });
   }

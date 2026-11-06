@@ -253,6 +253,18 @@
   display: none;
 }
 
+body:has([data-rent-bill-embed]) :is([data-dashboard-navigation], [data-dashboard-topbar]) {
+  display: none;
+}
+
+main:has(> [data-rent-bill-embed]) {
+  padding: 0.75rem;
+}
+
+@media print {
+  main:has(> [data-rent-bill-embed]) { padding: 0; }
+}
+
 @media screen {
   .tenant-bill .cash-memo-header dl { row-gap: 5px; }
   .tenant-bill :is(th, td) { padding-block: 6px; }

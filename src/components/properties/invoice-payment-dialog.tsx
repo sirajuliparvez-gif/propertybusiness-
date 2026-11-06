@@ -16,7 +16,7 @@ import { recordOverdueRentPayment } from "@/lib/actions/tenant-rent";
 const money = (cents: number) => formatTaka(cents / 100, 2);
 
 export function InvoicePaymentDialog({
-  tenantName, tenantLeaseId, propertyId, month, returnTo, lines, reconciliation,
+  tenantName, tenantLeaseId, propertyId, month, returnTo, lines, reconciliation, inline = false,
 }: {
   tenantName: string;
   tenantLeaseId: string;
@@ -25,6 +25,7 @@ export function InvoicePaymentDialog({
   returnTo: string;
   lines: (InvoicePaymentLine & { label: string })[];
   reconciliation?: { revision: number; open: boolean; printedCents?: number };
+  inline?: boolean;
 }) {
   const t = useTranslations("Properties");
   const locale = useLocale();
@@ -54,21 +55,8 @@ export function InvoicePaymentDialog({
   ] as const;
   const [method, setMethod] = useState<(typeof methods)[number][0]>("CASH");
 
-  return (
-    <Dialog open={open} onOpenChange={(next) => {
-      if (pending) return;
-      setOpen(next);
-      if (!next) {
-        setOnlyRent(false);
-        setMatches(true);
-        setReceived("");
-        setDate(today);
-        setMethod("CASH");
-      }
-    }}>
-      <DialogTrigger render={<Button />}>{actionLabel}</DialogTrigger>
-      <DialogContent className="max-h-[90dvh] overflow-y-auto sm:max-w-lg">
-        <DialogHeader><DialogTitle>{actionLabel}</DialogTitle></DialogHeader>
+  const paymentForm = (
+    <>
         <p className="text-sm font-medium">{tenantName} · {monthLabel(month, locale)}</p>
         <form className="grid gap-4" action={(formData) => {
           if (!valid || pending) return;
@@ -177,6 +165,27 @@ export function InvoicePaymentDialog({
           </details>
           <Button type="submit" disabled={!valid || !date || date > today || pending}>{t("invoicePaymentSave")}</Button>
         </form>
+    </>
+  );
+
+  if (inline) return <div className="space-y-3">{paymentForm}</div>;
+
+  return (
+    <Dialog open={open} onOpenChange={(next) => {
+      if (pending) return;
+      setOpen(next);
+      if (!next) {
+        setOnlyRent(false);
+        setMatches(true);
+        setReceived("");
+        setDate(today);
+        setMethod("CASH");
+      }
+    }}>
+      <DialogTrigger render={<Button />}>{actionLabel}</DialogTrigger>
+      <DialogContent className="max-h-[90dvh] overflow-y-auto sm:max-w-lg">
+        <DialogHeader><DialogTitle>{actionLabel}</DialogTitle></DialogHeader>
+        {paymentForm}
       </DialogContent>
     </Dialog>
   );

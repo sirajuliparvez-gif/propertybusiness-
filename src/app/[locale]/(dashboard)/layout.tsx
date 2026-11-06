@@ -25,7 +25,7 @@ export default async function DashboardLayout({
   return (
     <SidebarProvider>
       <RentActionFeedback />
-      <div className="print:hidden">
+      <div data-dashboard-navigation className="print:hidden">
         <AppSidebar />
       </div>
       <SidebarInset>
@@ -38,7 +38,7 @@ export default async function DashboardLayout({
         <main className="flex min-w-0 flex-1 flex-col gap-4 p-4 pb-24 sm:p-6 sm:pb-24 md:pb-6 print:p-0">
           {children}
         </main>
-        <div className="print:hidden md:hidden">
+        <div data-dashboard-navigation className="print:hidden md:hidden">
           <MobileTabBar />
         </div>
       </SidebarInset>

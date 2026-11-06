@@ -14,7 +14,7 @@ import type { RentBillPrintKey, RentBillPrintRow } from "@/lib/rent-bill-print";
 const money = (cents: number) => formatTaka(cents / 100, 2);
 
 export function RentBillPrintForm({
-  leaseId, month, rows, printed, printedDate, revision, header, prepare, returnTo,
+  leaseId, month, rows, printed, printedDate, revision, header, prepare, returnTo, embedded = false,
 }: {
   leaseId: string;
   month: string;
@@ -25,6 +25,7 @@ export function RentBillPrintForm({
   header: ComponentProps<typeof CashMemoHeader>;
   prepare: boolean;
   returnTo: string;
+  embedded?: boolean;
 }) {
   const t = useTranslations("Properties");
   const locale = useLocale();
@@ -52,7 +53,11 @@ export function RentBillPrintForm({
       try {
         if (await confirmRentBillPrint(leaseId, month, revision, selected, JSON.stringify(draft))) {
           toast.success(t("rentBillPrinted"));
-          router.push(returnTo);
+          if (embedded && window.parent !== window) {
+            window.parent.postMessage("rent-bill-print-saved", window.location.origin);
+          } else {
+            router.push(returnTo);
+          }
           return;
         }
       } catch {
@@ -91,7 +96,10 @@ export function RentBillPrintForm({
               <span>{t("rentBillExpected")}</span><span>{money(expected)}</span>
             </p>
             <div className="flex flex-wrap justify-end gap-2">
-              <Button type="button" variant="ghost" disabled={pending} onClick={() => { setOpen(false); setSentToPrint(false); }}>
+              <Button type="button" variant="ghost" disabled={pending} onClick={() => {
+                if (embedded && window.parent !== window) window.parent.postMessage("rent-bill-print-cancelled", window.location.origin);
+                else { setOpen(false); setSentToPrint(false); }
+              }}>
                 {t("cancel")}
               </Button>
               <Button type="submit" disabled={!draft.length || pending}><Printer className="size-4" />{t("invoicePrintBill")}</Button>
