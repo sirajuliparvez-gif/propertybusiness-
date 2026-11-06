@@ -17,7 +17,6 @@ import {
   Settings,
   FileSpreadsheet,
   FileText,
-  FilePlus,
   HandCoins,
   Receipt,
   type LucideIcon,
@@ -61,7 +60,6 @@ export function AppSidebar() {
     {
       label: t("quickActions"),
       items: [
-        { href: "/utility-bills?add=bill", label: t("quickUtilityBill"), icon: FilePlus, prefetch: false },
         { href: "/transactions?add=expense", label: t("quickExpense"), icon: Receipt, prefetch: false },
       ],
     },
