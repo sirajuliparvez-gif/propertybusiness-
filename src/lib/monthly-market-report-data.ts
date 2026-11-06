@@ -13,15 +13,17 @@ export async function getMonthlyMarketReport(requestedMonth?: string, propertyId
     select: { id: true, name: true, address: true },
     orderBy: [{ name: "asc" }, { id: "asc" }],
   });
-  const market = markets.find((item) => item.id === propertyId) ?? markets[0];
-  if (!market) return { month, currentMonth, markets, market: null, report: null };
+  const market = markets.find((item) => item.id === propertyId) ?? null;
+  if (!markets.length) return { month, currentMonth, markets, market, report: null };
+  const selectedMarkets = market ? [market] : markets;
+  const propertyIds = selectedMarkets.map(({ id }) => id);
 
   const { start, end } = transactionReportRange(month);
   const [rent, transactions] = await Promise.all([
-    getMonthlyRentReport(month, market.id),
+    getMonthlyRentReport(month, propertyIds),
     prisma.transaction.findMany({
       where: {
-        propertyId: market.id,
+        propertyId: { in: propertyIds },
         date: { gte: start, lt: end },
         OR: [
           { direction: "INCOMING", type: { in: [...INCOME_TYPES] } },
@@ -29,7 +31,7 @@ export async function getMonthlyMarketReport(requestedMonth?: string, propertyId
         ],
       },
       select: {
-        id: true, type: true, direction: true, amount: true, date: true, createdAt: true, notes: true,
+        id: true, propertyId: true, type: true, direction: true, amount: true, date: true, createdAt: true, notes: true,
         unit: { select: { label: true } },
         tenantLease: { select: { id: true, tenant: { select: { name: true } }, unit: { select: { label: true } } } },
         rentPayment: { select: { month: true, tenantLease: { select: { id: true, tenant: { select: { name: true } }, unit: { select: { label: true } } } } } },
@@ -56,12 +58,28 @@ export async function getMonthlyMarketReport(requestedMonth?: string, propertyId
     receiptMonths: new Map(),
   }]));
 
+  const marketRows = new Map(selectedMarkets.map(({ id, name }) => [id, {
+    id, name, receivedCents: 0, incomeCents: 0, expenseCents: 0, rentRemaining: 0,
+  }]));
+  for (const bill of rent.rows) {
+    const row = marketRows.get(bill.propertyId ?? "");
+    if (row) row.rentRemaining += bill.remaining;
+  }
+
   let rentReceivedCents = 0;
   const otherTransactions = cash.rows.flatMap((entry) => {
+    const marketRow = marketRows.get(entry.propertyId ?? "");
+    const cents = Math.round(entry.amount * 100);
+    if (marketRow) {
+      if (entry.direction === "INCOMING") marketRow.incomeCents += cents;
+      else marketRow.expenseCents += cents;
+      if (entry.type === "RENT_RECEIVED_FROM_TENANT") marketRow.receivedCents += cents;
+    }
     if (entry.type !== "RENT_RECEIVED_FROM_TENANT") {
       return [{
         ...entry,
         detail: [
+          market ? null : marketRow?.name,
           entry.unit?.label,
           entry.payrollRecord?.employee.name ?? entry.guestStay?.guestName ?? entry.tenantLease?.tenant.name,
           entry.notes,
@@ -78,7 +96,6 @@ export async function getMonthlyMarketReport(requestedMonth?: string, propertyId
       };
       tenantRows.set(key, row);
     }
-    const cents = Math.round(entry.amount * 100);
     row.receivedCents += cents;
     rentReceivedCents += cents;
     const billingMonth = entry.rentPayment?.month;
@@ -94,6 +111,7 @@ export async function getMonthlyMarketReport(requestedMonth?: string, propertyId
       totals: cash.totals, rentTotals: rent.totals, rentReceived: rentReceivedCents / 100,
       tenants: [...tenantRows.values()].sort((a, b) => (a.unit ?? "").localeCompare(b.unit ?? "", undefined, { numeric: true }) ||
         (a.name ?? "").localeCompare(b.name ?? "")),
+      marketRows: [...marketRows.values()],
       otherTransactions,
     },
   };
