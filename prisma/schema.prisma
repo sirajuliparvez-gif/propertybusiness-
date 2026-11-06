@@ -462,6 +462,7 @@ model RentBillReceiptCheck {
   printRevision Int?
   expectedCents Int
   receivedCents Int
+  lines         Json?
 
   @@index([tenantLeaseId, month])
 }

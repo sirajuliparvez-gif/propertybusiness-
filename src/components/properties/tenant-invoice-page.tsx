@@ -160,7 +160,7 @@ export default async function TenantInvoicePage({
   const paymentLines = [
     { id: selectedMonth, month: selectedMonth, kind: "rent" as const, remaining: rentRemaining, label: t("invoiceRentLabel") },
     ...statementBills.map((bill) => ({
-      id: bill.id, month: bill.month, kind: "utility" as const, remaining: billRemaining(bill), label: utilityTypeLabels[bill.type],
+      id: bill.id, month: bill.month, kind: "utility" as const, remaining: billRemaining(bill), label: fromRent ? `${utilityTypeLabels[bill.type]} · ${formatDate(bill.dueDate, locale)}` : utilityTypeLabels[bill.type],
     })),
   ].map(({ remaining, ...line }) => ({ ...line, remainingCents: Math.round(remaining * 100) }))
     .filter(({ remainingCents }) => remainingCents > 0);

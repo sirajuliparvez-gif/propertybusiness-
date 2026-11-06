@@ -17,7 +17,7 @@ import { localizedMutationPaths } from "@/lib/localized-revalidation";
 import { reportingMonthKey } from "@/lib/reporting-period";
 import { withRentActionFeedback } from "@/lib/rent-action-feedback";
 import { rentTermsDueAmount, resolveRentTermsForMonth } from "@/lib/rent-terms";
-import { allocateInvoicePayment, invoicePaymentSnapshot, type InvoicePaymentLine } from "@/lib/invoice-payment";
+import { allocateInvoicePayment, invoicePaymentSnapshot, reconcileInvoiceAllocation, type InvoicePaymentLine } from "@/lib/invoice-payment";
 import { allocateRentPayment, buildRentLedger } from "@/lib/rent-ledger";
 
 test("rent payment can settle September when money arrives in October", () => {
@@ -245,4 +245,21 @@ test("invoice partial payment settles older rent and utility before the selected
   ]);
   assert.equal(invoicePaymentSnapshot(lines), invoicePaymentSnapshot([...lines].reverse()));
   assert.notEqual(invoicePaymentSnapshot(lines), invoicePaymentSnapshot([{ ...lines[0], remainingCents: 597475 }, ...lines.slice(1)]));
+});
+
+test("a short receipt can pay electricity in full and leave the difference on rent", () => {
+  const rent = { id: "2026-11", month: "2026-11", kind: "rent", remainingCents: 1_000_000 } as const;
+  const power = { id: "power", month: "2026-11", kind: "utility", remainingCents: 100_000 } as const;
+  const lines = [rent, power];
+  assert.deepEqual(reconcileInvoiceAllocation(lines, 900_000, [[rent.id, 800_000], [power.id, 100_000]]), [
+    { ...rent, paidCents: 800_000 }, { ...power, paidCents: 100_000 },
+  ]);
+  for (const input of [
+    [[rent.id, 900_000], [power.id, 1]],
+    [[rent.id, 750_000], [power.id, 150_000]],
+    [[rent.id, 800_000], ["another-tenant-bill", 100_000]],
+    [[rent.id, 800_000], [rent.id, 100_000]],
+    [[rent.id, 900_000.5]],
+    [[rent.id, 900_001], [power.id, -1]],
+  ]) assert.equal(reconcileInvoiceAllocation(lines, 900_000, input), null);
 });

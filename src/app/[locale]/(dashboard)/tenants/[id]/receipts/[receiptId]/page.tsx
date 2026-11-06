@@ -10,6 +10,7 @@ import { isPaymentMonth } from "@/lib/payment-month";
 import { paymentMethodLabel } from "@/lib/payment-method";
 import { prisma } from "@/lib/prisma";
 import { requireCurrentUser } from "@/lib/auth/session";
+import type { ReceiptCheckLine } from "@/lib/invoice-payment";
 import { dhakaISO } from "@/lib/dhaka-time";
 
 export default async function MoneyReceiptPage({ params, searchParams }: {
@@ -40,6 +41,8 @@ export default async function MoneyReceiptPage({ params, searchParams }: {
   if (!first?.tenantLease) notFound();
   const comparison = await prisma.rentBillReceiptCheck.findUnique({ where: { receiptId, tenantLeaseId: id } });
 
+  const shortLines = comparison && comparison.receivedCents < comparison.expectedCents
+    ? comparison.lines as ReceiptCheckLine[] | null : null;
   const [t, nav, locale] = await Promise.all([getTranslations("Properties"), getTranslations("Nav"), getLocale()]);
   const utilityLabels = {
     ELECTRICITY: t("utilityTypeElectricity"), GAS: t("utilityTypeGas"),
@@ -88,7 +91,31 @@ export default async function MoneyReceiptPage({ params, searchParams }: {
           <div><dt className="text-xs text-muted-foreground">{t("cashMemoName")}</dt><dd className="font-semibold">{first.tenantLease.tenant.name}</dd></div>
           <div><dt className="text-xs text-muted-foreground">{t("cashMemoUnit")}</dt><dd>{first.tenantLease.unit.label}</dd></div>
         </dl>
-        <table className="w-full text-start">
+        {shortLines?.length ? (
+          <table className="w-full text-start">
+            <thead className="bg-muted/60 print:table-header-group">
+              <tr>
+                <th scope="col" className="px-2 py-1.5 text-start">{t("cashMemoCharge")}</th>
+                <th scope="col" className="px-2 py-1.5 text-end">{t("rentBillExpected")}</th>
+                <th scope="col" className="px-2 py-1.5 text-end">{t("receiptReceived")}</th>
+                <th scope="col" className="px-2 py-1.5 text-end">{t("receiptCheckRemaining")}</th>
+              </tr>
+            </thead>
+            <tbody>
+              {shortLines.map((line) => (
+                <tr key={line.id} className="break-inside-avoid border-b">
+                  <td className="px-2 py-1.5">
+                    {line.utilityType ? utilityLabels[line.utilityType] : t("invoiceRentLabel")}
+                    <span className="block text-xs text-muted-foreground">{line.dueDate ? formatDate(line.dueDate, locale) : monthLabel(comparison?.month ?? "", locale)}</span>
+                  </td>
+                  <td className="whitespace-nowrap px-2 py-1.5 text-end tabular-nums">{formatTaka(line.expectedCents / 100, 2)}</td>
+                  <td className="whitespace-nowrap px-2 py-1.5 text-end tabular-nums">{formatTaka(line.paidCents / 100, 2)}</td>
+                  <td className="whitespace-nowrap px-2 py-1.5 text-end font-medium tabular-nums">{formatTaka((line.expectedCents - line.paidCents) / 100, 2)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        ) : <table className="w-full text-start">
           <thead className="bg-muted/60 print:table-header-group">
             <tr><th scope="col" className="px-2 py-1.5 text-start">{t("cashMemoCharge")}</th><th scope="col" className="px-2 py-1.5 text-end">{t("receiptReceived")}</th></tr>
           </thead>
@@ -102,7 +129,7 @@ export default async function MoneyReceiptPage({ params, searchParams }: {
               </tr>
             ))}
           </tbody>
-        </table>
+        </table>}
         <div className="flex break-inside-avoid items-center justify-between gap-3 rounded-md border bg-muted/30 px-3 py-2">
           <div>
             <p className="font-semibold">{t("receiptTotalReceived")}</p>

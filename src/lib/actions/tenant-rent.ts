@@ -20,7 +20,7 @@ import { buildRentArrearsReport } from "@/lib/rent-arrears-report";
 import { requireCurrentUser } from "@/lib/auth/session";
 import { isValidTransactionDate } from "@/lib/transaction-edit";
 import { withRentActionFeedback } from "@/lib/rent-action-feedback";
-import { allocateInvoicePayment, invoicePaymentSnapshot, type InvoicePaymentLine } from "@/lib/invoice-payment";
+import { allocateInvoicePayment, invoicePaymentSnapshot, reconcileInvoiceAllocation, type InvoicePaymentLine, type ReceiptCheckLine } from "@/lib/invoice-payment";
 import { tenantUtilityArrearsWhere } from "@/lib/tenant-utility-arrears";
 import { limitToPrintedBill, type RentBillPrintRow } from "@/lib/rent-bill-print";
 import { prepareTenantUtilityBillRows, validateTenantUtilityBills } from "@/lib/utility-bill-entry";
@@ -619,6 +619,15 @@ export async function recordOverdueRentPayment(formData: FormData) {
   const invoiceChoice = str(formData, "invoiceChoice");
   const reconciliation = invoiceChoice === "reconcile";
   const printRevision = Number(str(formData, "printRevision"));
+  const allocationInput = str(formData, "receiptAllocation");
+  let manualAllocation: unknown;
+  if (allocationInput != null) {
+    try {
+      manualAllocation = JSON.parse(allocationInput);
+    } catch {
+      return { ok: false as const, reason: "invalid" as const };
+    }
+  }
   const receivedCents = Math.round(paymentAmount * 100);
   if (reconciliation && (!invoiceMonth || !Number.isSafeInteger(printRevision) || printRevision < 0 || receivedCents > 2_147_483_647)) {
     return { ok: false as const, reason: "invalid" as const };
@@ -692,13 +701,14 @@ export async function recordOverdueRentPayment(formData: FormData) {
             RENT_DUE_DAY,
           ));
       const utilityWhere = tenantUtilityArrearsWhere(lease, today.slice(0, 7));
-      const utilitySelect = { id: true, month: true, amount: true, paidAmount: true } as const;
+      const utilitySelect = { id: true, month: true, amount: true, paidAmount: true, type: true, dueDate: true } as const;
       const invoiceBills = invoiceMonth ? await tx.utilityBill.findMany({
         where: { ...utilityWhere, propertyId, month: reconciliation ? invoiceMonth : { lte: invoiceMonth } },
         select: utilitySelect,
       }) : [];
       let allocations: ReturnType<typeof allocateRentPayment>;
       let expectedCents = 0;
+      let receiptLines: ReceiptCheckLine[] = [];
       if (invoiceMonth) {
         let lines: InvoicePaymentLine[] = [
           ...entries.map(({ month, gap }) => ({ id: month, month, kind: "rent" as const, remainingCents: Math.round(gap * 100) })),
@@ -720,7 +730,20 @@ export async function recordOverdueRentPayment(formData: FormData) {
         expectedCents = limit;
         if (reconciliation ? limit <= 0 || limit > 2_147_483_647
           : receivedCents > limit || (invoiceChoice !== "partial" && receivedCents !== limit)) return false;
-        const planned = allocateInvoicePayment(eligible, Math.min(receivedCents, limit));
+        const appliedCents = Math.min(receivedCents, limit);
+        const planned = reconciliation && manualAllocation !== undefined
+          ? reconcileInvoiceAllocation(eligible, appliedCents, manualAllocation)
+          : allocateInvoicePayment(eligible, appliedCents);
+        if (!planned) return false;
+        if (reconciliation) {
+          const paidById = new Map(planned.map((line) => [line.id, line.paidCents]));
+          const billsById = new Map(invoiceBills.map((bill) => [bill.id, bill]));
+          receiptLines = eligible.map((line) => ({
+            id: line.id, utilityType: billsById.get(line.id)?.type ?? null,
+            dueDate: billsById.has(line.id) ? dhakaISO(billsById.get(line.id)!.dueDate) : null,
+            expectedCents: line.remainingCents, paidCents: paidById.get(line.id) ?? 0,
+          }));
+        }
         allocations = planned.filter(({ kind }) => kind === "rent").map(({ month, remainingCents, paidCents }) => ({
           month, gap: remainingCents / 100, amount: paidCents / 100,
         }));
@@ -804,7 +827,7 @@ export async function recordOverdueRentPayment(formData: FormData) {
         await tx.rentBillReceiptCheck.create({
           data: {
             receiptId: paymentReceiptId, tenantLeaseId, month: invoiceMonth,
-            printRevision: printRevision || null, expectedCents, receivedCents,
+            printRevision: printRevision || null, expectedCents, receivedCents, lines: receiptLines,
           },
         });
       }
