@@ -356,6 +356,7 @@ export async function getPropertyDetail(id: string) {
           status: true,
           paidByCompany: true,
           meterReading: true,
+          previousMeterReadingOverride: true,
           transactions: {
             orderBy: { date: "desc" },
             select: { type: true, amount: true, method: true },
@@ -818,6 +819,7 @@ export async function getPropertyDetail(id: string) {
     dueDate: b.dueDate,
     createdAt: b.createdAt,
     meterReading: b.meterReading != null ? Number(b.meterReading) : null,
+    previousMeterReadingOverride: b.previousMeterReadingOverride == null ? null : Number(b.previousMeterReadingOverride),
   }));
   const consumptionByBillId = attachElectricityConsumption(electricityBillsForConsumption);
   // What a brand-new electricity bill entered right now would chain from —
@@ -859,6 +861,7 @@ export async function getPropertyDetail(id: string) {
       propertyId: property.id,
       propertyName: property.name,
       meterReading: b.meterReading != null ? Number(b.meterReading) : null,
+      previousMeterReadingOverride: b.previousMeterReadingOverride == null ? null : Number(b.previousMeterReadingOverride),
       previousMeterReading: consumptionByBillId.get(b.id)?.previousReading ?? null,
       consumptionUnits: consumptionByBillId.get(b.id)?.consumption ?? null,
     };

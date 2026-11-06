@@ -23,7 +23,8 @@ export type UtilityBillErrorCode =
   | "notFound"
   | "unitNotInProperty"
   | "amountBelowPaid"
-  | "hasPayments";
+  | "hasPayments"
+  | "invalidMeterReading";
 
 export type UtilityBillActionResult = { ok: true } | { ok: false; error: UtilityBillErrorCode };
 
@@ -45,7 +46,15 @@ function readUtilityBillFields(formData: FormData) {
   const meterReadingRaw = type === "ELECTRICITY" ? str(formData, "meterReading") : null;
   const meterReading = meterReadingRaw ? Number(meterReadingRaw) : null;
 
-  return { type, amount, dueDate, paidByCompany, meterReading } as const;
+  const previousRaw = type === "ELECTRICITY" ? str(formData, "previousMeterReadingOverride") : null;
+  const previousMeterReadingOverride = previousRaw == null ? null : Number(previousRaw);
+  return { type, amount, dueDate, paidByCompany, meterReading, previousMeterReadingOverride } as const;
+}
+
+function validMeterReadings(current: number | null, previous: number | null) {
+  if (current != null && (!Number.isFinite(current) || current < 0)) return false;
+  if (previous == null) return true;
+  return Number.isFinite(previous) && previous >= 0 && (current == null || current >= previous);
 }
 
 export async function addUtilityBill(formData: FormData) {
@@ -53,6 +62,9 @@ export async function addUtilityBill(formData: FormData) {
   const propertyId = str(formData, "propertyId");
   const fields = readUtilityBillFields(formData);
   if (!propertyId || !fields) throw new Error("Missing required bill fields");
+  if (!validMeterReadings(fields.meterReading, fields.previousMeterReadingOverride)) {
+    throw new Error("Invalid electricity meter readings");
+  }
 
   await prisma.utilityBill.create({
     data: {
@@ -106,7 +118,7 @@ export async function addTenantUtilityBills(
   const validatedBills = [];
   for (const bill of fields) {
     if (!bill || !Number.isFinite(Number(bill.amount)) || Number(bill.amount) <= 0 ||
-      (bill.meterReading != null && (!Number.isFinite(bill.meterReading) || bill.meterReading < 0))) {
+      !validMeterReadings(bill.meterReading, bill.previousMeterReadingOverride)) {
       return { ok: false, error: "utilityBillInvalidAmount" } as const;
     }
     validatedBills.push(bill);
@@ -317,12 +329,14 @@ export async function updateUtilityBill(formData: FormData): Promise<UtilityBill
   const paidByCompany = type === "WATER" ? true : formData.get("paidByCompany") === "true";
   const meterReadingRaw = type === "ELECTRICITY" ? str(formData, "meterReading") : null;
   const meterReading = meterReadingRaw ? Number(meterReadingRaw) : null;
+  const previousRaw = str(formData, "previousMeterReadingOverride");
+  const previousMeterReadingOverride = type !== "ELECTRICITY" || previousRaw == null ? null : Number(previousRaw);
   const returnTo = str(formData, "returnTo") ?? `/properties/${propertyId}`;
 
   const problem = await prisma.$transaction(async (tx) => {
     const bill = await tx.utilityBill.findUnique({
       where: { id: billId },
-      select: { unitId: true, paidAmount: true },
+      select: { unitId: true, paidAmount: true, previousMeterReadingOverride: true },
     });
     if (!bill) return "notFound" as const;
     if (unitId) {
@@ -332,6 +346,10 @@ export async function updateUtilityBill(formData: FormData): Promise<UtilityBill
       });
       if (!unit || unit.unitType.propertyId !== propertyId) return "unitNotInProperty" as const;
     }
+    const previous = type !== "ELECTRICITY" || formData.has("previousMeterReadingOverride")
+      ? previousMeterReadingOverride
+      : bill.previousMeterReadingOverride == null ? null : Number(bill.previousMeterReadingOverride);
+    if (!validMeterReadings(meterReading, previous)) return "invalidMeterReading" as const;
     const paidAmount = Number(bill.paidAmount);
     if (Number(amount) < paidAmount) return "amountBelowPaid" as const;
 
@@ -346,6 +364,7 @@ export async function updateUtilityBill(formData: FormData): Promise<UtilityBill
         amount,
         paidByCompany,
         meterReading,
+        previousMeterReadingOverride: previous,
         // Rebuilt from what's settled against the NEW amount — a ৳2000 bill
         // already fully collected, edited down to ৳1000, is PAID rather than
         // an impossible overpaid PARTIAL.

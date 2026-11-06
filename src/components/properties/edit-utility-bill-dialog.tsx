@@ -23,6 +23,7 @@ import {
 } from "@/components/ui/dialog";
 import { Checkbox } from "@/components/ui/checkbox";
 import { FormField } from "@/components/properties/form-field";
+import { PreviousMeterReadingField } from "@/components/properties/previous-meter-reading-field";
 import { dhakaISO } from "@/lib/dhaka-time";
 import { formatTaka } from "@/lib/format";
 import { updateUtilityBill, type UtilityBillErrorCode } from "@/lib/actions/utility-bills";
@@ -47,6 +48,7 @@ export type EditableUtilityBill = {
   meterReading?: number | null;
   // This bill's own predecessor in the meter chain, for the consumption hint.
   previousMeterReading?: number | null;
+  previousMeterReadingOverride?: number | null;
 };
 
 // Corrections of a bill already in the system — same form as Add Bill, but
@@ -71,6 +73,9 @@ export function EditUtilityBillDialog({
   const [paidByCompany, setPaidByCompany] = useState(bill.paidByCompany);
   const [meterReading, setMeterReading] = useState(
     bill.meterReading != null ? String(bill.meterReading) : ""
+  );
+  const [manualPreviousReading, setManualPreviousReading] = useState<string | null>(
+    bill.previousMeterReadingOverride == null ? null : String(bill.previousMeterReadingOverride)
   );
   const [error, setError] = useState<UtilityBillErrorCode | null>(null);
   const [units, setUnits] = useState<
@@ -105,9 +110,12 @@ export function EditUtilityBillDialog({
     };
   }, [open, fixedUnitId, units, bill.propertyId, bill.unitId, bill.unitLabel]);
 
-  const previousReading = bill.previousMeterReading ?? null;
+  const previousReading = unitId === (fixedUnitId ?? bill.unitId ?? NONE_VALUE)
+    ? bill.previousMeterReading ?? null : null;
+  const effectivePreviousReading = manualPreviousReading == null ? previousReading
+    : manualPreviousReading === "" ? null : Number(manualPreviousReading);
   const consumption =
-    meterReading && previousReading != null ? Number(meterReading) - previousReading : null;
+    meterReading && effectivePreviousReading != null ? Number(meterReading) - effectivePreviousReading : null;
   const isWater = type === "WATER";
 
   const typeLabels: Record<UtilityType, string> = {
@@ -123,6 +131,7 @@ export function EditUtilityBillDialog({
     setType(next);
     setPaidByCompany(next === "WATER");
     setMeterReading("");
+    setManualPreviousReading(null);
   }
 
   const errorMessages: Record<UtilityBillErrorCode, string> = {
@@ -130,6 +139,7 @@ export function EditUtilityBillDialog({
     notFound: t("billErrNotFound"),
     unitNotInProperty: t("billErrUnitNotInProperty"),
     amountBelowPaid: t("billErrAmountBelowPaid", { amount: formatTaka(bill.paidAmount) }),
+    invalidMeterReading: t("utilityBillInvalidAmount"),
     hasPayments: t("billErrHasPayments", { amount: formatTaka(bill.paidAmount) }),
   };
 
@@ -226,31 +236,26 @@ export function EditUtilityBillDialog({
           </FormField>
 
           {type === "ELECTRICITY" ? (
-            <FormField
-              label={t("meterReading")}
-              htmlFor="editUtilityBillMeterReading"
-              className="sm:col-span-2"
-              hint={
-                previousReading != null
-                  ? t("previousMeterReadingHint", { reading: previousReading })
-                  : t("noPreviousMeterReading")
-              }
-            >
-              <Input
-                id="editUtilityBillMeterReading"
-                name="meterReading"
-                type="number"
-                step="any"
-                min={0}
-                value={meterReading}
-                onChange={(e) => setMeterReading(e.target.value)}
-              />
-              {consumption != null ? (
-                <p className="mt-1 text-xs text-muted-foreground">
-                  {t("consumptionPreview", { units: consumption })}
-                </p>
-              ) : null}
-            </FormField>
+            <div className="grid gap-3 sm:col-span-2 sm:grid-cols-2">
+              <PreviousMeterReadingField id="editUtilityBillPreviousReading" automatic={previousReading}
+                manual={manualPreviousReading} onChange={setManualPreviousReading} />
+              <FormField label={t("currentMeterReading")} htmlFor="editUtilityBillMeterReading">
+                <Input
+                  id="editUtilityBillMeterReading"
+                  name="meterReading"
+                  type="number"
+                  step="any"
+                  min={manualPreviousReading ? Number(manualPreviousReading) : 0}
+                  value={meterReading}
+                  onChange={(e) => setMeterReading(e.target.value)}
+                />
+                {consumption != null ? (
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    {t("consumptionPreview", { units: consumption })}
+                  </p>
+                ) : null}
+              </FormField>
+            </div>
           ) : null}
 
           <label
@@ -277,7 +282,7 @@ export function EditUtilityBillDialog({
               ) : (
                 <Select
                   value={unitId}
-                  onValueChange={(v) => setUnitId(v ?? NONE_VALUE)}
+                  onValueChange={(v) => { setUnitId(v ?? NONE_VALUE); setManualPreviousReading(null); }}
                   items={[
                     { value: NONE_VALUE, label: t("noSpecificUnit") },
                     ...units.map((u) => ({ value: u.id, label: unitPickerLabel(u) })),

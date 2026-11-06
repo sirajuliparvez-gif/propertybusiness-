@@ -75,6 +75,7 @@ export type UtilityBillRow = {
   propertyName?: string;
   meterReading?: number | null;
   previousMeterReading?: number | null;
+  previousMeterReadingOverride?: number | null;
   consumptionUnits?: number | null;
 };
 

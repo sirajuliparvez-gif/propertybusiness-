@@ -628,6 +628,8 @@ model UtilityBill {
   // the same unit, never stored separately, so it can never drift out of
   // sync — see attachElectricityConsumption().
   meterReading  Decimal?
+  // A manually entered starting reading for this bill only.
+  previousMeterReadingOverride Decimal?
   createdAt     DateTime     @default(now())
   importBatchId String?
   importBatch   ImportBatch? @relation(fields: [importBatchId], references: [id])

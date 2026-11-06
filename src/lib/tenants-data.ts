@@ -405,6 +405,7 @@ export async function getTenantProfile(leaseId: string) {
       status: true,
       paidByCompany: true,
       meterReading: true,
+      previousMeterReadingOverride: true,
       transactions: { orderBy: { date: "desc" }, select: { type: true, amount: true, method: true, date: true } },
     },
   });
@@ -416,6 +417,7 @@ export async function getTenantProfile(leaseId: string) {
       dueDate: b.dueDate,
       createdAt: b.createdAt,
       meterReading: b.meterReading != null ? Number(b.meterReading) : null,
+      previousMeterReadingOverride: b.previousMeterReadingOverride == null ? null : Number(b.previousMeterReadingOverride),
     }))
   );
   const previousElectricityReadingByUnit = Object.fromEntries(
@@ -628,6 +630,7 @@ export async function getTenantProfile(leaseId: string) {
         tenantLeaseId: lease.status === "ACTIVE" ? lease.id : null,
         propertyId: lease.unit.unitType.property.id,
         meterReading: b.meterReading != null ? Number(b.meterReading) : null,
+        previousMeterReadingOverride: b.previousMeterReadingOverride == null ? null : Number(b.previousMeterReadingOverride),
         previousMeterReading: unitConsumptionByBillId.get(b.id)?.previousReading ?? null,
         consumptionUnits: unitConsumptionByBillId.get(b.id)?.consumption ?? null,
       };

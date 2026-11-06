@@ -25,6 +25,7 @@ import {
 } from "@/components/ui/dialog";
 import { Checkbox } from "@/components/ui/checkbox";
 import { FormField } from "@/components/properties/form-field";
+import { PreviousMeterReadingField } from "@/components/properties/previous-meter-reading-field";
 import { addUtilityBill } from "@/lib/actions/utility-bills";
 import type { AllUtilityBillsData } from "@/lib/utility-bills-data";
 import { unitPickerLabel } from "@/lib/unit-label";
@@ -47,6 +48,7 @@ export function AddUtilityBillDialogGlobal({
   const [unitId, setUnitId] = useState(NONE_VALUE);
   const [paidByCompany, setPaidByCompany] = useState(false);
   const [meterReading, setMeterReading] = useState("");
+  const [manualPreviousReading, setManualPreviousReading] = useState<string | null>(null);
   const todayValue = dhakaTodayISO();
 
   const effectiveUnitId = unitId === NONE_VALUE ? "" : unitId;
@@ -54,8 +56,10 @@ export function AddUtilityBillDialogGlobal({
     properties.find((p) => p.id === propertyId)?.previousElectricityReadingByUnit[
       effectiveUnitId || "__property__"
     ] ?? null;
+  const effectivePreviousReading = manualPreviousReading == null ? previousReading
+    : manualPreviousReading === "" ? null : Number(manualPreviousReading);
   const consumption =
-    meterReading && previousReading != null ? Number(meterReading) - previousReading : null;
+    meterReading && effectivePreviousReading != null ? Number(meterReading) - effectivePreviousReading : null;
 
   const typeLabels: Record<UtilityType, string> = {
     GAS: t("utilityTypeGas"),
@@ -68,6 +72,7 @@ export function AddUtilityBillDialogGlobal({
     setType(next);
     setPaidByCompany(next === "WATER");
     setMeterReading("");
+    setManualPreviousReading(null);
   }
   const isWater = type === "WATER";
 
@@ -80,6 +85,7 @@ export function AddUtilityBillDialogGlobal({
     setPropertyId(v ?? "");
     setUnitId(NONE_VALUE);
     setMeterReading("");
+    setManualPreviousReading(null);
   }
 
   return (
@@ -156,31 +162,26 @@ export function AddUtilityBillDialogGlobal({
           </FormField>
 
           {type === "ELECTRICITY" ? (
-            <FormField
-              label={t("meterReading")}
-              htmlFor="utilityBillMeterReadingGlobal"
-              className="sm:col-span-2"
-              hint={
-                previousReading != null
-                  ? t("previousMeterReadingHint", { reading: previousReading })
-                  : t("noPreviousMeterReading")
-              }
-            >
-              <Input
-                id="utilityBillMeterReadingGlobal"
-                name="meterReading"
-                type="number"
-                step="any"
-                min={0}
-                value={meterReading}
-                onChange={(e) => setMeterReading(e.target.value)}
-              />
-              {consumption != null ? (
-                <p className="mt-1 text-xs text-muted-foreground">
-                  {t("consumptionPreview", { units: consumption })}
-                </p>
-              ) : null}
-            </FormField>
+            <div className="grid gap-3 sm:col-span-2 sm:grid-cols-2">
+              <PreviousMeterReadingField id="utilityBillGlobalPreviousReading" automatic={previousReading}
+                manual={manualPreviousReading} onChange={setManualPreviousReading} />
+              <FormField label={t("currentMeterReading")} htmlFor="utilityBillMeterReadingGlobal">
+                <Input
+                  id="utilityBillMeterReadingGlobal"
+                  name="meterReading"
+                  type="number"
+                  step="any"
+                  min={manualPreviousReading ? Number(manualPreviousReading) : 0}
+                  value={meterReading}
+                  onChange={(e) => setMeterReading(e.target.value)}
+                />
+                {consumption != null ? (
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    {t("consumptionPreview", { units: consumption })}
+                  </p>
+                ) : null}
+              </FormField>
+            </div>
           ) : null}
 
           <label
@@ -199,7 +200,7 @@ export function AddUtilityBillDialogGlobal({
           <FormField label={t("unitOptional")} htmlFor="utilityBillUnit" className="sm:col-span-2">
             <Select
               value={unitId}
-              onValueChange={(v) => setUnitId(v ?? NONE_VALUE)}
+              onValueChange={(v) => { setUnitId(v ?? NONE_VALUE); setManualPreviousReading(null); }}
               items={[
                 { value: NONE_VALUE, label: t("noSpecificUnit") },
                 ...unitsForProperty.map((u) => ({ value: u.id, label: unitPickerLabel(u) })),

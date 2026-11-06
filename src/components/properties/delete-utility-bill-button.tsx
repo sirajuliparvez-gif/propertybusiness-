@@ -41,6 +41,7 @@ export function DeleteUtilityBillButton({
     notFound: t("billErrNotFound"),
     unitNotInProperty: t("billErrUnitNotInProperty"),
     amountBelowPaid: t("billErrAmountBelowPaid", { amount: formatTaka(paidAmount) }),
+    invalidMeterReading: t("utilityBillInvalidAmount"),
     hasPayments: t("billErrHasPayments", { amount: formatTaka(paidAmount) }),
   };
 
