@@ -197,7 +197,7 @@ export function MobileRentList({
                 />
                 </div>
                 <Link
-                  href={`/tenants/${p.id}/invoice`}
+                  href={`/tenants/${p.id}/invoice?month=${selectedMonth}`}
                   title={t("invoiceLabel")}
                   className="flex w-12 shrink-0 items-center justify-center border-l text-primary transition-colors active:bg-muted/60"
                 >

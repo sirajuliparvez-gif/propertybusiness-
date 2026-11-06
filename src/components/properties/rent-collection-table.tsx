@@ -274,7 +274,7 @@ export function RentCollectionTable({
                         variant="outline"
                         size="icon-sm"
                         title={t("invoiceLabel")}
-                        render={<Link href={`/tenants/${p.id}/invoice`} />}
+                        render={<Link href={`/tenants/${p.id}/invoice?month=${selectedMonth}`} />}
                         nativeButton={false}
                         className="border-primary/40 text-primary hover:bg-primary/10"
                       >

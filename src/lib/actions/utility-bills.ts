@@ -1,11 +1,13 @@
 "use server";
 
-import { dhakaToday } from "@/lib/dhaka-time";
+import { dhakaISO, dhakaToday } from "@/lib/dhaka-time";
 import { revalidatePath } from "next/cache";
 import { getLocale } from "next-intl/server";
 import { prisma } from "@/lib/prisma";
 import { redirect } from "@/i18n/navigation";
 import { applyUtilityBillInstallment } from "@/lib/payment-progress";
+import { requireCurrentUser } from "@/lib/auth/session";
+import { isValidTransactionDate } from "@/lib/transaction-edit";
 
 function str(formData: FormData, key: string) {
   const v = formData.get(key);
@@ -25,20 +27,15 @@ export type UtilityBillErrorCode =
 
 export type UtilityBillActionResult = { ok: true } | { ok: false; error: UtilityBillErrorCode };
 
-export async function addUtilityBill(formData: FormData) {
-  const locale = await getLocale();
-  const propertyId = formData.get("propertyId") as string;
-  if (!propertyId) throw new Error("Missing property id");
-
+function readUtilityBillFields(formData: FormData) {
   const typeRaw = formData.get("type");
   const type =
     typeRaw === "GAS" || typeRaw === "ELECTRICITY" || typeRaw === "WATER" || typeRaw === "OTHER"
       ? typeRaw
       : "OTHER";
-  const unitId = str(formData, "unitId");
   const amount = str(formData, "amount");
   const dueDate = str(formData, "dueDate");
-  if (!amount || !dueDate) throw new Error("Missing required bill fields");
+  if (!amount || !dueDate) return null;
   // Water is company policy: always the company's own cost, never billed to
   // a tenant — enforced here too (not just the disabled checkbox client-side)
   // in case of a stale/tampered form.
@@ -48,16 +45,22 @@ export async function addUtilityBill(formData: FormData) {
   const meterReadingRaw = type === "ELECTRICITY" ? str(formData, "meterReading") : null;
   const meterReading = meterReadingRaw ? Number(meterReadingRaw) : null;
 
+  return { type, amount, dueDate, paidByCompany, meterReading } as const;
+}
+
+export async function addUtilityBill(formData: FormData) {
+  const locale = await getLocale();
+  const propertyId = str(formData, "propertyId");
+  const fields = readUtilityBillFields(formData);
+  if (!propertyId || !fields) throw new Error("Missing required bill fields");
+
   await prisma.utilityBill.create({
     data: {
+      ...fields,
       propertyId,
-      unitId,
-      type,
-      month: dueDate.slice(0, 7),
-      dueDate: new Date(dueDate),
-      amount,
-      paidByCompany,
-      meterReading,
+      unitId: str(formData, "unitId"),
+      month: fields.dueDate.slice(0, 7),
+      dueDate: new Date(fields.dueDate),
     },
   });
 
@@ -66,6 +69,78 @@ export async function addUtilityBill(formData: FormData) {
   const returnTo = str(formData, "returnTo") ?? `/properties/${propertyId}`;
   revalidatePath(returnTo);
   redirect({ href: returnTo, locale });
+}
+
+export async function getPreviousTenantMeterReading(tenantLeaseId: string, dueDate: string) {
+  await requireCurrentUser();
+  if (!isValidTransactionDate(dueDate)) return null;
+  const previousBill = await prisma.utilityBill.findFirst({
+    where: {
+      type: "ELECTRICITY",
+      meterReading: { not: null },
+      dueDate: { lte: new Date(dueDate) },
+      unit: { tenantLeases: { some: { id: tenantLeaseId } } },
+    },
+    orderBy: [{ dueDate: "desc" }, { createdAt: "desc" }],
+    select: { dueDate: true, meterReading: true },
+  });
+  return previousBill?.meterReading == null ? null : {
+    date: dhakaISO(previousBill.dueDate),
+    reading: Number(previousBill.meterReading),
+  };
+}
+
+export async function addTenantUtilityBills(
+  tenantLeaseId: string,
+  billingMonth: string,
+  bills: FormData[],
+) {
+  await requireCurrentUser();
+  const fields = bills.map(readUtilityBillFields);
+  if (!fields.length || !fields.every((bill) =>
+    bill != null && isValidTransactionDate(bill.dueDate) && bill.dueDate.slice(0, 7) === billingMonth
+  )) {
+    return { ok: false, error: "utilityBillInvalidDate" } as const;
+  }
+
+  const validatedBills = [];
+  for (const bill of fields) {
+    if (!bill || !Number.isFinite(Number(bill.amount)) || Number(bill.amount) <= 0 ||
+      (bill.meterReading != null && (!Number.isFinite(bill.meterReading) || bill.meterReading < 0))) {
+      return { ok: false, error: "utilityBillInvalidAmount" } as const;
+    }
+    validatedBills.push(bill);
+  }
+
+  const lease = await prisma.tenantLease.findUnique({
+    where: { id: tenantLeaseId },
+    select: { status: true, startDate: true, unitId: true, unit: { select: { unitType: { select: { propertyId: true } } } } },
+  });
+  if (!lease || lease.status !== "ACTIVE") {
+    return { ok: false, error: "utilityBillOutsideLease" } as const;
+  }
+  const leaseStart = dhakaISO(lease.startDate);
+  if (validatedBills.some((bill) => bill.dueDate < leaseStart)) {
+    return { ok: false, error: "utilityBillOutsideLease" } as const;
+  }
+
+  await prisma.utilityBill.createMany({
+    data: validatedBills.map((bill) => ({
+      ...bill,
+      propertyId: lease.unit.unitType.propertyId,
+      unitId: lease.unitId,
+      tenantLeaseId,
+      month: billingMonth,
+      dueDate: new Date(bill.dueDate),
+    })),
+  });
+
+  const locale = await getLocale();
+  revalidatePath(`/${locale}/tenants/${tenantLeaseId}`);
+  revalidatePath(`/${locale}/tenants/${tenantLeaseId}/invoice`);
+  revalidatePath(`/${locale}/utility-bills`);
+  revalidatePath(`/${locale}/properties/${lease.unit.unitType.propertyId}`);
+  return { ok: true } as const;
 }
 
 // Settles a bill, possibly only partially, possibly split between the
@@ -104,6 +179,7 @@ export async function payUtilityBill(formData: FormData) {
         amount: true,
         paidAmount: true,
         unitId: true,
+        tenantLeaseId: true,
         status: true,
         paidByCompany: true,
         unit: {
@@ -142,10 +218,11 @@ export async function payUtilityBill(formData: FormData) {
     if (billPortion <= 0 && companyAmount <= 0 && profitAmount <= 0) return;
     const paidDate = dhakaToday();
 
-    await tx.utilityBill.update({
-      where: { id: billId },
+    const updated = await tx.utilityBill.updateMany({
+      where: { id: billId, paidAmount: bill.paidAmount, status: bill.status },
       data: { paidAmount: newPaidAmount, status: newStatus },
     });
+    if (updated.count === 0) return;
 
     if (billPortion > 0) {
       // The company's policy: every other bill gets assigned to whichever
@@ -154,8 +231,7 @@ export async function payUtilityBill(formData: FormData) {
       // per the user). So this records the tenant's reimbursement — not the
       // company's own outgoing expense — and is excluded from netProfit the
       // same way DOWNPAYMENT_REFUND_TO_TENANT already is (pass-through, not
-      // real income). tenantLeaseId is auto-derived from the unit's current
-      // active lease, since the bill is only ever assigned by unit.
+      // real income). Older bills without an explicit lease use the unit’s active lease.
       await tx.transaction.create({
         data: {
           propertyId,
@@ -164,7 +240,7 @@ export async function payUtilityBill(formData: FormData) {
           amount: billPortion,
           method,
           unitId: bill.unitId,
-          tenantLeaseId: bill.unit?.tenantLeases[0]?.id ?? null,
+          tenantLeaseId: bill.tenantLeaseId ?? bill.unit?.tenantLeases[0]?.id ?? null,
           utilityBillId: billId,
           date: paidDate,
         },
@@ -181,7 +257,7 @@ export async function payUtilityBill(formData: FormData) {
           amount: profitAmount,
           method,
           unitId: bill.unitId,
-          tenantLeaseId: bill.unit?.tenantLeases[0]?.id ?? null,
+          tenantLeaseId: bill.tenantLeaseId ?? bill.unit?.tenantLeases[0]?.id ?? null,
           utilityBillId: billId,
           date: paidDate,
         },
@@ -264,6 +340,7 @@ export async function updateUtilityBill(formData: FormData): Promise<UtilityBill
       data: {
         type,
         unitId,
+        ...(unitId !== bill.unitId ? { tenantLeaseId: null } : {}),
         month: dueDate.slice(0, 7),
         dueDate: new Date(dueDate),
         amount,

@@ -5,7 +5,7 @@ import { revalidatePath } from "next/cache";
 import { getLocale } from "next-intl/server";
 import { prisma } from "@/lib/prisma";
 import { redirect } from "@/i18n/navigation";
-import { allocateRentPayment, buildRentLedger, overdueEntries, RENT_DUE_DAY } from "@/lib/rent-ledger";
+import { allocateRentPayment, buildRentLedger, overdueEntries, LEDGER_START_MONTH, RENT_DUE_DAY } from "@/lib/rent-ledger";
 import { applyRentInstallment, isRentPaymentSettled } from "@/lib/payment-progress";
 import {
   isPaymentMonth,
@@ -19,6 +19,7 @@ import { buildRentArrearsReport } from "@/lib/rent-arrears-report";
 import { requireCurrentUser } from "@/lib/auth/session";
 import { isValidTransactionDate } from "@/lib/transaction-edit";
 import { withRentActionFeedback } from "@/lib/rent-action-feedback";
+import { tenantUtilityArrearsWhere } from "@/lib/tenant-utility-arrears";
 import { numericRentRates, rentTermsDueAmount, resolveRentTermsForMonth } from "@/lib/rent-terms";
 
 function leaseFallbackTerms(lease: {
@@ -540,7 +541,7 @@ export async function recordTenantRentPayment(formData: FormData) {
       });
     }
     return true;
-  });
+  }, { isolationLevel: "Serializable" });
 
   // Reachable from both the per-property page and the cross-property global
   // Tenants page — each redirects back to wherever it was submitted from.
@@ -560,6 +561,23 @@ export async function recordTenantRentPayment(formData: FormData) {
 // 3 months doesn't have to be paid off in 3 separate manual entries anymore
 // — one amount here fills the oldest debt first, then the next, etc.,
 // including a genuine partial on whichever month the money runs out on.
+export async function getTenantUtilityArrears(tenantLeaseId: string) {
+  await requireCurrentUser();
+  const lease = await prisma.tenantLease.findUnique({
+    where: { id: tenantLeaseId },
+    select: { id: true, unitId: true, startDate: true, status: true, movedOutAt: true, endDate: true },
+  });
+  if (!lease) return [];
+  const bills = await prisma.utilityBill.findMany({
+    where: tenantUtilityArrearsWhere(lease, dhakaTodayISO().slice(0, 7)),
+    orderBy: [{ month: "asc" }, { dueDate: "asc" }, { id: "asc" }],
+    select: { id: true, type: true, month: true, amount: true, paidAmount: true },
+  });
+  return bills.map(({ amount, paidAmount, ...bill }) => ({
+    ...bill, remaining: Number(amount.minus(paidAmount)),
+  })).filter((bill) => bill.remaining > 0);
+}
+
 export async function recordOverdueRentPayment(formData: FormData) {
   const locale = await getLocale();
   const user = await requireCurrentUser();
@@ -567,9 +585,19 @@ export async function recordOverdueRentPayment(formData: FormData) {
   const tenantLeaseId = str(formData, "tenantLeaseId");
   const dateStr = str(formData, "date");
   const paymentAmount = Number(str(formData, "amount"));
+  const utilityPayments = new Map<string, number>();
+  for (const [key, value] of formData) {
+    if (!key.startsWith("utilityPayment:") || value === "") continue;
+    const billId = key.slice("utilityPayment:".length);
+    const amount = typeof value === "string" ? Number(value) : NaN;
+    if (!billId || !Number.isFinite(amount) || amount < 0 || utilityPayments.has(billId)) {
+      return { ok: false as const, reason: "invalid" as const };
+    }
+    if (amount > 0) utilityPayments.set(billId, amount);
+  }
   const today = dhakaTodayISO();
   if (!propertyId || !tenantLeaseId || !dateStr || !isValidTransactionDate(dateStr) ||
-      dateStr > today || !Number.isFinite(paymentAmount) || paymentAmount <= 0) {
+      dateStr > today || !Number.isFinite(paymentAmount) || paymentAmount < 0 || (paymentAmount === 0 && !utilityPayments.size)) {
     return { ok: false as const, reason: "invalid" as const };
   }
 
@@ -635,7 +663,19 @@ export async function recordOverdueRentPayment(formData: FormData) {
       const total = entries.reduce((sum, entry) => sum + entry.gap, 0);
       if (paymentAmount > total) return false;
       const allocations = allocateRentPayment(entries, paymentAmount);
-      if (!allocations.length || expected !== JSON.stringify(allocations)) return false;
+      if (paymentAmount > 0 && (!allocations.length || expected !== JSON.stringify(allocations))) return false;
+
+      const utilityBills = utilityPayments.size ? await tx.utilityBill.findMany({
+        where: {
+          ...tenantUtilityArrearsWhere(lease, today.slice(0, 7)),
+          propertyId,
+          id: { in: [...utilityPayments.keys()] },
+        },
+        select: { id: true, amount: true, paidAmount: true },
+      }) : [];
+      if (utilityBills.length !== utilityPayments.size || utilityBills.some((bill) =>
+        bill.amount.minus(bill.paidAmount).lt(utilityPayments.get(bill.id)!)
+      )) return false;
 
       const entriesByMonth = new Map(entries.map((entry) => [entry.month, entry]));
       for (const allocation of allocations) {
@@ -663,6 +703,21 @@ export async function recordOverdueRentPayment(formData: FormData) {
           },
         });
       }
+      for (const bill of utilityBills) {
+        const amount = utilityPayments.get(bill.id)!;
+        const paidAmount = bill.paidAmount.plus(amount);
+        await tx.utilityBill.update({
+          where: { id: bill.id },
+          data: { paidAmount, status: paidAmount.eq(bill.amount) ? "PAID" : "PARTIAL" },
+        });
+        await tx.transaction.create({
+          data: {
+            propertyId, unitId: lease.unitId, tenantLeaseId, utilityBillId: bill.id,
+            type: "UTILITY_REIMBURSEMENT_FROM_TENANT", direction: "INCOMING",
+            amount, method, date: paidDate, recordedByUserId: user.id,
+          },
+        });
+      }
       return true;
     }, { isolationLevel: "Serializable" });
   } catch (error) {
@@ -676,15 +731,148 @@ export async function recordOverdueRentPayment(formData: FormData) {
   const returnPath = new URL(returnTo, "http://local").pathname;
   for (const path of new Set([
     ...localizedMutationPaths(locale, returnPath),
-    ...["/rent/arrears", "/rent/report", "/transactions", `/tenants/${tenantLeaseId}`].map((path) => `/${locale}${path}`),
+    ...["/rent/arrears", "/rent/report", "/transactions", "/utility-bills", `/tenants/${tenantLeaseId}`, `/tenants/${tenantLeaseId}/invoice`].map((path) => `/${locale}${path}`),
   ])) revalidatePath(path);
-  redirect({ href: withRentActionFeedback(returnTo, "overdue", { amount: paymentAmount }), locale });
+  const utilityTotal = [...utilityPayments.values()].reduce((sum, amount) => sum + amount, 0);
+  const result = utilityPayments.size ? "overdueWithUtilities" : "overdue";
+  redirect({ href: withRentActionFeedback(returnTo, result, { amount: paymentAmount + utilityTotal }), locale });
 }
 
 function addMonthsToMonthStr(monthStr: string, offset: number) {
   const [year, month] = monthStr.split("-").map(Number);
   const date = new Date(year, month - 1 + offset, 1);
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`;
+}
+
+const multiMonthLeaseInclude = {
+  rentRates: true,
+  rentPayments: { select: { id: true, month: true, dueAmount: true, paidAmount: true } },
+  unit: { select: { unitType: { select: { property: { select: { id: true, deletedAt: true } } } } } },
+} as const;
+
+type MultiMonthLease = NonNullable<Awaited<ReturnType<typeof findMultiMonthLease>>>;
+
+function findMultiMonthLease(id: string) {
+  return prisma.tenantLease.findUnique({ where: { id }, include: multiMonthLeaseInclude });
+}
+
+function multiMonthBalances(lease: MultiMonthLease, currentMonth: string) {
+  const start = dhakaISO(lease.startDate).slice(0, 7);
+  const firstTracked = start > LEDGER_START_MONTH ? start : LEDGER_START_MONTH;
+  const lastAdvance = addMonthsToMonthStr(currentMonth, 36);
+  const endDate = lease.movedOutAt ?? lease.endDate;
+  const lastEligible = lease.status === "ACTIVE"
+    ? lastAdvance
+    : endDate ? dhakaISO(endDate).slice(0, 7) : currentMonth;
+  const last = lastEligible < lastAdvance ? lastEligible : lastAdvance;
+  const recorded = new Map(lease.rentPayments.map((payment) => [payment.month, payment]));
+  const months = new Set([
+    ...(firstTracked <= last ? paymentMonthRange(firstTracked, last, 600) : []),
+    ...recorded.keys(),
+  ]);
+  const rates = numericRentRates(lease.rentRates);
+  const terms = leaseFallbackTerms(lease);
+  return [...months].sort().flatMap((month) => {
+    if (!isPaymentMonth(month) || month < start || month > last) return [];
+    const payment = recorded.get(month);
+    const due = payment ? Number(payment.dueAmount) : rentTermsDueAmount(resolveRentTermsForMonth(terms, rates, month));
+    const dueCents = Math.round(due * 100);
+    const paidCents = Math.round(Number(payment?.paidAmount ?? 0) * 100);
+    const remainingCents = dueCents - paidCents;
+    return remainingCents > 0 ? [{ month, payment, dueCents, remainingCents }] : [];
+  });
+}
+
+export async function getMultiMonthRentOptions(tenantLeaseId: string) {
+  await requireCurrentUser();
+  const lease = await findMultiMonthLease(tenantLeaseId);
+  if (!lease || lease.unit.unitType.property.deletedAt) return [];
+  return multiMonthBalances(lease, dhakaTodayISO().slice(0, 7)).map(({ month, remainingCents }) => ({ month, remainingCents }));
+}
+
+export async function recordMultiMonthRentPayment(formData: FormData) {
+  const user = await requireCurrentUser();
+  const propertyId = str(formData, "propertyId");
+  const tenantLeaseId = str(formData, "tenantLeaseId");
+  const date = str(formData, "date");
+  const today = dhakaTodayISO();
+  const invalid = { ok: false, reason: "invalid" } as const;
+  const changed = { ok: false, reason: "changed" } as const;
+  if (!propertyId || !tenantLeaseId || !date || !isValidTransactionDate(date) || date > today) return invalid;
+
+  const methodRaw = str(formData, "method");
+  const method =
+    methodRaw === "CASH" || methodRaw === "BKASH" || methodRaw === "NAGAD" ||
+    methodRaw === "BANK" || methodRaw === "BANK_CHECK" || methodRaw === "OTHER" ? methodRaw : null;
+
+  let input: unknown;
+  try {
+    input = JSON.parse(str(formData, "multiMonthPayments") ?? "null");
+  } catch {
+    return invalid;
+  }
+  if (!Array.isArray(input) || input.length < 1 || input.length > 36) return invalid;
+  const requested = new Map<string, { amountCents: number; remainingCents: number }>();
+  for (const row of input) {
+    if (!row || typeof row.month !== "string" || !isPaymentMonth(row.month) || requested.has(row.month) ||
+        typeof row.amount !== "string" || !/^\d+(\.\d{1,2})?$/.test(row.amount) ||
+        !Number.isSafeInteger(row.remainingCents)) return invalid;
+    const amountCents = Math.round(Number(row.amount) * 100);
+    if (!Number.isSafeInteger(amountCents) || amountCents <= 0 || amountCents > row.remainingCents) return invalid;
+    requested.set(row.month, { amountCents, remainingCents: row.remainingCents });
+  }
+
+  const paidDate = new Date(date);
+  try {
+    const saved = await prisma.$transaction(async (tx) => {
+      const lease = await tx.tenantLease.findUnique({ where: { id: tenantLeaseId }, include: multiMonthLeaseInclude });
+      if (!lease || lease.unit.unitType.property.id !== propertyId || lease.unit.unitType.property.deletedAt) return false;
+      const selected = multiMonthBalances(lease, today.slice(0, 7)).flatMap((balance) => {
+        const request = requested.get(balance.month);
+        return request && request.remainingCents === balance.remainingCents
+          ? [{ ...balance, amountCents: request.amountCents }]
+          : [];
+      });
+      // Verify every month before writing anything, including retries of partially paid months.
+      if (selected.length !== requested.size) return false;
+      for (const { month, payment, amountCents, remainingCents, dueCents } of selected) {
+        const amount = amountCents / 100;
+        const status = amountCents === remainingCents ? "PAID" : "PARTIAL";
+        const rentPayment = payment
+          ? await tx.rentPayment.update({
+              where: { id: payment.id },
+              data: { paidAmount: { increment: amount }, paidAt: paidDate, status },
+            })
+          : await tx.rentPayment.create({
+              data: {
+                tenantLeaseId, month, dueDate: paymentMonthDueDate(month, RENT_DUE_DAY),
+                dueAmount: dueCents / 100, paidAmount: amount, paidAt: paidDate, status,
+              },
+            });
+        await tx.transaction.create({
+          data: {
+            propertyId, tenantLeaseId, rentPaymentId: rentPayment.id, amount, method,
+            type: "RENT_RECEIVED_FROM_TENANT", direction: "INCOMING", date: paidDate, recordedByUserId: user.id,
+          },
+        });
+      }
+      return true;
+    }, { isolationLevel: "Serializable" });
+    if (!saved) return changed;
+  } catch (error) {
+    if (error instanceof Error && "code" in error && (error.code === "P2034" || error.code === "P2002")) return changed;
+    throw error;
+  }
+
+  const locale = await getLocale();
+  const returnTo = str(formData, "returnTo") ?? "/rent";
+  for (const path of new Set([
+    new URL(returnTo, "http://local").pathname,
+    "/dashboard", "/rent", "/rent/arrears", "/rent/report", "/reports/market", "/transactions", "/tenants",
+    `/properties/${propertyId}`, `/tenants/${tenantLeaseId}`, `/tenants/${tenantLeaseId}/invoice`, `/tenants/${tenantLeaseId}/history`,
+  ])) revalidateLocalizedPath(locale, path);
+  const totalCents = [...requested.values()].reduce((sum, row) => sum + row.amountCents, 0);
+  redirect({ href: withRentActionFeedback(returnTo, "multiMonth", { count: requested.size, amount: totalCents / 100 }), locale });
 }
 
 // A tenant sometimes pays several months of rent in one go (any number of
@@ -783,7 +971,7 @@ export async function recordAdvanceRentPayment(formData: FormData) {
       totalRecorded += payNow;
     }
     return totalRecorded;
-  });
+  }, { isolationLevel: "Serializable" });
 
   const returnTo = str(formData, "returnTo") ?? `/properties/${propertyId}`;
   revalidateLocalizedPath(locale, returnTo);

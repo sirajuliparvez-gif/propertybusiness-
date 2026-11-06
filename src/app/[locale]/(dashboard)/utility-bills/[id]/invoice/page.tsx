@@ -1,9 +1,9 @@
 import { notFound } from "next/navigation";
-import { getTranslations } from "next-intl/server";
-import { ArrowLeft, Building2, Scissors } from "lucide-react";
+import { getLocale, getTranslations } from "next-intl/server";
+import { ArrowLeft, Scissors } from "lucide-react";
 import { Link } from "@/i18n/navigation";
 import { Button } from "@/components/ui/button";
-import { InvoiceHeader } from "@/components/invoice-header";
+import { CashMemoHeader, CashMemoReading, CashMemoSignatures, cashMemoClassName } from "@/components/properties/cash-memo";
 import { InvoicePrintButton } from "@/components/properties/invoice-print-button";
 import { getUtilityBillInvoice } from "@/lib/utility-bills-data";
 import { formatTaka, formatDate, monthLabel } from "@/lib/format";
@@ -19,14 +19,18 @@ type Translate = (key: string) => string;
 function InvoiceCopy({
   bill,
   t,
-  tNav,
+  brand,
+  locale,
+  date,
   typeLabels,
   statusLabel,
   remaining,
 }: {
   bill: Bill;
   t: Translate;
-  tNav: Translate;
+  brand: string;
+  locale: string;
+  date: string;
   typeLabels: Record<string, string>;
   statusLabel: string;
   remaining: number;
@@ -34,48 +38,34 @@ function InvoiceCopy({
   return (
     <div
       data-testid="invoice-copy"
-      className="flex break-inside-avoid flex-col gap-3 rounded-xl border bg-card p-6 text-sm print:break-inside-avoid print:gap-2 print:rounded-none print:border-0 print:p-0 sm:p-8"
+      className={cashMemoClassName}
     >
-      <InvoiceHeader brand={tNav("brand")} title={t("utilityInvoiceTitle")} subtitle={monthLabel(bill.month)}>
-        <p className="mt-1 flex items-center gap-1 text-xs text-muted-foreground">
-          <Building2 className="size-3" />
-          {bill.propertyName}
-          {bill.unitLabel ? ` · ${bill.unitLabel}` : ""}
-          {bill.tenantName ? ` · ${bill.tenantName}` : ""}
-        </p>
-      </InvoiceHeader>
-
-      <div className="grid gap-4 sm:grid-cols-2">
-        <div>
-          <p className="text-xs font-semibold text-muted-foreground">{t("invoiceBilledTo")}</p>
-          {bill.tenantName ? (
-            <>
-              <p className="font-medium">{bill.tenantName}</p>
-              {bill.tenantContact ? (
-                <p className="font-mono text-xs text-muted-foreground">{bill.tenantContact}</p>
-              ) : null}
-              {bill.paidByCompany ? (
-                <p className="mt-1 text-xs text-muted-foreground">{t("invoiceCompanyBorne")}</p>
-              ) : null}
-            </>
-          ) : bill.paidByCompany ? (
-            <p className="font-medium">{t("invoiceCompanyBorne")}</p>
-          ) : (
-            <p className="text-muted-foreground">{t("invoiceNoTenant")}</p>
-          )}
-        </div>
-        <div className="sm:text-right">
-          <p className="text-xs font-semibold text-muted-foreground">{t("invoiceGeneratedOn")}</p>
-          <p className="font-mono font-medium tabular-nums">{formatDate(dhakaNow())}</p>
-          <p className="mt-1 font-mono text-xs text-muted-foreground">#{bill.id.slice(-8).toUpperCase()}</p>
-        </div>
-      </div>
+      <CashMemoHeader
+        brand={brand}
+        title={t("cashMemoUtilityTitle")}
+        month={monthLabel(bill.month, locale)}
+        property={bill.propertyName}
+        unit={bill.unitLabel}
+        name={bill.tenantName ?? t(bill.paidByCompany ? "invoiceCompanyBorne" : "invoiceNoTenant")}
+        contact={bill.tenantContact}
+        date={date}
+        billNumber={`U-${bill.month.replace("-", "")}-${bill.id.slice(-10).toUpperCase()}`}
+        companyAddress={t("cashMemoCompanyAddress")}
+        companyPhone={t("cashMemoCompanyPhone")}
+        labels={{
+          unit: t("cashMemoUnit"), name: t("cashMemoName"), month: t("invoiceBillMonth"),
+          date: t("cashMemoDate"), billNumber: t("cashMemoBillNumber"),
+        }}
+      />
+      {bill.tenantName && bill.paidByCompany ? (
+        <p className="text-xs text-muted-foreground">{t("invoiceCompanyBorne")}</p>
+      ) : null}
 
       <div>
         <p className="mb-2 text-xs font-semibold tracking-wide text-muted-foreground uppercase">
           {t("invoiceBillSection")}
         </p>
-        <div className="grid grid-cols-2 gap-3 rounded-lg border p-3 print:p-2 sm:grid-cols-4">
+        <div className="cash-memo-fields grid grid-cols-2 gap-x-4 gap-y-2 border-y border-dashed py-2 sm:grid-cols-4">
           <div>
             <p className="text-xs text-muted-foreground">{t("utilityType")}</p>
             <p className="font-medium">{typeLabels[bill.type] ?? bill.type}</p>
@@ -86,7 +76,7 @@ function InvoiceCopy({
           </div>
           <div>
             <p className="text-xs text-muted-foreground">{t("invoiceDueDateLabel")}</p>
-            <p className="font-mono font-medium tabular-nums">{formatDate(bill.dueDate)}</p>
+            <p className="font-mono font-medium tabular-nums">{formatDate(bill.dueDate, locale)}</p>
           </div>
           <div>
             <p className="text-xs text-muted-foreground">{t("status")}</p>
@@ -96,28 +86,23 @@ function InvoiceCopy({
           </div>
         </div>
         {bill.type === "ELECTRICITY" && bill.meterReading != null ? (
-          <div className="mt-3 grid grid-cols-3 gap-3 rounded-lg border p-3 print:p-2">
-            <div>
-              <p className="text-xs text-muted-foreground">{t("previousReadingColumn")}</p>
-              <p className="font-mono font-medium tabular-nums">{bill.previousMeterReading ?? "—"}</p>
-            </div>
-            <div>
-              <p className="text-xs text-muted-foreground">{t("currentReadingColumn")}</p>
-              <p className="font-mono font-medium tabular-nums">{bill.meterReading}</p>
-            </div>
-            <div>
-              <p className="text-xs text-muted-foreground">{t("consumptionColumn")}</p>
-              <p className="font-mono font-medium tabular-nums">{bill.consumptionUnits ?? "—"}</p>
-            </div>
-          </div>
+          <CashMemoReading
+            current={bill.meterReading}
+            previous={bill.previousMeterReading}
+            units={bill.consumptionUnits}
+            label={t("cashMemoReading")}
+            unitLabel={t("cashMemoUnits")}
+            missing={t("cashMemoReadingMissing")}
+            locale={locale}
+          />
         ) : null}
       </div>
 
-      <div className="grid grid-cols-2 gap-3 rounded-lg border p-3 print:p-2 sm:grid-cols-3">
+      <div className="cash-memo-fields grid grid-cols-2 gap-x-4 gap-y-2 border-y border-dashed py-2 sm:grid-cols-3">
         <div>
           <p className="text-xs text-muted-foreground">{t("paidDate")}</p>
           <p className="font-mono font-medium tabular-nums">
-            {bill.paidAt ? formatDate(bill.paidAt) : t("notYetPaid")}
+            {bill.paidAt ? formatDate(bill.paidAt, locale) : t("notYetPaid")}
           </p>
         </div>
         <div>
@@ -130,7 +115,7 @@ function InvoiceCopy({
         </div>
       </div>
 
-      <div className="flex items-center justify-between border-t pt-4 print:pt-3">
+      <div className="cash-memo-totals flex items-center justify-between rounded-md border border-sky-900/25 bg-sky-500/5 px-3 py-2">
         <div>
           <p className="text-xs text-muted-foreground">{t("invoiceBillAmount")}</p>
           <p className="font-mono text-lg font-bold tabular-nums">{formatTaka(bill.amount)}</p>
@@ -145,6 +130,7 @@ function InvoiceCopy({
           ) : null}
         </div>
       </div>
+      <CashMemoSignatures tenant={t("cashMemoTenantSignature")} company={t("cashMemoCompanySignature")} />
     </div>
   );
 }
@@ -153,6 +139,8 @@ export default async function UtilityBillInvoicePage({ params }: { params: Promi
   const { id } = await params;
   const t = await getTranslations("Properties");
   const tNav = await getTranslations("Nav");
+  const locale = await getLocale();
+  const date = formatDate(dhakaNow(), locale);
 
   const bill = await getUtilityBillInvoice(id);
   if (!bill) notFound();
@@ -164,7 +152,7 @@ export default async function UtilityBillInvoicePage({ params }: { params: Promi
     OTHER: t("utilityTypeOther"),
   };
   const statusLabel =
-    bill.status === "PAID" ? t("paid") : bill.status === "PARTIAL" ? t("pending") : t("billStatusUnpaid");
+    bill.status === "PAID" ? t("paid") : bill.status === "PARTIAL" ? t("invoicePartiallyPaid") : t("billStatusUnpaid");
   const remaining = Math.max(0, bill.amount - bill.paidAmount);
 
   return (
@@ -183,11 +171,13 @@ export default async function UtilityBillInvoicePage({ params }: { params: Promi
 
       {/* Two-up: one A4 sheet carries the same bill twice, cut apart along
           the dashed rule — one copy for the tenant, one for the file. */}
-      <div data-testid="invoice" className="print-two-up flex flex-col">
+      <div data-testid="invoice" className="print-two-up flex flex-col print:block">
         <InvoiceCopy
           bill={bill}
           t={t}
-          tNav={tNav}
+          brand={tNav("brand")}
+          locale={locale}
+          date={date}
           typeLabels={typeLabels}
           statusLabel={statusLabel}
           remaining={remaining}
@@ -199,7 +189,9 @@ export default async function UtilityBillInvoicePage({ params }: { params: Promi
         <InvoiceCopy
           bill={bill}
           t={t}
-          tNav={tNav}
+          brand={tNav("brand")}
+          locale={locale}
+          date={date}
           typeLabels={typeLabels}
           statusLabel={statusLabel}
           remaining={remaining}

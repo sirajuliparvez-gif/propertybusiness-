@@ -1,38 +1,27 @@
 import { dhakaISO, dhakaNow } from "@/lib/dhaka-time";
 import { notFound } from "next/navigation";
-import { getTranslations } from "next-intl/server";
-import { ArrowLeft, Building2, Scissors } from "lucide-react";
-import { Link } from "@/i18n/navigation";
+import { getLocale, getTranslations } from "next-intl/server";
+import { Droplet, Flame, House, ReceiptText, Zap } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { getTenantProfile } from "@/lib/tenants-data";
 import { formatTaka, formatDate, monthLabel } from "@/lib/format";
 import { paymentMethodLabel } from "@/lib/payment-method";
 import { isMonthPastDue, LEDGER_START_MONTH, RENT_DUE_DAY } from "@/lib/rent-ledger";
 import { cn } from "@/lib/utils";
-import { InvoiceHeader } from "@/components/invoice-header";
+import { CashMemoHeader, CashMemoReading, CashMemoSignatures, cashMemoClassName } from "@/components/properties/cash-memo";
 import { InvoiceMonthSelect } from "@/components/properties/invoice-month-select";
 import { RecordTenantRentPaymentDialog } from "@/components/properties/record-tenant-rent-payment-dialog";
 import { InvoicePrintButton } from "@/components/properties/invoice-print-button";
 import { rentTermsDueAmount, resolveRentTermsForMonth } from "@/lib/rent-terms";
 
+function formatInvoiceAmount(amount: number) {
+  return formatTaka(amount, 2);
+}
+
 function currentMonthKey() {
   const now = dhakaNow();
   return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
-}
-
-function TwoUpInvoice({ children }: { children: React.ReactNode }) {
-  return (
-    <div data-testid="invoice" className="print-two-up flex flex-col print:block">
-      {children}
-      <div aria-hidden="true" className="my-4 flex items-center gap-2 text-muted-foreground print:my-2">
-        <Scissors className="size-3.5 shrink-0" />
-        <span className="h-0 flex-1 border-t border-dashed border-current opacity-60" />
-      </div>
-      {children}
-    </div>
-  );
 }
 
 // One statement per tenant and month: the month's rent, any rent still owed from earlier months, every utility bill
@@ -49,15 +38,19 @@ export default async function TenantInvoicePage({
   const { month: requestedMonth, bill: highlightedBillId } = await searchParams;
   const t = await getTranslations("Properties");
   const tNav = await getTranslations("Nav");
+  const locale = await getLocale();
 
   const tenant = await getTenantProfile(id);
   if (!tenant) notFound();
 
   // Only the bills dated while this tenant rented the unit are theirs (an earlier tenant's unpaid bill is not).
   const leaseEnd = tenant.leaseStatus === "ACTIVE" ? null : (tenant.movedOutAt ?? tenant.endDate ?? null);
-  const unitBills = tenant.utilityBills.filter(
-    (b) => b.dueDate >= tenant.startDate && (!leaseEnd || b.dueDate <= leaseEnd)
-  );
+  const leaseStartDay = dhakaISO(tenant.startDate);
+  const leaseEndDay = leaseEnd ? dhakaISO(leaseEnd) : null;
+  const unitBills = tenant.utilityBills.filter((bill) => {
+    const dueDay = dhakaISO(bill.dueDate);
+    return dueDay >= leaseStartDay && (!leaseEndDay || dueDay <= leaseEndDay);
+  });
 
   const nowMonth = currentMonthKey();
   const availableMonths = Array.from(
@@ -88,7 +81,7 @@ export default async function TenantInvoicePage({
   const rentPaid = rentTracked ? (payment?.paidAmount ?? 0) : 0;
   const rentRemaining = Math.max(0, rentDue - rentPaid);
   const rentStatus = payment?.status ?? "UNPAID";
-  const invoiceCreatedAt = payment?.createdAt ?? dhakaNow();
+  const billDate = dhakaNow();
   const [selectedYear, selectedMonthNumber] = selectedMonth.split("-").map(Number);
   const rentDeadline = new Date(selectedYear, selectedMonthNumber - 1, RENT_DUE_DAY);
   const adjustment = tenant.downpaymentAdjustments.find((a) => a.month === selectedMonth) ?? null;
@@ -125,6 +118,22 @@ export default async function TenantInvoicePage({
     WATER: t("utilityTypeWater"),
     OTHER: t("utilityTypeOther"),
   };
+  const monthUtilityRows = [
+    { type: "ELECTRICITY", icon: Zap, label: t("utilityTypeElectricity") },
+    { type: "GAS", icon: Flame, label: t("utilityTypeGas") },
+    { type: "WATER", icon: Droplet, label: t("utilityTypeWater") },
+    { type: "OTHER", icon: ReceiptText, label: t("cashMemoOtherCharges") },
+  ].map(({ type, label, icon }) => {
+    const bills = monthBills.filter((b) => b.type === type);
+    const companyBills = companyBorneBills.filter((b) => b.type === type);
+    const due = bills.reduce((sum, b) => sum + b.amount, 0);
+    const remaining = bills.reduce((sum, b) => sum + billRemaining(b), 0);
+    return { type, label, icon, bills, companyBills, due, remaining };
+  });
+  const detailBills = [
+    ...earlierUnpaidBills,
+    ...monthBills.filter((b) => monthUtilityRows.some((row) => row.type === b.type && row.bills.length > 1)),
+  ];
   const billStatusLabel = (status: string) =>
     status === "PAID" ? t("paid") : status === "PARTIAL" ? t("invoicePartiallyPaid") : t("billStatusUnpaid");
 
@@ -133,31 +142,24 @@ export default async function TenantInvoicePage({
   // An overpayment on one bill does not settle another bill.
   const balance = rentRemaining + previousRentDue + utilityRemaining;
   const totalSettled = totalDue - balance;
+  const previousUtilityDue = earlierUnpaidBills.reduce((sum, b) => sum + billRemaining(b), 0);
+  const previousBalance = previousRentDue + previousUtilityDue;
+  const monthlyBalance = balance - previousBalance;
 
   const highlightedShown = highlightedBillId
     ? [...statementBills, ...companyBorneBills].some((b) => b.id === highlightedBillId)
     : false;
 
   return (
-    <div className="mx-auto flex w-full max-w-3xl min-w-0 flex-1 flex-col gap-4">
-      <div className="flex flex-wrap items-center justify-between gap-2 print:hidden">
-        <div className="flex items-center gap-2">
-          <Button variant="ghost" size="icon-sm" render={<Link href={`/tenants/${id}`} />} nativeButton={false}>
-            <ArrowLeft className="size-4" />
-          </Button>
-          <span className="text-sm text-muted-foreground">
-            {tenant.tenantName} / {t("invoiceLabel")}
-          </span>
-        </div>
-        <div className="flex items-center gap-2">
-          <InvoiceMonthSelect leaseId={id} months={availableMonths} selectedMonth={selectedMonth} />
-          <InvoicePrintButton />
-        </div>
+    <div data-tenant-invoice-page className="mx-auto flex w-full max-w-4xl min-w-0 flex-1 flex-col gap-4">
+      <div className="flex flex-wrap items-center justify-end gap-2 print:hidden">
+        <InvoiceMonthSelect leaseId={id} months={availableMonths} selectedMonth={selectedMonth} />
+        <InvoicePrintButton />
       </div>
 
       {tenant.leaseStatus === "ACTIVE" && selectedMonth <= nowMonth && rentRemaining > 0 ? (
-        <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border bg-muted/40 px-4 py-3 print:hidden">
-          <p className="text-sm text-muted-foreground">{t("invoiceCollectRentHint")}</p>
+        <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border bg-muted/40 px-3 py-2 print:hidden">
+          <p className="text-sm text-muted-foreground">{t("cashMemoRentActionHint")}</p>
           <RecordTenantRentPaymentDialog
             key={`${selectedMonth}:${rentRemaining}`}
             propertyId={tenant.propertyId}
@@ -181,103 +183,167 @@ export default async function TenantInvoicePage({
         </p>
       ) : null}
 
-      <TwoUpInvoice>
+      <div data-testid="invoice" className="print-invoice-a4">
       <div
         data-testid="invoice-copy"
-        className="flex break-inside-avoid flex-col gap-6 rounded-xl border bg-card p-6 text-sm print:block print:space-y-3 print:[&_[data-slot=table-container]]:overflow-visible print:[&_tr]:break-inside-avoid print:rounded-none print:border-0 print:p-0 sm:p-8"
+        className={cn(cashMemoClassName, "tenant-bill gap-6 rounded-xl border-primary/25 p-4 sm:gap-8 sm:p-8 lg:p-10")}
       >
-        <InvoiceHeader brand={tNav("brand")} title={t("invoiceLabel")} subtitle={monthLabel(selectedMonth)}>
-          <p className="mt-1 flex items-center gap-1 text-xs text-muted-foreground">
-            <Building2 className="size-3" />
-            {tenant.propertyName} · {tenant.unitLabel}
-          </p>
-        </InvoiceHeader>
+        <CashMemoHeader
+          brand={tNav("brand")}
+          title={t("cashMemoRentTitle")}
+          month={monthLabel(selectedMonth, locale)}
+          property={tenant.propertyName}
+          unit={tenant.unitLabel}
+          name={tenant.tenantName}
+          contact={tenant.contactInfo}
+          date={formatDate(billDate, locale)}
+          billNumber={`R-${selectedMonth.replace("-", "")}-${tenant.id.slice(-10).toUpperCase()}`}
+          companyAddress={t("cashMemoCompanyAddress")}
+          companyPhone={t("cashMemoCompanyPhone")}
+          labels={{
+            unit: t("cashMemoUnit"), name: t("cashMemoName"), month: t("invoiceBillMonth"),
+            date: t("cashMemoDate"), billNumber: t("cashMemoBillNumber"),
+          }}
+        />
 
-        <div className="grid gap-4 sm:grid-cols-2">
-          <div>
-            <p className="text-xs font-semibold text-muted-foreground">{t("tenant")}</p>
-            <p className="font-medium">{tenant.tenantName}</p>
-            {tenant.contactInfo ? <p className="font-mono text-xs text-muted-foreground">{tenant.contactInfo}</p> : null}
-          </div>
-          <div className="sm:text-right">
-            <p className="text-xs font-semibold text-muted-foreground">{t("invoiceGeneratedOn")}</p>
-            <p className="font-mono font-medium tabular-nums">{formatDate(invoiceCreatedAt)}</p>
-          </div>
-        </div>
-
-        <div>
-          <p className="mb-2 text-xs font-semibold tracking-wide text-muted-foreground uppercase">
-            {t("invoiceRentSection")}
-          </p>
-          {rentTracked ? (
-            <>
-              <div className="grid grid-cols-2 gap-3 rounded-lg border p-3 sm:grid-cols-3">
-                <div>
-                  <p className="text-xs text-muted-foreground">{t("totalDueLabel")}</p>
-                  <p data-testid="invoice-rent-due" className="font-mono font-semibold tabular-nums">{formatTaka(rentDue)}</p>
-                </div>
-                <div>
-                  <p className="text-xs text-muted-foreground">{t("paid")}</p>
-                  <p className="font-mono font-semibold tabular-nums text-success">{formatTaka(rentPaid)}</p>
-                </div>
-                <div>
-                  <p className="text-xs text-muted-foreground">{t("remaining")}</p>
-                  <p className={cn("font-mono font-semibold tabular-nums", rentRemaining > 0 && "text-destructive")}>
-                    {formatTaka(rentRemaining)}
-                  </p>
-                </div>
-                <div>
-                  <p className="text-xs text-muted-foreground">{t("invoiceDueDateLabel")}</p>
-                  <p className="font-mono font-medium tabular-nums">{formatDate(rentDeadline)}</p>
-                </div>
-                <div>
-                  <p className="text-xs text-muted-foreground">{t("status")}</p>
-                  <p data-testid="invoice-status" className="font-medium">
-                    {rentStatusLabels[rentStatus] ?? rentStatus}
-                  </p>
-                </div>
-                <div>
-                  <p className="text-xs text-muted-foreground">{t("paidDate")}</p>
-                  <p className="font-mono font-medium tabular-nums">
-                    {payment?.paidAt ? formatDate(payment.paidAt) : t("notYetPaid")}
-                  </p>
-                </div>
+        <section className="tenant-bill-summary overflow-hidden rounded-lg border border-primary/25 bg-primary/[0.045]" aria-label={t("cashMemoSummary")}>
+          <dl className="tenant-bill-summary-main grid grid-cols-2 items-center gap-x-4 gap-y-4 px-4 py-4 sm:grid-cols-[1.25fr_1fr_1fr] sm:px-6 sm:py-5">
+            <div className="col-span-2 sm:col-span-1">
+              <dt className="text-sm font-semibold">{t("cashMemoToPay")}</dt>
+              <dd data-testid="invoice-balance" className={cn("tenant-bill-balance mt-1 text-3xl leading-tight sm:text-4xl font-bold tabular-nums", balance > 0 ? "text-destructive" : "text-success")}>
+                {formatInvoiceAmount(balance)}
+              </dd>
+            </div>
+            <div className="sm:border-s sm:ps-4">
+              <dt className="text-xs text-muted-foreground">{t("invoiceGrandDue")}</dt>
+              <dd data-testid="invoice-total-due" className="text-base font-semibold tabular-nums">{formatInvoiceAmount(totalDue)}</dd>
+            </div>
+            <div className="border-s ps-3 sm:ps-4">
+              <dt className="text-xs text-muted-foreground">{t("invoiceTotalSettled")}</dt>
+              <dd data-testid="invoice-total-paid" className="text-base font-semibold tabular-nums text-success">{formatInvoiceAmount(totalSettled)}</dd>
+            </div>
+          </dl>
+          {previousBalance > 0 ? (
+            <dl className="tenant-bill-breakdown flex flex-wrap gap-x-6 gap-y-2 border-t border-primary/15 px-4 py-2.5 text-xs sm:px-6">
+              <div className="flex items-baseline gap-1.5">
+                <dt className="text-muted-foreground">{t("cashMemoMonthlyBalance")}</dt>
+                <dd className="font-semibold tabular-nums">{formatInvoiceAmount(monthlyBalance)}</dd>
               </div>
-              {payment?.method ? (
-                <p className="mt-2 text-xs text-muted-foreground">
-                  {t("paymentMethod")}: {paymentMethodLabel(t, payment.method)}
-                </p>
-              ) : null}
-            </>
-          ) : (
-            <p className="rounded-lg border border-dashed p-4 text-center text-xs text-muted-foreground">
-              {t("noRentRecordThisMonth")}
+              <div className="flex items-baseline gap-1.5">
+                <dt className="text-muted-foreground">{t("cashMemoEarlierBalance")}</dt>
+                <dd className="font-semibold tabular-nums">{formatInvoiceAmount(previousBalance)}</dd>
+              </div>
+            </dl>
+          ) : null}
+        </section>
+
+        <section className="min-w-0" aria-label={t("cashMemoMonthlyCharges")}>
+          <h2 className="mb-2.5 text-base font-bold sm:text-lg print:break-after-avoid">
+            {t("cashMemoMonthlyCharges")}
+          </h2>
+          <Table data-testid="invoice-monthly-charges" className="tenant-bill-charges text-xs sm:text-sm">
+            <TableHeader>
+              <TableRow className="bg-muted/60">
+                <TableHead scope="col" className="h-8 whitespace-normal">{t("cashMemoCharge")}</TableHead>
+                <TableHead scope="col" className="h-8 whitespace-normal text-right">{t("amount")}</TableHead>
+                <TableHead scope="col" className="h-8 whitespace-normal text-right">{t("cashMemoSettled")}</TableHead>
+                <TableHead scope="col" className="h-8 whitespace-normal text-right">{t("cashMemoShortBalance")}</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              <TableRow>
+                <th scope="row" className="p-2 text-left align-middle font-medium">
+                  <span className="flex items-center gap-1.5 font-semibold">
+                    <House aria-hidden="true" className="size-3.5 shrink-0 text-primary" />
+                    {t("cashMemoRentCharge")}
+                  </span>
+                  {!rentTracked ? <span className="text-xs font-normal text-muted-foreground">{t("cashMemoNoCharge")}</span> : null}
+                  {rentTracked && rentDue > selectedTerms.monthlyRentAmount ? (
+                    <span className="block text-[0.7rem] font-normal text-muted-foreground">{t("cashMemoRentIncludesService")}</span>
+                  ) : null}
+                </th>
+                <TableCell data-testid="invoice-rent-due" className="text-right tabular-nums">
+                  {rentTracked ? formatInvoiceAmount(rentDue) : "—"}
+                </TableCell>
+                <TableCell className="text-right tabular-nums">
+                  {rentTracked ? formatInvoiceAmount(Math.min(rentPaid, rentDue)) : "—"}
+                </TableCell>
+                <TableCell className={cn("bg-muted/30 text-right tabular-nums", rentRemaining > 0 ? "font-semibold text-destructive" : "text-muted-foreground")}>
+                  {rentTracked ? formatInvoiceAmount(rentRemaining) : "—"}
+                </TableCell>
+              </TableRow>
+              {monthUtilityRows.map(({ type, label, icon: Icon, bills, companyBills, due, remaining }) => {
+                const noBill = bills.length === 0 && companyBills.length === 0;
+                const missingAmount = noBill ? <span className="print:hidden">—</span> : "—";
+
+                return (
+                  <TableRow key={type} className={cn(
+                    noBill && "print:h-[10mm] print:[&>td]:bg-transparent",
+                    [...bills, ...companyBills].some((b) => b.id === highlightedBillId) && "bg-primary/5 print:bg-transparent"
+                  )}>
+                    <th scope="row" className="p-2 text-left align-middle font-medium">
+                      <span className="flex items-center gap-1.5 font-semibold">
+                        <Icon aria-hidden="true" className="size-3.5 shrink-0 text-primary" />
+                        {label}
+                      </span>
+                      {noBill ? (
+                        <span className="block text-xs font-normal text-muted-foreground print:hidden">{t("cashMemoNoCharge")}</span>
+                      ) : null}
+                      {companyBills.length > 0 ? (
+                        <span className="block text-[0.7rem] font-normal text-muted-foreground">
+                          {t("cashMemoCompanyShare", { amount: formatInvoiceAmount(companyBills.reduce((sum, b) => sum + b.amount, 0)) })}
+                        </span>
+                      ) : null}
+                      {type === "ELECTRICITY" ? [...bills, ...companyBills].map((b) => b.meterReading != null ? (
+                        <CashMemoReading key={b.id}
+                          current={b.meterReading} previous={b.previousMeterReading} units={b.consumptionUnits}
+                          label={t("cashMemoReading")} unitLabel={t("cashMemoUnits")} missing={t("cashMemoReadingMissing")}
+                          locale={locale}
+                        />
+                      ) : null) : null}
+                    </th>
+                    <TableCell className="text-right tabular-nums">{bills.length ? formatInvoiceAmount(due) : missingAmount}</TableCell>
+                    <TableCell className="text-right tabular-nums">{bills.length ? formatInvoiceAmount(due - remaining) : missingAmount}</TableCell>
+                    <TableCell className={cn("bg-muted/30 text-right tabular-nums", remaining > 0 ? "font-semibold text-destructive" : "text-muted-foreground")}>
+                      {bills.length ? formatInvoiceAmount(remaining) : missingAmount}
+                    </TableCell>
+                  </TableRow>
+                );
+              })}
+            </TableBody>
+          </Table>
+          {rentTracked ? (
+            <p className="mt-3 flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground">
+              <span>{t("invoiceRentSection")}: <strong data-testid="invoice-status">{rentStatusLabels[rentStatus] ?? rentStatus}</strong></span>
+              <span>{t("invoiceDueDateLabel")}: {formatDate(rentDeadline, locale)}</span>
+              {payment?.paidAt ? <span>{t("paidDate")}: {formatDate(payment.paidAt, locale)}</span> : null}
+              {payment?.method ? <span>{t("paymentMethod")}: {paymentMethodLabel(t, payment.method)}</span> : null}
             </p>
-          )}
+          ) : null}
           {adjustment ? (
             <div className="mt-3 rounded-lg border border-primary/30 bg-primary/5 p-3 text-xs">
               <p className="font-medium text-primary">{t("adjustedFromDownpaymentNote")}</p>
               <div className="mt-1.5 flex flex-wrap items-center gap-x-4 gap-y-1 text-muted-foreground">
                 <span>
-                  {t("amount")}: <span className="font-mono font-medium text-foreground">{formatTaka(adjustment.amountAdjusted)}</span>
+                  {t("amount")}: <span className="font-mono font-medium text-foreground">{formatInvoiceAmount(adjustment.amountAdjusted)}</span>
                 </span>
                 <span>
                   {t("downpaymentBalance")}:{" "}
                   <span className="font-mono font-medium text-foreground">
-                    {formatTaka(tenant.currentDownpaymentBalance)}
+                    {formatInvoiceAmount(tenant.currentDownpaymentBalance)}
                   </span>
                 </span>
               </div>
             </div>
           ) : null}
-        </div>
+        </section>
 
         {earlierRent.length > 0 ? (
           <section className="min-w-0" data-testid="invoice-rent-arrears">
-            <div className="flex flex-wrap items-center justify-between gap-2 rounded-t-lg border border-destructive/30 bg-destructive/5 px-3 py-2 text-xs print:break-after-avoid">
-              <h2 className="font-semibold text-destructive">{t("invoicePreviousRentDue")}</h2>
+            <div className="flex flex-wrap items-center justify-between gap-2 tenant-bill-section-label rounded-t-md border-b bg-muted/60 px-3 py-2.5 text-sm print:break-after-avoid">
+              <h2 className="font-semibold">{t("invoicePreviousRentDue")}</h2>
               <span data-testid="invoice-previous-rent" className="font-mono text-sm font-semibold tabular-nums text-destructive">
-                {formatTaka(previousRentDue)}
+                {formatInvoiceAmount(previousRentDue)}
               </span>
             </div>
             <Table className="text-xs">
@@ -292,10 +358,10 @@ export default async function TenantInvoicePage({
               <TableBody>
                 {earlierRent.map((p) => (
                   <TableRow key={p.month}>
-                    <TableCell className="whitespace-normal font-medium">{monthLabel(p.month)}</TableCell>
-                    <TableCell className="text-right tabular-nums">{formatTaka(p.dueAmount)}</TableCell>
-                    <TableCell className="text-right tabular-nums">{formatTaka(p.paidAmount)}</TableCell>
-                    <TableCell className="text-right font-semibold tabular-nums text-destructive">{formatTaka(p.remaining)}</TableCell>
+                    <TableCell className="whitespace-normal font-medium">{monthLabel(p.month, locale)}</TableCell>
+                    <TableCell className="text-right tabular-nums">{formatInvoiceAmount(p.dueAmount)}</TableCell>
+                    <TableCell className="text-right tabular-nums">{formatInvoiceAmount(p.paidAmount)}</TableCell>
+                    <TableCell className="text-right font-semibold tabular-nums text-destructive">{formatInvoiceAmount(p.remaining)}</TableCell>
                   </TableRow>
                 ))}
               </TableBody>
@@ -303,16 +369,12 @@ export default async function TenantInvoicePage({
           </section>
         ) : null}
 
-        <div>
-          <p className="mb-2 text-xs font-semibold tracking-wide text-muted-foreground uppercase">
-            {t("invoiceUtilitySection")}
-          </p>
-          {statementBills.length === 0 ? (
-            <p className="rounded-lg border border-dashed p-4 text-center text-xs text-muted-foreground">
-              {t("noUtilityBillsThisMonth")}
-            </p>
-          ) : (
-            <Table data-testid="invoice-bills">
+        {detailBills.length > 0 ? (
+          <section className="min-w-0">
+            <h2 className="mb-1 tenant-bill-section-label rounded-t-md border-b bg-muted/60 px-3 py-2.5 text-sm font-semibold print:break-after-avoid">
+              {t(detailBills.some((b) => b.month === selectedMonth) ? "invoiceUtilitySection" : "cashMemoEarlierUtilities")}
+            </h2>
+            <Table data-testid="invoice-bills" className="tenant-bill-detail text-xs">
               <TableHeader>
                 <TableRow>
                   <TableHead>{t("utilityType")}</TableHead>
@@ -320,11 +382,11 @@ export default async function TenantInvoicePage({
                   <TableHead className="text-right">{t("amount")}</TableHead>
                   <TableHead className="text-right">{t("paid")}</TableHead>
                   <TableHead className="text-right">{t("remaining")}</TableHead>
-                  <TableHead>{t("status")}</TableHead>
+                  <TableHead className="hidden sm:table-cell print:table-cell">{t("status")}</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {statementBills.map((b) => (
+                {detailBills.map((b) => (
                   <TableRow
                     key={b.id}
                     data-bill-id={b.id}
@@ -332,16 +394,24 @@ export default async function TenantInvoicePage({
                   >
                     <TableCell>
                       {utilityTypeLabels[b.type] ?? b.type}
-                      {b.type === "ELECTRICITY" && b.meterReading != null ? (
-                        <p className="mt-0.5 text-xs text-muted-foreground">
-                          {t("previousReadingColumn")}: {b.previousMeterReading ?? "—"} · {t("currentReadingColumn")}:{" "}
-                          {b.meterReading}
-                          {b.consumptionUnits != null ? ` · ${t("consumptionCell", { units: b.consumptionUnits })}` : ""}
-                        </p>
+                      <p className="text-xs text-muted-foreground sm:hidden print:hidden">
+                        {billStatusLabel(b.status)}
+                        {b.paidAt ? ` · ${formatDate(b.paidAt, locale)}` : null}
+                      </p>
+                      {b.month < selectedMonth && b.type === "ELECTRICITY" && b.meterReading != null ? (
+                        <CashMemoReading
+                          current={b.meterReading}
+                          previous={b.previousMeterReading}
+                          units={b.consumptionUnits}
+                          label={t("cashMemoReading")}
+                          unitLabel={t("cashMemoUnits")}
+                          missing={t("cashMemoReadingMissing")}
+                          locale={locale}
+                        />
                       ) : null}
                     </TableCell>
                     <TableCell className="font-mono text-muted-foreground">
-                      {b.month}
+                      {monthLabel(b.month, locale)}
                       {b.month < selectedMonth ? (
                         <div className="mt-0.5">
                           <Badge variant="outline" className="border-destructive/40 text-[0.65rem] text-destructive">
@@ -350,72 +420,35 @@ export default async function TenantInvoicePage({
                         </div>
                       ) : null}
                     </TableCell>
-                    <TableCell className="text-right font-mono tabular-nums">{formatTaka(b.amount)}</TableCell>
-                    <TableCell className="text-right font-mono tabular-nums text-success">{formatTaka(b.paidAmount)}</TableCell>
+                    <TableCell className="text-right font-mono tabular-nums">{formatInvoiceAmount(b.amount)}</TableCell>
+                    <TableCell className="text-right font-mono tabular-nums text-success">{formatInvoiceAmount(b.paidAmount)}</TableCell>
                     <TableCell
                       className={cn(
                         "text-right font-mono tabular-nums",
                         billRemaining(b) > 0 ? "font-semibold text-destructive" : "text-muted-foreground"
                       )}
                     >
-                      {formatTaka(billRemaining(b))}
+                      {formatInvoiceAmount(billRemaining(b))}
                     </TableCell>
-                    <TableCell>
+                    <TableCell className="hidden sm:table-cell print:table-cell">
                       <span data-testid="invoice-bill-status">{billStatusLabel(b.status)}</span>
                       {b.paidAt ? (
-                        <p className="mt-0.5 font-mono text-xs text-muted-foreground">{formatDate(b.paidAt)}</p>
+                        <p className="mt-0.5 font-mono text-xs text-muted-foreground">{formatDate(b.paidAt, locale)}</p>
                       ) : null}
                     </TableCell>
                   </TableRow>
                 ))}
               </TableBody>
             </Table>
-          )}
-          {companyBorneBills.length > 0 ? (
-            <div className="mt-3 rounded-lg border border-dashed p-3 text-xs text-muted-foreground">
-              <p className="mb-1 font-medium">{t("invoiceCompanyBorneSection")}</p>
-              <ul className="flex flex-col gap-0.5">
-                {companyBorneBills.map((b) => (
-                  <li key={b.id} className={cn("flex items-center justify-between", b.id === highlightedBillId && "font-semibold")}>
-                    <span>
-                      {utilityTypeLabels[b.type] ?? b.type} · {monthLabel(b.month)}
-                    </span>
-                    <span className="font-mono tabular-nums">
-                      {formatTaka(b.amount)} · {billStatusLabel(b.status)}
-                    </span>
-                  </li>
-                ))}
-              </ul>
-            </div>
-          ) : null}
-          {highlightedShown ? (
-            <p className="mt-2 text-xs text-muted-foreground print:hidden">{t("invoiceBillHighlightNote")}</p>
-          ) : null}
-        </div>
+          </section>
+        ) : null}
+        {highlightedShown ? (
+          <p className="text-xs text-muted-foreground print:hidden">{t("invoiceBillHighlightNote")}</p>
+        ) : null}
 
-        <div className="grid grid-cols-3 gap-4 border-t pt-4 print:break-inside-avoid">
-          <div>
-            <p className="text-xs text-muted-foreground">{t("invoiceGrandDue")}</p>
-            <p data-testid="invoice-total-due" className="font-mono text-lg font-bold tabular-nums">{formatTaka(totalDue)}</p>
-          </div>
-          <div className="text-center">
-            <p className="text-xs text-muted-foreground">{t("invoiceTotalSettled")}</p>
-            <p data-testid="invoice-total-paid" className="font-mono text-lg font-bold tabular-nums text-success">
-              {formatTaka(totalSettled)}
-            </p>
-          </div>
-          <div className="text-right">
-            <p className="text-xs text-muted-foreground">{t("invoiceBalanceDue")}</p>
-            <p
-              data-testid="invoice-balance"
-              className={cn("font-mono text-lg font-bold tabular-nums", balance > 0 ? "text-destructive" : "text-success")}
-            >
-              {formatTaka(balance)}
-            </p>
-          </div>
-        </div>
+        <CashMemoSignatures tenant={t("cashMemoTenantSignature")} company={t("cashMemoCompanySignature")} />
       </div>
-      </TwoUpInvoice>
+      </div>
     </div>
   );
 }

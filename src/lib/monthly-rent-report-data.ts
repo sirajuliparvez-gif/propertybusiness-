@@ -4,7 +4,7 @@ import { isPaymentMonth } from "@/lib/payment-month";
 import { numericRentRates } from "@/lib/rent-terms";
 import { buildMonthlyRentReport } from "@/lib/monthly-rent-report";
 
-export async function getMonthlyRentReport(requestedMonth?: string) {
+export async function getMonthlyRentReport(requestedMonth?: string, propertyId?: string) {
   const now = dhakaNow();
   const currentMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
   const month = isPaymentMonth(requestedMonth) && requestedMonth <= currentMonth ? requestedMonth : currentMonth;
@@ -13,7 +13,10 @@ export async function getMonthlyRentReport(requestedMonth?: string) {
   const nextMonth = new Date(Date.UTC(year, number, 1, -6));
   const [leases, recordedMonths] = await prisma.$transaction([
     prisma.tenantLease.findMany({
-      where: { OR: [{ startDate: { lt: nextMonth } }, { rentPayments: { some: { month } } }] },
+      where: {
+        ...(propertyId ? { unit: { unitType: { propertyId } } } : {}),
+        OR: [{ startDate: { lt: nextMonth } }, { rentPayments: { some: { month } } }],
+      },
       select: {
         id: true, status: true, startDate: true, endDate: true, movedOutAt: true,
         monthlyRentAmount: true, serviceChargeType: true, serviceChargeValue: true,

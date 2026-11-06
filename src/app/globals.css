@@ -190,12 +190,24 @@
   }
 }
 
-/* Rent and utility invoices print as two copies on one A4 sheet — the tenant
-   takes one, the other stays in the file — cut apart along the dashed rule
-   between them. A named page keeps unrelated printouts on their own paper. */
+/* Use A4 for invoices without changing the paper size of other reports. */
 @page invoiceA4 {
   size: A4;
   margin: 10mm;
+}
+
+/* Reserve the tenant invoice margins without Chromium's automatic print text. */
+@page tenantInvoiceA4 {
+  size: A4;
+  margin: 10mm;
+  @top-left { content: ""; }
+  @top-right { content: ""; }
+  @bottom-left { content: ""; }
+  @bottom-right { content: ""; }
+}
+
+.print-invoice-a4 {
+  page: tenantInvoiceA4;
 }
 
 .print-two-up {
@@ -210,4 +222,72 @@
   .monthly-rent-report tfoot { display: table-row-group; }
   .monthly-rent-report tr { break-inside: avoid; }
   .monthly-rent-report th, .monthly-rent-report td { overflow-wrap: anywhere; }
+}
+
+/* Keep printed memos compact and let longer arrears tables flow across pages. */
+@media print {
+  .cash-memo {
+    display: block;
+    break-inside: avoid;
+    overflow: visible;
+    font-size: 9pt;
+    line-height: 1.2;
+    border: 1px solid #234c74;
+    border-radius: 0;
+  }
+
+  .cash-memo > * + * { margin-top: 6px; }
+  .cash-memo-header > :first-child { padding-bottom: 4px; gap: 8px; }
+  .cash-memo-header img { width: 32px; height: 32px; }
+  .cash-memo-header dl { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 3px 12px; margin-top: 4px; }
+  .cash-memo-fields { padding-block: 4px; gap: 3px 12px; }
+  .cash-memo-totals { padding-block: 4px; }
+  .cash-memo [data-slot="table-container"] { overflow: visible; }
+  .cash-memo th, .cash-memo td { height: auto; padding-block: 3px; white-space: normal; font-size: 8pt; }
+  .cash-memo tr, .cash-memo-signatures { break-inside: avoid; }
+  .cash-memo-signatures { padding-top: 12px; }
+}
+
+[data-slot="sidebar-inset"]:has([data-tenant-invoice-page]) > [data-dashboard-topbar] {
+  display: none;
+}
+
+@media screen {
+  .tenant-bill .cash-memo-header dl { row-gap: 12px; }
+  .tenant-bill .cash-memo-header dl > div { padding-bottom: 8px; }
+  .tenant-bill :is(th, td) { padding-block: 10px; }
+  .tenant-bill .cash-memo-signatures { padding-top: 24px; }
+}
+
+@media screen and (max-width: 639px) {
+  .tenant-bill .cash-memo-header > :first-child { gap: 12px; padding-bottom: 12px; }
+  .tenant-bill .cash-memo-header > :first-child > :last-child { text-align: start; }
+  .tenant-bill .cash-memo-header dl { grid-template-columns: repeat(2, minmax(0, 1fr)); column-gap: 12px; }
+  .tenant-bill .cash-memo-header dl > :last-child { grid-column: 1 / -1; }
+  .tenant-bill .cash-memo-header dl > div { display: block; }
+  .tenant-bill :is(th, td) { padding-inline: 4px; }
+  .tenant-bill-detail :is(th, td) { white-space: normal; }
+}
+
+@media print {
+  .tenant-bill { padding: 20px 24px; font-size: 10pt; line-height: 1.4; break-inside: auto; }
+  .tenant-bill > * + * { margin-top: 18px; }
+  .tenant-bill .cash-memo-header > :first-child { flex-wrap: nowrap; padding-bottom: 12px; }
+  .tenant-bill .cash-memo-header img { width: 40px; height: 40px; }
+  .tenant-bill .cash-memo-header dl { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px 16px; }
+  .tenant-bill .cash-memo-header dl > div { padding-bottom: 5px; }
+  .tenant-bill .cash-memo-company { font-size: 9pt; line-height: 1.35; }
+  .tenant-bill h2 { font-size: 11pt; margin-bottom: 5px; }
+  .tenant-bill .tenant-bill-section-label { padding-block: 5px; }
+  .tenant-bill thead { display: table-header-group; }
+  .tenant-bill th, .tenant-bill td { padding-block: 6px; font-size: 9.5pt; }
+  .tenant-bill .cash-memo-reading { font-size: 8.5pt; }
+  .tenant-bill .cash-memo-signatures { padding-top: 16px; }
+  .tenant-bill-summary { break-inside: avoid; }
+  .tenant-bill-summary-main { grid-template-columns: 1.25fr 1fr 1fr; padding: 10px 14px; }
+  .tenant-bill-summary-main > :first-child { grid-column: auto; }
+  .tenant-bill-summary-main dt, .tenant-bill-summary-main dd { font-size: 10pt; }
+  .tenant-bill-summary-main .tenant-bill-balance { font-size: 20pt; }
+  .tenant-bill-breakdown { padding: 6px 14px; }
+  .tenant-bill-detail td:nth-child(2) > div { display: none; }
 }

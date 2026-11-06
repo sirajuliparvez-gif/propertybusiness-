@@ -12,7 +12,9 @@ const RESULTS = new Set<RentActionResult>([
   "recorded",
   "alreadyPaid",
   "advance",
+  "multiMonth",
   "overdue",
+  "overdueWithUtilities",
   "arrearsAdded",
   "arrearsAlreadyExists",
   "historicalRentCorrected",
@@ -37,7 +39,9 @@ export function RentActionFeedback() {
     const monthText = month ? monthLabel(month, locale) : "";
     const amountText = amount > 0 ? formatTaka(amount) : "";
     const message =
-      resultValue === "recorded"
+      resultValue === "multiMonth"
+        ? t("rentFeedbackMultiMonth", { count, amount: formatTaka(amount, 2) })
+        : resultValue === "recorded"
         ? t("rentFeedbackRecorded", { month: monthText, amount: amountText })
         : resultValue === "alreadyPaid"
           ? t("rentFeedbackAlreadyPaid", { month: monthText })
@@ -45,6 +49,8 @@ export function RentActionFeedback() {
             ? t("rentFeedbackAdvance", { count, amount: amountText })
             : resultValue === "overdue"
               ? t("rentFeedbackOverdue", { amount: amountText })
+              : resultValue === "overdueWithUtilities"
+                ? t("rentFeedbackOverdueWithUtilities", { amount: formatTaka(amount, 2) })
               : resultValue === "arrearsAdded"
                 ? t("rentFeedbackArrearsAdded", { count, amount: amountText })
                 : resultValue === "arrearsAlreadyExists"

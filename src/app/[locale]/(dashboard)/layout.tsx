@@ -29,10 +29,10 @@ export default async function DashboardLayout({
         <AppSidebar />
       </div>
       <SidebarInset>
-        <div className="hidden print:hidden md:block">
+        <div data-dashboard-topbar className="hidden print:hidden md:block">
           <SiteHeader notifications={notifications} />
         </div>
-        <div className="print:hidden md:hidden">
+        <div data-dashboard-topbar className="print:hidden md:hidden">
           <MobileTopBar notifications={notifications} />
         </div>
         <main className="flex min-w-0 flex-1 flex-col gap-4 p-4 pb-24 sm:p-6 sm:pb-24 md:pb-6 print:p-0">

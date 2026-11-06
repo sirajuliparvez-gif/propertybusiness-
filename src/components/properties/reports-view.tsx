@@ -3,6 +3,9 @@
 import { useState } from "react";
 import { useLocale, useTranslations } from "next-intl";
 import Image from "next/image";
+import { FileText } from "lucide-react";
+import { Link } from "@/i18n/navigation";
+import { Button } from "@/components/ui/button";
 import styles from "./financial-report.module.css";
 import { InvoicePrintButton } from "./invoice-print-button";
 import { ReportPrintMetadata } from "./report-print-metadata";
@@ -107,6 +110,9 @@ export function ReportsView({ months, propertyPLByMonth, defaultMonth, generated
   return (
     <div className="flex min-w-0 flex-col gap-5">
       <div className="flex flex-wrap items-center justify-end gap-3 print:hidden">
+        <Button variant="outline" render={<Link href={`/reports/market?month=${data.month}`} />} nativeButton={false}>
+          <FileText className="size-4" />{t("marketMonthlyReportTitle")}
+        </Button>
         <label className="sr-only" htmlFor="financial-report-month">{t("rentMonthFilter")}</label>
         <select id="financial-report-month" value={data.month} onChange={(event) => setSelectedMonth(event.target.value)}
           className="h-10 rounded-lg border bg-card px-3 text-sm font-medium focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring">
@@ -164,7 +170,13 @@ export function ReportsView({ months, propertyPLByMonth, defaultMonth, generated
             </tr></thead>
             <tbody>
               {propertyRows.length === 0 ? <tr><td colSpan={6} className="py-8 text-center text-muted-foreground">{t("noTransactions")}</td></tr> : propertyRows.map((row) => <tr key={row.propertyId} className={styles.tenant}>
-                <th scope="row" className={`${styles.name} text-left`}>{row.propertyId === COMPANY_KEY ? t("companyExpenseRowLabel") : row.propertyName}</th>
+                <th scope="row" className={`${styles.name} text-left`}>{row.propertyId === COMPANY_KEY ? t("companyExpenseRowLabel") : (
+                  <>
+                    <Link className="text-primary underline-offset-4 hover:underline print:hidden"
+                      href={`/reports/market?month=${data.month}&market=${row.propertyId}`}>{row.propertyName}</Link>
+                    <span className="hidden print:inline">{row.propertyName}</span>
+                  </>
+                )}</th>
                 {[row.income, row.ownerRent, row.payroll + row.otherExpense, row.netProfit].map((value, index) =>
                   <td key={index} className={`${styles.number} ${index === 3 ? value < 0 ? styles.remaining : styles.collected : ""}`}>{formatTaka(value)}</td>)}
                 <td className={styles.number}>{row.margin}%</td>
