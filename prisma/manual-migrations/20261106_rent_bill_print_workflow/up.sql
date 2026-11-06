@@ -18,4 +18,6 @@ CREATE TABLE IF NOT EXISTS "RentBillReceiptCheck" (
 );
 CREATE INDEX IF NOT EXISTS "RentBillReceiptCheck_tenantLeaseId_month_idx"
   ON "RentBillReceiptCheck" ("tenantLeaseId", "month");
+ALTER TABLE "RentBillPrint" ENABLE ROW LEVEL SECURITY;
+ALTER TABLE "RentBillReceiptCheck" ENABLE ROW LEVEL SECURITY;
 COMMIT;
