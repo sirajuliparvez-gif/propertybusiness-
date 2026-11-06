@@ -185,6 +185,9 @@
     "empty": "এই অংশে কোনো রেকর্ড নেই।"
   },
   "RentArrears": {
+    "searchTenant": "ভাড়াটিয়ার নাম বা দোকান নম্বর",
+    "moreFilters": "আরও ফিল্টার",
+    "clearFilters": "সব দেখুন",
     "collectOutstanding": "বকেয়া আদায়",
     "marketDue": "এই মার্কেটের মোট বাকি",
     "marketAccounts": "{count}টি ভাড়ার হিসাব",

@@ -3,7 +3,11 @@ import { dhakaNow } from "@/lib/dhaka-time";
 import { numericRentRates } from "@/lib/rent-terms";
 import { buildRentArrearsReport, resolveArrearsRange } from "@/lib/rent-arrears-report";
 
-export async function getRentArrearsReport(requested: { from?: string; to?: string; property?: string; tenant?: string; show?: string }) {
+function normalizeSearch(value: string) {
+  return value.normalize("NFC").toLowerCase().replace(/[০-৯]/g, (digit) => String(digit.charCodeAt(0) - 0x09e6));
+}
+
+export async function getRentArrearsReport(requested: { from?: string; to?: string; property?: string; tenant?: string; show?: string; q?: string }) {
   const now = dhakaNow();
   const currentMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
   const earliest = await prisma.rentPayment.aggregate({ _min: { month: true }, where: { month: { lte: currentMonth } } });
@@ -33,7 +37,13 @@ export async function getRentArrearsReport(requested: { from?: string; to?: stri
   const tenantOptions = options.filter((option) => !property || option.propertyId === property);
   const tenant = tenantOptions.some((option) => option.id === requested.tenant) ? requested.tenant! : "";
   const includeSettled = requested.show === "all";
-  const report = buildRentArrearsReport(leases.filter((lease) => (!property || lease.unit.unitType.property.id === property) && (!tenant || lease.id === tenant)).map((lease) => ({
+  const query = typeof requested.q === "string" ? requested.q.trim().slice(0, 120) : "";
+  const searchWords = query ? normalizeSearch(query).split(/\s+/) : [];
+  const matchingLeases = new Set(tenantOptions.filter((option) =>
+    (!tenant || option.id === tenant) &&
+    searchWords.every((word) => normalizeSearch(`${option.name} ${option.unit}`).includes(word))
+  ).map((option) => option.id));
+  const report = buildRentArrearsReport(leases.filter((lease) => matchingLeases.has(lease.id)).map((lease) => ({
     ...lease, tenantName: lease.tenant.name, propertyId: lease.unit.unitType.property.id, propertyName: lease.unit.unitType.property.name,
     propertyDeleted: lease.unit.unitType.property.deletedAt != null, unitLabel: lease.unit.label,
     monthlyRentAmount: Number(lease.monthlyRentAmount), serviceChargeValue: lease.serviceChargeValue == null ? null : Number(lease.serviceChargeValue),
@@ -42,5 +52,5 @@ export async function getRentArrearsReport(requested: { from?: string; to?: stri
       adjustments: payment.downpaymentAdjustments.map((adjustment) => Number(adjustment.amountAdjusted)),
     })),
   })), range.from, range.to, includeSettled, now);
-  return { ...report, ...range, currentMonth, properties, tenantOptions, property, tenant, includeSettled };
+  return { ...report, ...range, currentMonth, properties, tenantOptions, property, tenant, includeSettled, query };
 }

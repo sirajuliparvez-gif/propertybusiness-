@@ -185,6 +185,9 @@
     "empty": "No records in this section."
   },
   "RentArrears": {
+    "searchTenant": "Tenant name or unit number",
+    "moreFilters": "More filters",
+    "clearFilters": "Clear filters",
     "collectOutstanding": "Collect outstanding rent",
     "marketDue": "Market outstanding",
     "marketAccounts": "{count} tenant accounts",

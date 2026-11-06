@@ -47,12 +47,14 @@ export function AppSidebar() {
   const pathname = usePathname();
   const groups: { label?: string; items: SidebarItem[] }[] = [
     {
-      items: [{ href: "/", label: t("dashboard"), icon: LayoutDashboard }],
+      items: [
+        { href: "/", label: t("dashboard"), icon: LayoutDashboard },
+        { href: "/rent/arrears", label: t("quickRentArrears"), icon: HandCoins, prefetch: false },
+      ],
     },
     {
       label: t("quickActions"),
       items: [
-        { href: "/rent/arrears", label: t("quickRentArrears"), icon: HandCoins, prefetch: false },
         { href: "/utility-bills?add=bill", label: t("quickUtilityBill"), icon: FilePlus, prefetch: false },
         { href: "/transactions?add=expense", label: t("quickExpense"), icon: Receipt, prefetch: false },
       ],

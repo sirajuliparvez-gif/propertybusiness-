@@ -12,7 +12,7 @@ import { getRentArrearsReport } from "@/lib/rent-arrears-report-data";
 import { formatDate, formatTaka, monthLabel } from "@/lib/format";
 
 export default async function RentArrearsPage({ searchParams }: {
-  searchParams: Promise<{ from?: string; to?: string; property?: string; tenant?: string; show?: string }>;
+  searchParams: Promise<{ from?: string; to?: string; property?: string; tenant?: string; show?: string; q?: string }>;
 }) {
   const requested = await searchParams;
   const [report, t, p, nav, locale] = await Promise.all([
@@ -32,6 +32,7 @@ export default async function RentArrearsPage({ searchParams }: {
   const returnParams = new URLSearchParams({ from: report.from, to: report.to });
   if (report.property) returnParams.set("property", report.property);
   if (report.tenant) returnParams.set("tenant", report.tenant);
+  if (report.query) returnParams.set("q", report.query);
   if (report.includeSettled) returnParams.set("show", "all");
   const filterClass = "h-10 w-full min-w-0 rounded-lg border bg-card px-3 text-sm";
   return <div className="flex min-w-0 flex-col gap-5">
@@ -39,27 +40,40 @@ export default async function RentArrearsPage({ searchParams }: {
       <Button variant="outline" render={<Link href="/rent" />} nativeButton={false}><ArrowLeft className="size-4" />{p("rentCollectionTitle")}</Button>
       <InvoicePrintButton />
     </div>
-    <details className={`${clean.filters} print:hidden`}><summary>{t("filters")} · {period}</summary>
-    <form action={`/${locale}/rent/arrears`} method="get" className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-      <label className="min-w-0 space-y-1 text-xs font-medium">{t("from")}<input aria-label={t("from")} type="month" name="from" required defaultValue={report.from} min={report.earliest} max={report.currentMonth} className={filterClass} /></label>
-      <label className="min-w-0 space-y-1 text-xs font-medium">{t("to")}<input aria-label={t("to")} type="month" name="to" required defaultValue={report.to} min={report.earliest} max={report.currentMonth} className={filterClass} /></label>
-      <label className="min-w-0 space-y-1 text-xs font-medium">{t("property")}<select aria-label={t("property")} name="property" defaultValue={report.property} className={filterClass}>
-        <option value="">{t("allProperties")}</option>{report.properties.map((property) => <option key={property.id} value={property.id}>{property.name}</option>)}
-      </select></label>
-      <label className="min-w-0 space-y-1 text-xs font-medium">{p("tenantName")}<select aria-label={p("tenantName")} name="tenant" defaultValue={report.tenant} className={filterClass}>
-        <option value="">{t("allTenants")}</option>{report.tenantOptions.map((tenant) => <option key={tenant.id} value={tenant.id}>{tenant.name} · {tenant.unit} · {tenant.propertyName}</option>)}
-      </select></label>
-      <label className="min-w-0 space-y-1 text-xs font-medium">{t("show")}<select aria-label={t("show")} name="show" defaultValue={report.includeSettled ? "all" : "owing"} className={filterClass}>
-        <option value="owing">{t("owingOnly")}</option><option value="all">{t("includeSettled")}</option>
-      </select></label>
-      <Button type="submit" className="self-end">{t("apply")}</Button>
-    </form></details>
+    <form key={returnParams.toString()} action={`/${locale}/rent/arrears`} method="get" className={`${clean.filters} grid gap-3 p-4 print:hidden`}>
+      <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto]">
+        <label className="min-w-0 space-y-1 text-xs font-medium">
+          {t("searchTenant")}
+          <input type="search" name="q" defaultValue={report.query} maxLength={120} placeholder={t("searchTenant")} className={filterClass} />
+        </label>
+        <label className="min-w-0 space-y-1 text-xs font-medium">{t("property")}<select aria-label={t("property")} name="property" defaultValue={report.property} className={filterClass}>
+          <option value="">{t("allProperties")}</option>{report.properties.map((property) => <option key={property.id} value={property.id}>{property.name}</option>)}
+        </select></label>
+        <div className="flex flex-wrap items-end gap-2">
+          <Button type="submit" className="h-10">{t("apply")}</Button>
+          <Button variant="outline" className="h-10" render={<Link href="/rent/arrears" />} nativeButton={false}>{t("clearFilters")}</Button>
+        </div>
+      </div>
+      <details className="border-t pt-2">
+        <summary className="cursor-pointer text-sm text-muted-foreground">{t("moreFilters")} · {period}</summary>
+        <div className="mt-3 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+          <label className="min-w-0 space-y-1 text-xs font-medium">{t("from")}<input aria-label={t("from")} type="month" name="from" required defaultValue={report.from} min={report.earliest} max={report.currentMonth} className={filterClass} /></label>
+          <label className="min-w-0 space-y-1 text-xs font-medium">{t("to")}<input aria-label={t("to")} type="month" name="to" required defaultValue={report.to} min={report.earliest} max={report.currentMonth} className={filterClass} /></label>
+          <label className="min-w-0 space-y-1 text-xs font-medium">{p("tenantName")}<select aria-label={p("tenantName")} name="tenant" defaultValue={report.tenant} className={filterClass}>
+            <option value="">{t("allTenants")}</option>{report.tenantOptions.map((tenant) => <option key={tenant.id} value={tenant.id}>{tenant.name} · {tenant.unit} · {tenant.propertyName}</option>)}
+          </select></label>
+          <label className="min-w-0 space-y-1 text-xs font-medium">{t("show")}<select aria-label={t("show")} name="show" defaultValue={report.includeSettled ? "all" : "owing"} className={filterClass}>
+            <option value="owing">{t("owingOnly")}</option><option value="all">{t("includeSettled")}</option>
+          </select></label>
+        </div>
+      </details>
+    </form>
     <article data-testid="invoice" className={`${styles.report} ${styles.arrearsPrint}`}>
       <header className={clean.header}>
-        <div><div className={clean.brandRow}><Image src="/logo.jpg" alt="" width={36} height={36} unoptimized /><p className={clean.brand}>{nav("brand")}</p></div><h1>{t("title")}</h1><p className={clean.period}>{period} · {selectedProperty ?? t("allProperties")}{selectedTenant ? ` · ${selectedTenant}` : ""}</p></div>
+        <div><div className={clean.brandRow}><Image src="/logo.jpg" alt="" width={36} height={36} unoptimized /><p className={clean.brand}>{nav("brand")}</p></div><h1>{t("title")}</h1><p className={clean.period}>{period} · {selectedProperty ?? t("allProperties")}{selectedTenant ? ` · ${selectedTenant}` : ""}{report.query ? ` · ${report.query}` : ""}</p></div>
         <div className={clean.metadata}><ReportPrintMetadata pageName="rentArrearsReport" initialDate={generatedDate} locale={locale} dateLabel={p("monthlyReportPrintDate")} pageLabel={p("monthlyReportPage")} title={`${nav("brand")} · ${t("title")}`} month={period} /></div>
       </header>
-      <div className={clean.printBrand}><Image src="/logo.jpg" alt="" width={48} height={48} unoptimized /><div><strong>{nav("brand")}</strong><h1>{t("title")}</h1><p>{period}{selectedProperty ? ` · ${selectedProperty}` : ""}</p></div></div>
+      <div className={clean.printBrand}><Image src="/logo.jpg" alt="" width={48} height={48} unoptimized /><div><strong>{nav("brand")}</strong><h1>{t("title")}</h1><p>{period}{selectedProperty ? ` · ${selectedProperty}` : ""}{selectedTenant ? ` · ${selectedTenant}` : ""}{report.query ? ` · ${report.query}` : ""}</p></div></div>
       <dl className={clean.overview}>
         <div><dt>{t("totalOutstanding")}</dt><dd className={clean.mainBalance}>{formatTaka(report.totals.remaining)}</dd></div>
         <div><dt>{t("overdue")}</dt><dd>{formatTaka(report.totals.overdue)}</dd></div>
@@ -71,7 +85,7 @@ export default async function RentArrearsPage({ searchParams }: {
         {report.totals.credit > 0 && <p>{p("monthlyReportCredit", { amount: formatTaka(report.totals.credit) })}</p>}
         <div className={clean.printSignatures}><span>{p("monthlyReportPreparedBy")}: __________________</span><span>{p("monthlyReportApprovedBy")}: __________________</span></div>
       </div>
-      <RentArrearsLedger key={`${report.from}-${report.to}-${report.property}-${report.tenant}-${report.includeSettled}`} tenants={report.rows} monthLabels={Object.fromEntries(report.months.map((month) => [month, monthLabel(month, locale)]))} selectedTenant={report.tenant} arrearsPeriod={{ from: report.from, to: report.to }} returnTo={`/rent/arrears?${returnParams}`} />
+      <RentArrearsLedger key={`${report.from}-${report.to}-${report.property}-${report.tenant}-${report.includeSettled}-${report.query}`} tenants={report.rows} monthLabels={Object.fromEntries(report.months.map((month) => [month, monthLabel(month, locale)]))} selectedTenant={report.tenant} arrearsPeriod={{ from: report.from, to: report.to }} returnTo={`/rent/arrears?${returnParams}`} />
       <details className={`${clean.notes} print:hidden`}><summary>{t("monthlySummary")}</summary>
       <div className={styles.tableWrap}><table className={styles.table}>
         <caption className="sr-only">{t("monthlySummary")}</caption>

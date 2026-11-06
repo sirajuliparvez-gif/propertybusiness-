@@ -19,8 +19,10 @@ export function QuickActionsSheet({
   onOpenChange: (open: boolean) => void;
 }) {
   const t = useTranslations("Mobile");
+  const nav = useTranslations("Nav");
 
   const actions = [
+    { href: "/rent/arrears", label: nav("quickRentArrears"), icon: HandCoins, tone: "text-amber-600 dark:text-amber-400 bg-linear-to-br from-amber-500/20 to-amber-500/5" },
     { href: "/properties/new", label: t("newProperty"), icon: Building2, tone: "text-blue-600 dark:text-blue-400 bg-linear-to-br from-blue-500/20 to-blue-500/5" },
     { href: "/rent", label: t("recordRent"), icon: Wallet, tone: "text-success bg-linear-to-br from-success/25 to-success/5" },
     { href: "/tenants", label: t("newTenant"), icon: Users, tone: "text-blue-600 dark:text-blue-400 bg-linear-to-br from-blue-500/20 to-blue-500/5" },
@@ -32,7 +34,7 @@ export function QuickActionsSheet({
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
-      <SheetContent side="bottom" className="rounded-t-2xl pb-[calc(env(safe-area-inset-bottom)+0.5rem)]">
+      <SheetContent side="bottom" className="max-h-[90dvh] overflow-y-auto rounded-t-2xl pb-[calc(env(safe-area-inset-bottom)+0.5rem)]">
         <SheetHeader>
           <SheetTitle>{t("quickActionsTitle")}</SheetTitle>
           <SheetDescription>{t("quickActionsDesc")}</SheetDescription>
