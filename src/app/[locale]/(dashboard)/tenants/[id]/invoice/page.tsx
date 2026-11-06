@@ -11,7 +11,7 @@ import { formatTaka, formatDate, monthLabel } from "@/lib/format";
 import { paymentMethodLabel } from "@/lib/payment-method";
 import { isMonthPastDue, LEDGER_START_MONTH, RENT_DUE_DAY } from "@/lib/rent-ledger";
 import { cn } from "@/lib/utils";
-import { CashMemoHeader, CashMemoReading, CashMemoSignatures, cashMemoClassName } from "@/components/properties/cash-memo";
+import { CashMemoHandwritingRow, CashMemoHeader, CashMemoReading, CashMemoSignatures, cashMemoClassName } from "@/components/properties/cash-memo";
 import { InvoiceMonthSelect } from "@/components/properties/invoice-month-select";
 import { InvoicePaymentDialog } from "@/components/properties/invoice-payment-dialog";
 import { InvoiceAddUtilityBillDialog } from "@/components/properties/add-utility-bill-dialog";
@@ -135,6 +135,7 @@ export default async function TenantInvoicePage({
     const remaining = bills.reduce((sum, b) => sum + billRemaining(b), 0);
     return { type, label, icon, bills, companyBills, due, remaining };
   });
+  const missingUtilityRows = monthUtilityRows.filter(({ bills, companyBills }) => !bills.length && !companyBills.length);
   const detailBills = [
     ...earlierUnpaidBills,
     ...monthBills.filter((b) => monthUtilityRows.some((row) => row.type === b.type && row.bills.length > 1)),
@@ -192,8 +193,8 @@ export default async function TenantInvoicePage({
         </div>
         <article data-testid="payment-request-copy" className="print-invoice-a4 space-y-4 rounded-lg border border-sky-900/40 bg-card p-4 text-sm sm:p-6 print:p-4">
           <CashMemoHeader {...memoHeader} title={t("paymentRequestTitle")} />
-          {paymentLines.length ? (
-            <table className="w-full">
+          {paymentLines.length || missingUtilityRows.length ? (
+            <table className={cn("w-full", !paymentLines.length && "hidden print:table")}>
               <thead className="bg-muted/60 print:table-header-group">
                 <tr>
                   <th scope="col" className="px-2 py-1.5 text-start">{t("cashMemoCharge")}</th>
@@ -216,6 +217,7 @@ export default async function TenantInvoicePage({
                     </tr>
                   );
                 })}
+                {missingUtilityRows.map(({ type, label }) => <CashMemoHandwritingRow key={type} label={label} />)}
               </tbody>
             </table>
           ) : null}
@@ -335,12 +337,12 @@ export default async function TenantInvoicePage({
                 </TableCell>
               </TableRow>
               {monthUtilityRows.map(({ type, label, icon: Icon, bills, companyBills, due, remaining }) => {
-                const noBill = bills.length === 0 && companyBills.length === 0;
-                const missingAmount = noBill ? null : "—";
+                if (bills.length === 0 && companyBills.length === 0) {
+                  return <CashMemoHandwritingRow key={type} label={label} amountColumns={3} />;
+                }
 
                 return (
                   <TableRow key={type} className={cn(
-                    noBill && "hidden print:table-row print:h-[10mm] print:[&>td]:bg-transparent",
                     [...bills, ...companyBills].some((b) => b.id === highlightedBillId) && "bg-primary/5 print:bg-transparent"
                   )}>
                     <th scope="row" className="p-2 text-left align-middle font-medium">
@@ -361,10 +363,10 @@ export default async function TenantInvoicePage({
                         />
                       ) : null) : null}
                     </th>
-                    <TableCell className="text-right tabular-nums">{bills.length ? formatInvoiceAmount(due) : missingAmount}</TableCell>
-                    <TableCell className="text-right tabular-nums">{bills.length ? formatInvoiceAmount(due - remaining) : missingAmount}</TableCell>
+                    <TableCell className="text-right tabular-nums">{bills.length ? formatInvoiceAmount(due) : "—"}</TableCell>
+                    <TableCell className="text-right tabular-nums">{bills.length ? formatInvoiceAmount(due - remaining) : "—"}</TableCell>
                     <TableCell className={cn("bg-muted/30 text-right tabular-nums", remaining > 0 ? "font-semibold text-destructive" : "text-muted-foreground")}>
-                      {bills.length ? formatInvoiceAmount(remaining) : missingAmount}
+                      {bills.length ? formatInvoiceAmount(remaining) : "—"}
                     </TableCell>
                   </TableRow>
                 );

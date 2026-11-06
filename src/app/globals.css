@@ -290,4 +290,11 @@
   .tenant-bill-summary-main .tenant-bill-balance { font-size: 20pt; }
   .tenant-bill-breakdown { padding: 6px 14px; }
   .tenant-bill-detail td:nth-child(2) > div { display: none; }
+  .cash-memo-handwriting-row { height: 12mm; break-inside: avoid; }
+  .cash-memo-handwriting-row > td { min-width: 60mm; vertical-align: middle; }
+  .cash-memo-handwriting-line {
+    display: block;
+    height: 7mm;
+    border-bottom: 1px dashed #64748b;
+  }
 }
