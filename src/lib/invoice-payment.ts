@@ -1,3 +1,5 @@
+import type { UtilityType } from "@/generated/prisma/client";
+
 export type InvoicePaymentLine = {
   id: string;
   month: string;
@@ -28,7 +30,7 @@ export function allocateInvoicePayment(lines: InvoicePaymentLine[], amountCents:
 
 export type ReceiptCheckLine = {
   id: string;
-  utilityType: "ELECTRICITY" | "GAS" | "WATER" | "OTHER" | null;
+  utilityType: UtilityType | null;
   dueDate: string | null;
   expectedCents: number;
   paidCents: number;

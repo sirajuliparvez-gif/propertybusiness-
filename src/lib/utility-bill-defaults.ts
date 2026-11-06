@@ -1,6 +1,10 @@
 import type { UtilityType } from "@/generated/prisma/client";
 
-export const utilityBillTypes = ["ELECTRICITY", "GAS", "WATER", "OTHER"] as const satisfies readonly UtilityType[];
+export const utilityBillTypes = ["ELECTRICITY", "GAS", "WATER", "WASTE", "SECURITY", "OTHER"] as const satisfies readonly UtilityType[];
+
+export function readUtilityType(value: unknown): UtilityType {
+  return utilityBillTypes.find((type) => type === value) ?? "OTHER";
+}
 
 export type UtilityBillDefault = {
   type: UtilityType;

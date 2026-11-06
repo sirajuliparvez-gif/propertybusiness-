@@ -602,6 +602,8 @@
     "utilityTypeGas": "Gas",
     "utilityTypeElectricity": "Electricity",
     "utilityTypeWater": "Water",
+    "utilityTypeWaste": "Waste charge",
+    "utilityTypeSecurity": "Security charge",
     "utilityTypeOther": "Other",
     "billDueDate": "Due Date",
     "billStatusUnpaid": "Unpaid",

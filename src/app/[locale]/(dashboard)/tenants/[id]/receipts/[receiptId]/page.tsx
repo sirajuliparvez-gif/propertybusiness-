@@ -46,7 +46,8 @@ export default async function MoneyReceiptPage({ params, searchParams }: {
   const [t, nav, locale] = await Promise.all([getTranslations("Properties"), getTranslations("Nav"), getLocale()]);
   const utilityLabels = {
     ELECTRICITY: t("utilityTypeElectricity"), GAS: t("utilityTypeGas"),
-    WATER: t("utilityTypeWater"), OTHER: t("cashMemoOtherCharges"),
+    WATER: t("utilityTypeWater"), WASTE: t("utilityTypeWaste"),
+    SECURITY: t("utilityTypeSecurity"), OTHER: t("cashMemoOtherCharges"),
   };
   const dates = new Set(entries.map(({ date }) => dhakaISO(date)));
   const lines = entries.map((entry) => ({

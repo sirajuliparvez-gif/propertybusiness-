@@ -131,12 +131,16 @@ export default async function TenantInvoicePage({
     GAS: t("utilityTypeGas"),
     ELECTRICITY: t("utilityTypeElectricity"),
     WATER: t("utilityTypeWater"),
+    WASTE: t("utilityTypeWaste"),
+    SECURITY: t("utilityTypeSecurity"),
     OTHER: t("utilityTypeOther"),
   };
   const monthUtilityRows = [
     { type: "ELECTRICITY", icon: Zap, label: t("utilityTypeElectricity") },
     { type: "GAS", icon: Flame, label: t("utilityTypeGas") },
     { type: "WATER", icon: Droplet, label: t("utilityTypeWater") },
+    { type: "WASTE", icon: ReceiptText, label: t("utilityTypeWaste") },
+    { type: "SECURITY", icon: ReceiptText, label: t("utilityTypeSecurity") },
     { type: "OTHER", icon: ReceiptText, label: t("cashMemoOtherCharges") },
   ].map(({ type, label, icon }) => {
     const bills = monthBills.filter((b) => b.type === type);

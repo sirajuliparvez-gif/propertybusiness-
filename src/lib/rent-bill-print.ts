@@ -2,7 +2,9 @@ import type { TenantProfile } from "@/lib/tenants-data";
 import type { InvoicePaymentLine } from "@/lib/invoice-payment";
 import { dhakaISO } from "@/lib/dhaka-time";
 
-export const rentBillPrintKeys = ["RENT", "ELECTRICITY", "GAS", "WATER", "OTHER"] as const;
+import { utilityBillTypes } from "@/lib/utility-bill-defaults";
+
+export const rentBillPrintKeys = ["RENT", ...utilityBillTypes] as const;
 export type RentBillPrintKey = (typeof rentBillPrintKeys)[number];
 export type RentBillPrintRow = {
   key: RentBillPrintKey;

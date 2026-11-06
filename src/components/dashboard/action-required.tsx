@@ -97,6 +97,8 @@ export function ActionRequired({ data, month, initialTab }: {
     GAS: tp("utilityTypeGas"),
     ELECTRICITY: tp("utilityTypeElectricity"),
     WATER: tp("utilityTypeWater"),
+    WASTE: tp("utilityTypeWaste"),
+    SECURITY: tp("utilityTypeSecurity"),
     OTHER: tp("utilityTypeOther"),
   };
 

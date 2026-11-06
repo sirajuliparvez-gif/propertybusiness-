@@ -1,5 +1,8 @@
 "use client";
 
+import type { UtilityType } from "@/generated/prisma/client";
+import { utilityBillTypes } from "@/lib/utility-bill-defaults";
+
 import { useEffect, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
@@ -32,7 +35,7 @@ import { listPropertyUnits } from "@/lib/actions/units";
 import { unitPickerLabel } from "@/lib/unit-label";
 
 const NONE_VALUE = "NONE";
-type UtilityType = "GAS" | "ELECTRICITY" | "WATER" | "OTHER";
+
 
 // What the edit form needs about a bill — deliberately narrower than
 // UtilityBillRow so the invoice page's richer row shape fits too.
@@ -129,6 +132,8 @@ export function EditUtilityBillDialog({
     GAS: t("utilityTypeGas"),
     ELECTRICITY: t("utilityTypeElectricity"),
     WATER: t("utilityTypeWater"),
+    WASTE: t("utilityTypeWaste"),
+    SECURITY: t("utilityTypeSecurity"),
     OTHER: t("utilityTypeOther"),
   };
 
@@ -208,7 +213,7 @@ export function EditUtilityBillDialog({
             <Select
               value={type}
               onValueChange={(v) => handleTypeChange((v ?? "OTHER") as UtilityType)}
-              items={(["GAS", "ELECTRICITY", "WATER", "OTHER"] as UtilityType[]).map((k) => ({
+              items={utilityBillTypes.map((k) => ({
                 value: k,
                 label: typeLabels[k],
               }))}
@@ -217,7 +222,7 @@ export function EditUtilityBillDialog({
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                {(["GAS", "ELECTRICITY", "WATER", "OTHER"] as UtilityType[]).map((k) => (
+                {utilityBillTypes.map((k) => (
                   <SelectItem key={k} value={k}>
                     {typeLabels[k]}
                   </SelectItem>

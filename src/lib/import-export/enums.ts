@@ -29,16 +29,18 @@ export function paymentMethodToBengali(method: string | null): string {
   return method ? (map[method] ?? "") : "";
 }
 
-export function parseUtilityType(raw: string | null): "GAS" | "ELECTRICITY" | "WATER" | "OTHER" {
+export function parseUtilityType(raw: string | null) {
   const v = (raw ?? "").trim();
   if (["গ্যাস", "gas", "GAS"].includes(v)) return "GAS";
   if (["বিদ্যুৎ", "electricity", "ELECTRICITY"].includes(v)) return "ELECTRICITY";
   if (["পানি", "water", "WATER"].includes(v)) return "WATER";
+  if (["ময়লা বিল", "waste", "WASTE"].includes(v)) return "WASTE";
+  if (["সিকিউরিটি চার্জ", "security", "SECURITY"].includes(v)) return "SECURITY";
   return "OTHER";
 }
 
 export function utilityTypeToBengali(type: string): string {
-  const map: Record<string, string> = { GAS: "গ্যাস", ELECTRICITY: "বিদ্যুৎ", WATER: "পানি", OTHER: "অন্যান্য" };
+  const map: Record<string, string> = { GAS: "গ্যাস", ELECTRICITY: "বিদ্যুৎ", WATER: "পানি", WASTE: "ময়লা বিল", SECURITY: "সিকিউরিটি চার্জ", OTHER: "অন্যান্য" };
   return map[type] ?? type;
 }
 

@@ -10,7 +10,7 @@ import { redirect } from "@/i18n/navigation";
 import { applyUtilityBillInstallment } from "@/lib/payment-progress";
 import { requireCurrentUser } from "@/lib/auth/session";
 import { isValidTransactionDate } from "@/lib/transaction-edit";
-import { serializeUtilityBillDefaults, utilityBillTypes } from "@/lib/utility-bill-defaults";
+import { readUtilityType, serializeUtilityBillDefaults, utilityBillTypes } from "@/lib/utility-bill-defaults";
 
 function str(formData: FormData, key: string) {
   const v = formData.get(key);
@@ -324,11 +324,7 @@ export async function updateUtilityBill(
   const locale = await getLocale();
   const billId = str(formData, "billId");
   const propertyId = str(formData, "propertyId");
-  const typeRaw = formData.get("type");
-  const type =
-    typeRaw === "GAS" || typeRaw === "ELECTRICITY" || typeRaw === "WATER" || typeRaw === "OTHER"
-      ? typeRaw
-      : "OTHER";
+  const type = readUtilityType(formData.get("type"));
   const unitId = str(formData, "unitId");
   const amount = str(formData, "amount");
   const dueDate = str(formData, "dueDate");

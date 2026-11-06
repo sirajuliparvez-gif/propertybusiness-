@@ -602,6 +602,8 @@
     "utilityTypeGas": "গ্যাস",
     "utilityTypeElectricity": "বিদ্যুৎ",
     "utilityTypeWater": "পানি",
+    "utilityTypeWaste": "ময়লা বিল",
+    "utilityTypeSecurity": "সিকিউরিটি চার্জ",
     "utilityTypeOther": "অন্যান্য",
     "billDueDate": "পরিশোধের তারিখ",
     "billStatusUnpaid": "অপরিশোধিত",

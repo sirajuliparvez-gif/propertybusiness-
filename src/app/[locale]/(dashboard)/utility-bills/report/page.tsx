@@ -11,7 +11,8 @@ import styles from "@/components/properties/financial-report.module.css";
 import { getMonthlyUtilityReport } from "@/lib/monthly-utility-report-data";
 import { formatDate, formatTaka, monthLabel } from "@/lib/format";
 
-const typeKeys = { ELECTRICITY: "utilityTypeElectricity", GAS: "utilityTypeGas", WATER: "utilityTypeWater", OTHER: "utilityTypeOther" } as const;
+const typeKeys = { ELECTRICITY: "utilityTypeElectricity", GAS: "utilityTypeGas", WATER: "utilityTypeWater",
+  WASTE: "utilityTypeWaste", SECURITY: "utilityTypeSecurity", OTHER: "utilityTypeOther" } as const;
 
 export default async function MonthlyUtilityReportPage({ searchParams }: { searchParams: Promise<{ month?: string }> }) {
   const { month: requested } = await searchParams;

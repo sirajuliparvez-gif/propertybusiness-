@@ -238,6 +238,8 @@ export function RecordTenantRentPaymentDialog({
     GAS: t("utilityTypeGas"),
     ELECTRICITY: t("utilityTypeElectricity"),
     WATER: t("utilityTypeWater"),
+    WASTE: t("utilityTypeWaste"),
+    SECURITY: t("utilityTypeSecurity"),
     OTHER: t("utilityTypeOther"),
   };
   const utilityTotal = utilityArrears?.reduce((sum, bill) => sum + Number(utilityAmounts[bill.id] || 0), 0) ?? 0;

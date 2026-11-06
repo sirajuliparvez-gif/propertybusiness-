@@ -1,5 +1,7 @@
 "use client";
 
+import type { UtilityType } from "@/generated/prisma/client";
+
 import { useMemo, useState, useTransition } from "react";
 import { useTranslations } from "next-intl";
 import { Loader2, Printer, Search, Wallet } from "lucide-react";
@@ -49,7 +51,7 @@ const ALL_PROPERTIES = "ALL";
 
 export type UtilityBillRow = {
   id: string;
-  type: "GAS" | "ELECTRICITY" | "WATER" | "OTHER";
+  type: UtilityType;
   dueDate: Date;
   // "YYYY-MM" the bill belongs to.
   month: string;
@@ -92,6 +94,8 @@ export const UTILITY_TYPE_LABEL_KEYS: Record<string, string> = {
   GAS: "utilityTypeGas",
   ELECTRICITY: "utilityTypeElectricity",
   WATER: "utilityTypeWater",
+  WASTE: "utilityTypeWaste",
+  SECURITY: "utilityTypeSecurity",
   OTHER: "utilityTypeOther",
 };
 
@@ -110,7 +114,7 @@ export function PayUtilityBillButton({
 }: {
   billId: string;
   propertyId: string;
-  type: "GAS" | "ELECTRICITY" | "WATER" | "OTHER";
+  type: UtilityType;
   amount: number;
   paidAmount?: number;
   paidByCompany: boolean;

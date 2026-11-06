@@ -19,6 +19,8 @@ export function TenantUtilityDefaultsDialog({ leaseId, defaults }: { leaseId: st
     ELECTRICITY: t("utilityTypeElectricity"),
     GAS: t("utilityTypeGas"),
     WATER: t("utilityTypeWater"),
+    WASTE: t("utilityTypeWaste"),
+    SECURITY: t("utilityTypeSecurity"),
     OTHER: t("utilityTypeOther"),
   };
 

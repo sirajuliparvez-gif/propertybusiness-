@@ -26,7 +26,8 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { FormField } from "@/components/properties/form-field";
 import { PreviousMeterReadingField } from "@/components/properties/previous-meter-reading-field";
 import { addTenantUtilityBills, addUtilityBill, getPreviousPropertyMeterReading, getPreviousTenantMeterReading, getTenantUtilityBillDefaults } from "@/lib/actions/utility-bills";
-import type { UtilityBillDefault } from "@/lib/utility-bill-defaults";
+import type { UtilityType } from "@/generated/prisma/client";
+import { utilityBillTypes, type UtilityBillDefault } from "@/lib/utility-bill-defaults";
 import { electricityAmountAtRate } from "@/lib/electricity-consumption";
 import { formatDate, formatTaka, monthLabel } from "@/lib/format";
 import { toast } from "sonner";
@@ -34,7 +35,7 @@ import { useRouter } from "next/navigation";
 import { unitPickerLabel } from "@/lib/unit-label";
 
 const NONE_VALUE = "NONE";
-type UtilityType = "GAS" | "ELECTRICITY" | "WATER" | "OTHER";
+
 
 type PropertyBillFields = {
   propertyId: string;
@@ -226,6 +227,8 @@ export function AddUtilityBillForm(props: BillFormProps) {
     GAS: t("utilityTypeGas"),
     ELECTRICITY: t("utilityTypeElectricity"),
     WATER: t("utilityTypeWater"),
+    WASTE: t("utilityTypeWaste"),
+    SECURITY: t("utilityTypeSecurity"),
     OTHER: t("utilityTypeOther"),
   };
 
@@ -320,7 +323,7 @@ export function AddUtilityBillForm(props: BillFormProps) {
         <Select
           value={type}
           onValueChange={(v) => handleTypeChange((v ?? "OTHER") as UtilityType)}
-          items={(["GAS", "ELECTRICITY", "WATER", "OTHER"] as UtilityType[]).map((k) => ({
+          items={utilityBillTypes.map((k) => ({
             value: k,
             label: typeLabels[k],
           }))}
@@ -329,7 +332,7 @@ export function AddUtilityBillForm(props: BillFormProps) {
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
-            {(["GAS", "ELECTRICITY", "WATER", "OTHER"] as UtilityType[]).map((k) => (
+            {utilityBillTypes.map((k) => (
               <SelectItem key={k} value={k}>
                 {typeLabels[k]}
               </SelectItem>

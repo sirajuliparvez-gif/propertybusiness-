@@ -38,7 +38,8 @@ export function RentBillPrintForm({
   const [selected, setSelected] = useState<RentBillPrintKey[]>(() => (printed ?? rows).map(({ key }) => key));
   const labels = {
     RENT: t("invoiceRentLabel"), ELECTRICITY: t("utilityTypeElectricity"), GAS: t("utilityTypeGas"),
-    WATER: t("utilityTypeWater"), OTHER: t("cashMemoOtherCharges"),
+    WATER: t("utilityTypeWater"), WASTE: t("utilityTypeWaste"),
+    SECURITY: t("utilityTypeSecurity"), OTHER: t("cashMemoOtherCharges"),
   };
   const draft = rows.filter(({ key }) => selected.includes(key));
   const draftSnapshot = JSON.stringify(draft);

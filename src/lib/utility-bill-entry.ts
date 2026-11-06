@@ -1,3 +1,4 @@
+import { readUtilityType } from "@/lib/utility-bill-defaults";
 import { electricityAmountAtRate } from "@/lib/electricity-consumption";
 import { dhakaISO } from "@/lib/dhaka-time";
 import { isValidTransactionDate } from "@/lib/transaction-edit";
@@ -9,11 +10,7 @@ function str(formData: FormData, key: string) {
 }
 
 export function readUtilityBillFields(formData: FormData) {
-  const typeRaw = formData.get("type");
-  const type =
-    typeRaw === "GAS" || typeRaw === "ELECTRICITY" || typeRaw === "WATER" || typeRaw === "OTHER"
-      ? typeRaw
-      : "OTHER";
+  const type = readUtilityType(formData.get("type"));
   let amount = str(formData, "amount");
   const dueDate = str(formData, "dueDate");
   if (!amount || !dueDate) return null;
