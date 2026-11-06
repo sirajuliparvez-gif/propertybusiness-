@@ -258,6 +258,7 @@ export default async function TenantInvoicePage({
                   previous={bill.previousMeterReading} bill={bill}
                   dateLabel={formatDate(bill.dueDate, locale) + (paidByCompany(bill) ? ` · ${t("paidByCompanyBadge")}` : "")}
                   editAction={<EditUtilityBillDialog
+                    key={bill.id}
                     bill={bill} returnTo={invoicePath} fixedUnitId={bill.unitId}
                     invoice={{ leaseId: id, month: selectedMonth, startDate: leaseStartDay }}
                   />} />
