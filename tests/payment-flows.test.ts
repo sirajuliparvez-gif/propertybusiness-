@@ -17,6 +17,7 @@ import { localizedMutationPaths } from "@/lib/localized-revalidation";
 import { reportingMonthKey } from "@/lib/reporting-period";
 import { withRentActionFeedback } from "@/lib/rent-action-feedback";
 import { rentTermsDueAmount, resolveRentTermsForMonth } from "@/lib/rent-terms";
+import { allocateInvoicePayment, invoicePaymentSnapshot, type InvoicePaymentLine } from "@/lib/invoice-payment";
 import { allocateRentPayment, buildRentLedger } from "@/lib/rent-ledger";
 
 test("rent payment can settle September when money arrives in October", () => {
@@ -230,4 +231,18 @@ test("oldest-first arrears preview settles full or partial payments against rema
     { ...balances[0], gap: 2_000, amount: 2_000 },
     { ...balances[1], amount: 1_000 },
   ]);
+});
+
+test("invoice partial payment settles older rent and utility before the selected month", () => {
+  const lines: InvoicePaymentLine[] = [
+    { id: "2026-11", month: "2026-11", kind: "rent", remainingCents: 600000 },
+    { id: "gas", month: "2026-10", kind: "utility", remainingCents: 3500 },
+    { id: "2026-10", month: "2026-10", kind: "rent", remainingCents: 33975 },
+  ];
+
+  assert.deepEqual(allocateInvoicePayment(lines, 40000).map(({ id, paidCents }) => [id, paidCents]), [
+    ["2026-10", 33975], ["gas", 3500], ["2026-11", 2525],
+  ]);
+  assert.equal(invoicePaymentSnapshot(lines), invoicePaymentSnapshot([...lines].reverse()));
+  assert.notEqual(invoicePaymentSnapshot(lines), invoicePaymentSnapshot([{ ...lines[0], remainingCents: 597475 }, ...lines.slice(1)]));
 });

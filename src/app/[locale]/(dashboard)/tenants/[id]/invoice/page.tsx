@@ -11,7 +11,9 @@ import { isMonthPastDue, LEDGER_START_MONTH, RENT_DUE_DAY } from "@/lib/rent-led
 import { cn } from "@/lib/utils";
 import { CashMemoHeader, CashMemoReading, CashMemoSignatures, cashMemoClassName } from "@/components/properties/cash-memo";
 import { InvoiceMonthSelect } from "@/components/properties/invoice-month-select";
-import { RecordTenantRentPaymentDialog } from "@/components/properties/record-tenant-rent-payment-dialog";
+import { InvoicePaymentDialog } from "@/components/properties/invoice-payment-dialog";
+import { InvoiceAddUtilityBillDialog } from "@/components/properties/add-utility-bill-dialog";
+import { invoicePaymentSnapshot } from "@/lib/invoice-payment";
 import { InvoicePrintButton } from "@/components/properties/invoice-print-button";
 import { rentTermsDueAmount, resolveRentTermsForMonth } from "@/lib/rent-terms";
 
@@ -100,12 +102,13 @@ export default async function TenantInvoicePage({
 
   // ---- utility bills
   // Company-paid bills (water, by policy) are never charged to the tenant: listed for reference, kept out of the totals.
-  const billable = unitBills.filter((b) => !b.paidByCompany);
+  const paidByCompany = (bill: (typeof unitBills)[number]) => bill.paidByCompany || bill.type === "WATER";
+  const billable = unitBills.filter((b) => !paidByCompany(b));
   const byDate = (a: (typeof unitBills)[number], b: (typeof unitBills)[number]) => a.dueDate.getTime() - b.dueDate.getTime();
   const earlierUnpaidBills = billable.filter((b) => b.month < selectedMonth && b.status !== "PAID").sort(byDate);
   const monthBills = billable.filter((b) => b.month === selectedMonth).sort(byDate);
   const statementBills = [...earlierUnpaidBills, ...monthBills];
-  const companyBorneBills = unitBills.filter((b) => b.paidByCompany && b.month === selectedMonth).sort(byDate);
+  const companyBorneBills = unitBills.filter((b) => paidByCompany(b) && b.month === selectedMonth).sort(byDate);
 
   const billRemaining = (b: (typeof unitBills)[number]) =>
     b.status === "PAID" ? 0 : Math.max(0, b.amount - b.paidAmount);
@@ -146,6 +149,15 @@ export default async function TenantInvoicePage({
   const previousBalance = previousRentDue + previousUtilityDue;
   const monthlyBalance = balance - previousBalance;
 
+  const paymentLines = [
+    ...earlierRent.map(({ month, remaining }) => ({ id: month, month, kind: "rent" as const, remaining, label: t("invoiceRentLabel") })),
+    { id: selectedMonth, month: selectedMonth, kind: "rent" as const, remaining: rentRemaining, label: t("invoiceRentLabel") },
+    ...statementBills.map((bill) => ({
+      id: bill.id, month: bill.month, kind: "utility" as const, remaining: billRemaining(bill), label: utilityTypeLabels[bill.type],
+    })),
+  ].map(({ remaining, ...line }) => ({ ...line, remainingCents: Math.round(remaining * 100) }))
+    .filter(({ remainingCents }) => remainingCents > 0);
+
   const highlightedShown = highlightedBillId
     ? [...statementBills, ...companyBorneBills].some((b) => b.id === highlightedBillId)
     : false;
@@ -157,30 +169,24 @@ export default async function TenantInvoicePage({
         <InvoicePrintButton />
       </div>
 
-      {tenant.leaseStatus === "ACTIVE" && selectedMonth <= nowMonth && rentRemaining > 0 ? (
-        <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border bg-muted/40 px-3 py-2 print:hidden">
-          <p className="text-sm text-muted-foreground">{t("cashMemoRentActionHint")}</p>
-          <RecordTenantRentPaymentDialog
-            key={`${selectedMonth}:${rentRemaining}`}
-            propertyId={tenant.propertyId}
-            tenantLeaseId={tenant.id}
-            tenantName={tenant.tenantName}
-            propertyName={tenant.propertyName}
-            unitLabel={tenant.unitLabel}
-            {...selectedTerms}
-            paymentProgress={[{ month: selectedMonth, dueAmount: rentDue, paidAmount: rentPaid }]}
-            initialBillingMonth={selectedMonth}
-            fixedBillingMonth={selectedMonth}
-            returnTo={`/tenants/${id}/invoice?${new URLSearchParams({
-              month: selectedMonth,
-              ...(highlightedBillId ? { bill: highlightedBillId } : {}),
-            })}`}
-          />
+      {tenant.leaseStatus === "ACTIVE" && selectedMonth <= nowMonth ? (
+        <div className="flex flex-wrap items-center gap-2 print:hidden">
+          {paymentLines.length > 0 ? (
+            <InvoicePaymentDialog
+              key={invoicePaymentSnapshot(paymentLines)}
+              tenantLeaseId={tenant.id}
+              tenantName={tenant.tenantName}
+              propertyId={tenant.propertyId}
+              month={selectedMonth}
+              lines={paymentLines}
+              returnTo={`/tenants/${id}/invoice?${new URLSearchParams({
+                month: selectedMonth,
+                ...(highlightedBillId ? { bill: highlightedBillId } : {}),
+              })}`}
+            />
+          ) : null}
+          <InvoiceAddUtilityBillDialog key={selectedMonth} leaseId={id} month={selectedMonth} />
         </div>
-      ) : tenant.leaseStatus === "ACTIVE" && previousRentDue > 0 ? (
-        <p className="rounded-lg border bg-muted/40 px-4 py-3 text-sm text-muted-foreground print:hidden">
-          {t("invoiceChooseOutstandingMonth")}
-        </p>
       ) : null}
 
       <div data-testid="invoice" className="print-invoice-a4">
@@ -209,17 +215,17 @@ export default async function TenantInvoicePage({
         <section className="tenant-bill-summary overflow-hidden rounded-lg border border-primary/25 bg-primary/[0.045]" aria-label={t("cashMemoSummary")}>
           <dl className="tenant-bill-summary-main grid grid-cols-2 items-center gap-x-4 gap-y-4 px-4 py-4 sm:grid-cols-[1.25fr_1fr_1fr] sm:px-6 sm:py-5">
             <div className="col-span-2 sm:col-span-1">
-              <dt className="text-sm font-semibold">{t("cashMemoToPay")}</dt>
+              <dt className="text-sm font-semibold">{t("invoiceSimpleBalance")}</dt>
               <dd data-testid="invoice-balance" className={cn("tenant-bill-balance mt-1 text-3xl leading-tight sm:text-4xl font-bold tabular-nums", balance > 0 ? "text-destructive" : "text-success")}>
                 {formatInvoiceAmount(balance)}
               </dd>
             </div>
             <div className="sm:border-s sm:ps-4">
-              <dt className="text-xs text-muted-foreground">{t("invoiceGrandDue")}</dt>
+              <dt className="text-xs text-muted-foreground">{t("invoiceSimpleBillTotal")}</dt>
               <dd data-testid="invoice-total-due" className="text-base font-semibold tabular-nums">{formatInvoiceAmount(totalDue)}</dd>
             </div>
             <div className="border-s ps-3 sm:ps-4">
-              <dt className="text-xs text-muted-foreground">{t("invoiceTotalSettled")}</dt>
+              <dt className="text-xs text-muted-foreground">{t("invoiceSimplePaid")}</dt>
               <dd data-testid="invoice-total-paid" className="text-base font-semibold tabular-nums text-success">{formatInvoiceAmount(totalSettled)}</dd>
             </div>
           </dl>
@@ -245,8 +251,8 @@ export default async function TenantInvoicePage({
             <TableHeader>
               <TableRow className="bg-muted/60">
                 <TableHead scope="col" className="h-8 whitespace-normal">{t("cashMemoCharge")}</TableHead>
-                <TableHead scope="col" className="h-8 whitespace-normal text-right">{t("amount")}</TableHead>
-                <TableHead scope="col" className="h-8 whitespace-normal text-right">{t("cashMemoSettled")}</TableHead>
+                <TableHead scope="col" className="h-8 whitespace-normal text-right">{t("invoiceSimpleBillTotal")}</TableHead>
+                <TableHead scope="col" className="h-8 whitespace-normal text-right">{t("invoiceSimplePaid")}</TableHead>
                 <TableHead scope="col" className="h-8 whitespace-normal text-right">{t("cashMemoShortBalance")}</TableHead>
               </TableRow>
             </TableHeader>
@@ -350,8 +356,8 @@ export default async function TenantInvoicePage({
               <TableHeader>
                 <TableRow>
                   <TableHead scope="col" className="h-8 whitespace-normal">{t("invoiceBillMonth")}</TableHead>
-                  <TableHead scope="col" className="h-8 whitespace-normal text-right">{t("totalDueLabel")}</TableHead>
-                  <TableHead scope="col" className="h-8 whitespace-normal text-right">{t("invoiceRentSettled")}</TableHead>
+                  <TableHead scope="col" className="h-8 whitespace-normal text-right">{t("invoiceSimpleBillTotal")}</TableHead>
+                  <TableHead scope="col" className="h-8 whitespace-normal text-right">{t("invoiceSimplePaid")}</TableHead>
                   <TableHead scope="col" className="h-8 whitespace-normal text-right">{t("remaining")}</TableHead>
                 </TableRow>
               </TableHeader>
@@ -379,8 +385,8 @@ export default async function TenantInvoicePage({
                 <TableRow>
                   <TableHead>{t("utilityType")}</TableHead>
                   <TableHead>{t("invoiceBillMonth")}</TableHead>
-                  <TableHead className="text-right">{t("amount")}</TableHead>
-                  <TableHead className="text-right">{t("paid")}</TableHead>
+                  <TableHead className="text-right">{t("invoiceSimpleBillTotal")}</TableHead>
+                  <TableHead className="text-right">{t("invoiceSimplePaid")}</TableHead>
                   <TableHead className="text-right">{t("remaining")}</TableHead>
                   <TableHead className="hidden sm:table-cell print:table-cell">{t("status")}</TableHead>
                 </TableRow>

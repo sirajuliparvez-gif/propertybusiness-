@@ -1,4 +1,5 @@
 export type RentActionResult =
+  | "invoicePaid"
   | "recorded"
   | "alreadyPaid"
   | "multiMonth"

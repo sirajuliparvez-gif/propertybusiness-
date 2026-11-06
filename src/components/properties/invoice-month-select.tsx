@@ -1,6 +1,6 @@
 "use client";
 
-import { useTranslations } from "next-intl";
+import { useLocale, useTranslations } from "next-intl";
 import { useRouter } from "@/i18n/navigation";
 import {
   Select,
@@ -24,6 +24,7 @@ export function InvoiceMonthSelect({
   basePath?: string;
 }) {
   const t = useTranslations("Properties");
+  const locale = useLocale();
   const router = useRouter();
 
   return (
@@ -33,7 +34,7 @@ export function InvoiceMonthSelect({
         onValueChange={(v) => {
           if (v) router.push(`${basePath ?? `/tenants/${leaseId}/invoice`}?month=${v}`);
         }}
-        items={months.map((m) => ({ value: m, label: monthLabel(m) }))}
+        items={months.map((m) => ({ value: m, label: monthLabel(m, locale) }))}
       >
         <SelectTrigger className="w-48" aria-label={t("selectInvoiceMonth")}>
           <SelectValue />
@@ -41,7 +42,7 @@ export function InvoiceMonthSelect({
         <SelectContent>
           {months.map((m) => (
             <SelectItem key={m} value={m}>
-              {monthLabel(m)}
+              {monthLabel(m, locale)}
             </SelectItem>
           ))}
         </SelectContent>

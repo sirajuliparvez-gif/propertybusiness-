@@ -19,6 +19,7 @@ import { buildRentArrearsReport } from "@/lib/rent-arrears-report";
 import { requireCurrentUser } from "@/lib/auth/session";
 import { isValidTransactionDate } from "@/lib/transaction-edit";
 import { withRentActionFeedback } from "@/lib/rent-action-feedback";
+import { allocateInvoicePayment, invoicePaymentSnapshot, type InvoicePaymentLine } from "@/lib/invoice-payment";
 import { tenantUtilityArrearsWhere } from "@/lib/tenant-utility-arrears";
 import { numericRentRates, rentTermsDueAmount, resolveRentTermsForMonth } from "@/lib/rent-terms";
 
@@ -608,6 +609,15 @@ export async function recordOverdueRentPayment(formData: FormData) {
     : null;
   if ((from || to) && !period) return { ok: false as const, reason: "invalid" as const };
 
+  const invoiceMonth = str(formData, "invoiceMonth");
+  const invoiceChoice = str(formData, "invoiceChoice");
+  if (invoiceMonth && (!isPaymentMonth(invoiceMonth) || invoiceMonth > today.slice(0, 7) || period ||
+      utilityPayments.size || !["all", "rent", "partial"].includes(invoiceChoice ?? "") ||
+      !Number.isSafeInteger(Math.round(paymentAmount * 100)) ||
+      !/^\d+(\.\d{1,2})?$/.test(str(formData, "amount") ?? ""))) {
+    return { ok: false as const, reason: "invalid" as const };
+  }
+
   const paidDate = new Date(dateStr);
   const methodRaw = formData.get("method");
   const method =
@@ -643,8 +653,17 @@ export async function recordOverdueRentPayment(formData: FormData) {
       const byMonth = new Map(payments.map((payment) => [payment.month, payment]));
       const property = lease.unit.unitType.property;
       // For report payments use its exact billing rules and displayed range,
-      // including recorded historical bills and former tenants.
-      const entries = period
+      // including recorded bills from earlier months.
+      const invoiceEntries = invoiceMonth ? payments
+        .filter((payment) => payment.month <= invoiceMonth)
+        .map(({ month, dueAmount, paidAmount }) => ({ month, dueAmount, paidAmount, gap: Math.max(0, dueAmount - paidAmount) })) : [];
+      if (invoiceMonth && (lease.status !== "ACTIVE" || property.deletedAt)) return false;
+      if (invoiceMonth && !byMonth.has(invoiceMonth) && invoiceMonth >= LEDGER_START_MONTH &&
+          invoiceMonth >= dhakaISO(lease.startDate).slice(0, 7)) {
+        const dueAmount = rentTermsDueAmount(resolveRentTermsForMonth(terms, rates, invoiceMonth));
+        invoiceEntries.push({ month: invoiceMonth, gap: dueAmount, dueAmount, paidAmount: 0 });
+      }
+      const entries = invoiceMonth ? invoiceEntries : period
         ? (buildRentArrearsReport([{
             ...lease, ...terms, propertyId, propertyName: property.name,
             propertyDeleted: property.deletedAt != null, tenantName: lease.tenant.name,
@@ -660,28 +679,54 @@ export async function recordOverdueRentPayment(formData: FormData) {
             lease.status === "ACTIVE" ? dhakaNow() : (lease.movedOutAt ?? lease.endDate ?? dhakaNow()),
             RENT_DUE_DAY,
           ));
-      const total = entries.reduce((sum, entry) => sum + entry.gap, 0);
-      if (paymentAmount > total) return false;
-      const allocations = allocateRentPayment(entries, paymentAmount);
-      if (paymentAmount > 0 && (!allocations.length || expected !== JSON.stringify(allocations))) return false;
-
-      const utilityBills = utilityPayments.size ? await tx.utilityBill.findMany({
-        where: {
-          ...tenantUtilityArrearsWhere(lease, today.slice(0, 7)),
-          propertyId,
-          id: { in: [...utilityPayments.keys()] },
-        },
-        select: { id: true, amount: true, paidAmount: true },
+      const utilityWhere = tenantUtilityArrearsWhere(lease, today.slice(0, 7));
+      const utilitySelect = { id: true, month: true, amount: true, paidAmount: true } as const;
+      const invoiceBills = invoiceMonth ? await tx.utilityBill.findMany({
+        where: { ...utilityWhere, propertyId, month: { lte: invoiceMonth } },
+        select: utilitySelect,
       }) : [];
+      let allocations: ReturnType<typeof allocateRentPayment>;
+      if (invoiceMonth) {
+        const lines: InvoicePaymentLine[] = [
+          ...entries.map(({ month, gap }) => ({ id: month, month, kind: "rent" as const, remainingCents: Math.round(gap * 100) })),
+          ...invoiceBills.map((bill) => ({
+            id: bill.id, month: bill.month, kind: "utility" as const,
+            remainingCents: Math.round(Number(bill.amount.minus(bill.paidAmount)) * 100),
+          })),
+        ].filter(({ remainingCents }) => remainingCents > 0);
+        if (str(formData, "invoiceSnapshot") !== invoicePaymentSnapshot(lines)) return false;
+        const eligible = invoiceChoice === "rent" ? lines.filter((line) => line.kind === "rent" && line.month === invoiceMonth) : lines;
+        const requested = Math.round(paymentAmount * 100);
+        const limit = eligible.reduce((sum, line) => sum + line.remainingCents, 0);
+        if (requested > limit || (invoiceChoice !== "partial" && requested !== limit)) return false;
+        const planned = allocateInvoicePayment(eligible, requested);
+        allocations = planned.filter(({ kind }) => kind === "rent").map(({ month, remainingCents, paidCents }) => ({
+          month, gap: remainingCents / 100, amount: paidCents / 100,
+        }));
+        for (const { id, kind, paidCents } of planned) {
+          if (kind === "utility") utilityPayments.set(id, paidCents / 100);
+        }
+      } else {
+        const total = entries.reduce((sum, entry) => sum + entry.gap, 0);
+        if (paymentAmount > total) return false;
+        allocations = allocateRentPayment(entries, paymentAmount);
+        if (paymentAmount > 0 && (!allocations.length || expected !== JSON.stringify(allocations))) return false;
+      }
+
+      const utilityBills = invoiceMonth ? invoiceBills.filter((bill) => utilityPayments.has(bill.id))
+        : utilityPayments.size ? await tx.utilityBill.findMany({
+            where: { ...utilityWhere, propertyId, id: { in: [...utilityPayments.keys()] } },
+            select: utilitySelect,
+          }) : [];
       if (utilityBills.length !== utilityPayments.size || utilityBills.some((bill) =>
-        bill.amount.minus(bill.paidAmount).lt(utilityPayments.get(bill.id)!)
+        !invoiceMonth && bill.amount.minus(bill.paidAmount).lt(utilityPayments.get(bill.id)!)
       )) return false;
 
       const entriesByMonth = new Map(entries.map((entry) => [entry.month, entry]));
       for (const allocation of allocations) {
         const entry = entriesByMonth.get(allocation.month)!;
         const existing = byMonth.get(entry.month);
-        const settled = allocation.amount === entry.gap;
+        const settled = allocation.amount === allocation.gap;
         const paidAmount = settled ? entry.dueAmount : entry.paidAmount + allocation.amount;
         const status = settled ? "PAID" : "PARTIAL";
         const rentPayment = existing
@@ -705,7 +750,9 @@ export async function recordOverdueRentPayment(formData: FormData) {
       }
       for (const bill of utilityBills) {
         const amount = utilityPayments.get(bill.id)!;
-        const paidAmount = bill.paidAmount.plus(amount);
+        const gap = bill.amount.minus(bill.paidAmount);
+        const settlesInvoiceBill = invoiceMonth && Math.round(Number(gap) * 100) === Math.round(amount * 100);
+        const paidAmount = settlesInvoiceBill ? bill.amount : bill.paidAmount.plus(amount);
         await tx.utilityBill.update({
           where: { id: bill.id },
           data: { paidAmount, status: paidAmount.eq(bill.amount) ? "PAID" : "PARTIAL" },
@@ -734,8 +781,8 @@ export async function recordOverdueRentPayment(formData: FormData) {
     ...["/rent/arrears", "/rent/report", "/transactions", "/utility-bills", `/tenants/${tenantLeaseId}`, `/tenants/${tenantLeaseId}/invoice`].map((path) => `/${locale}${path}`),
   ])) revalidatePath(path);
   const utilityTotal = [...utilityPayments.values()].reduce((sum, amount) => sum + amount, 0);
-  const result = utilityPayments.size ? "overdueWithUtilities" : "overdue";
-  redirect({ href: withRentActionFeedback(returnTo, result, { amount: paymentAmount + utilityTotal }), locale });
+  const result = invoiceMonth ? "invoicePaid" : utilityPayments.size ? "overdueWithUtilities" : "overdue";
+  redirect({ href: withRentActionFeedback(returnTo, result, { amount: invoiceMonth ? paymentAmount : paymentAmount + utilityTotal }), locale });
 }
 
 function addMonthsToMonthStr(monthStr: string, offset: number) {

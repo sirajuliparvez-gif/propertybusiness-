@@ -28,6 +28,7 @@ import { PreviousMeterReadingField } from "@/components/properties/previous-mete
 import { addTenantUtilityBills, addUtilityBill, getPreviousTenantMeterReading } from "@/lib/actions/utility-bills";
 import { formatDate, formatTaka, monthLabel } from "@/lib/format";
 import { toast } from "sonner";
+import { useRouter } from "next/navigation";
 import { unitPickerLabel } from "@/lib/unit-label";
 
 const NONE_VALUE = "NONE";
@@ -42,8 +43,8 @@ type PropertyBillFields = {
 };
 
 type BillFormProps =
-  | (PropertyBillFields & { tenantBilling?: never; onDraftChange?: never })
-  | { tenantBilling: { leaseId: string; month: string }; onDraftChange: (hasDraft: boolean) => void };
+  | (PropertyBillFields & { tenantBilling?: never; onDraftChange?: never; onSaved?: never })
+  | { tenantBilling: { leaseId: string; month: string }; onDraftChange?: (hasDraft: boolean) => void; onSaved?: () => void };
 
 export function AddUtilityBillDialog(props: PropertyBillFields) {
   const t = useTranslations("Properties");
@@ -63,8 +64,34 @@ export function AddUtilityBillDialog(props: PropertyBillFields) {
   );
 }
 
+export function InvoiceAddUtilityBillDialog({ leaseId, month }: { leaseId: string; month: string }) {
+  const t = useTranslations("Properties");
+  const locale = useLocale();
+  const router = useRouter();
+  const [open, setOpen] = useState(false);
+
+  return (
+    <Dialog open={open} onOpenChange={setOpen}>
+      <DialogTrigger render={<Button variant="outline" />}>
+        <Plus className="size-4" />
+        {t("invoiceAddBill")}
+      </DialogTrigger>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>{t("invoiceAddBill")}</DialogTitle>
+        </DialogHeader>
+        <p className="text-sm text-muted-foreground">{monthLabel(month, locale)}</p>
+        <AddUtilityBillForm tenantBilling={{ leaseId, month }} onSaved={() => {
+          setOpen(false);
+          router.refresh();
+        }} />
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 export function AddUtilityBillForm(props: BillFormProps) {
-  const { tenantBilling, onDraftChange } = props;
+  const { tenantBilling, onDraftChange, onSaved } = props;
   const property = "propertyId" in props ? props : undefined;
   const { propertyId, units = [], fixedUnitId, returnTo, previousElectricityReadingByUnit = {} } = property ?? {};
   const t = useTranslations("Properties");
@@ -215,6 +242,7 @@ export function AddUtilityBillForm(props: BillFormProps) {
           setReadingLookup(null);
           setReadingRefresh((version) => version + 1);
           resetDraft();
+          onSaved?.();
         } catch {
           toast.error(t("utilityBillAddFailed"));
         }
@@ -253,22 +281,6 @@ export function AddUtilityBillForm(props: BillFormProps) {
         </Select>
       </FormField>
 
-      <FormField label={t("amount")} htmlFor="utilityBillAmount" required>
-        <Input id="utilityBillAmount" name="amount" type="number" step="any" min={tenantBilling ? 0.01 : 0}
-          required={!queuedBills.length || !!meterReading}
-          value={tenantBilling ? billAmount : undefined}
-          readOnly={usingUnitRate}
-          onChange={tenantBilling ? (event) => setDraftAmount(event.target.value) : undefined}
-        />
-      </FormField>
-      <FormField label={t("billDueDate")} htmlFor="utilityBillDueDate" required>
-        <Input id="utilityBillDueDate" name="dueDate" type="date" min={minDate} max={maxDate} required
-          defaultValue={tenantBilling ? undefined : defaultDate}
-          value={tenantBilling ? draftDate ?? defaultDate : undefined}
-          onInput={tenantBilling ? (event) => setDraftDate(event.currentTarget.value) : undefined}
-        />
-      </FormField>
-
       {type === "ELECTRICITY" ? (
         <div className="grid gap-3 sm:col-span-2 sm:grid-cols-2">
           <PreviousMeterReadingField id="utilityBillPreviousMeterReading" automatic={previousReading}
@@ -292,7 +304,7 @@ export function AddUtilityBillForm(props: BillFormProps) {
           ) : null}
           <p aria-live="polite" className="text-xs text-muted-foreground sm:col-span-2">
             {calculatedAmount
-              ? t("electricityRateCalculation", { units: consumption ?? 0, rate: unitRate, amount: formatTaka(Number(calculatedAmount), 2) })
+              ? t("electricityRateCalculation", { units: consumption ?? 0, amount: formatTaka(Number(calculatedAmount), 2) })
               : consumption != null
                 ? t("consumptionPreview", { units: consumption })
               : effectivePreviousReading == null
@@ -303,6 +315,22 @@ export function AddUtilityBillForm(props: BillFormProps) {
           {invalidCalculation ? <p className="text-xs text-destructive sm:col-span-2">{t("electricityRateNeedsReadings")}</p> : null}
         </div>
       ) : null}
+
+      <FormField label={t(tenantBilling ? "invoiceUtilityBillAmount" : "amount")} htmlFor="utilityBillAmount" required>
+        <Input id="utilityBillAmount" name="amount" type="number" step="any" min={tenantBilling ? 0.01 : 0}
+          required={!queuedBills.length || !!meterReading}
+          value={tenantBilling ? billAmount : undefined}
+          readOnly={usingUnitRate}
+          onChange={tenantBilling ? (event) => setDraftAmount(event.target.value) : undefined}
+        />
+      </FormField>
+      <FormField label={t("billDueDate")} htmlFor="utilityBillDueDate" required>
+        <Input id="utilityBillDueDate" name="dueDate" type="date" min={minDate} max={maxDate} required
+          defaultValue={tenantBilling ? undefined : defaultDate}
+          value={tenantBilling ? draftDate ?? defaultDate : undefined}
+          onInput={tenantBilling ? (event) => setDraftDate(event.currentTarget.value) : undefined}
+        />
+      </FormField>
 
       <label
         htmlFor="utilityBillPaidByCompany"
