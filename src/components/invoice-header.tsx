@@ -6,11 +6,13 @@ export function InvoiceHeader({
   brand,
   title,
   subtitle,
+  details,
   children,
 }: {
   brand: string;
   title: string;
   subtitle?: string;
+  details?: React.ReactNode;
   children?: React.ReactNode;
 }) {
   return (
@@ -27,6 +29,7 @@ export function InvoiceHeader({
       <div className="text-right">
         <p className="text-lg font-bold tracking-tight">{title}</p>
         {subtitle ? <p className="text-sm font-medium text-muted-foreground">{subtitle}</p> : null}
+        {details}
       </div>
     </div>
   );
