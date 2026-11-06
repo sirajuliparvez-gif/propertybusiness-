@@ -63,7 +63,7 @@ export function RentBillRowActions({ leaseId, month, revision, scoped }: {
       }}>
         <DialogContent className="gap-2 p-3 sm:max-w-2xl sm:p-4">
           <DialogHeader><DialogTitle>{title}</DialogTitle></DialogHeader>
-          {popup ? <iframe ref={frame} src={`/${locale}${href}`} title={title} className="h-[min(80dvh,44rem)] w-full rounded-lg border" /> : null}
+          {popup ? <iframe ref={frame} src={`/${locale}${href}`} title={title} className={popup === "receive" ? "h-[min(80dvh,44rem)] w-full rounded-lg border" : "h-[min(84dvh,48rem)] w-full rounded-lg border"} /> : null}
         </DialogContent>
       </Dialog>
     </div>

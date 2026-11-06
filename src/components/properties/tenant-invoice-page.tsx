@@ -248,32 +248,28 @@ export default async function TenantInvoicePage({
         chooseDate={bills.length > 0} leaseStart={leaseStartDay} /> : null;
       if (!bills.length) return [type, newBill];
       return [type, (
-        <div key={type} className="space-y-1">
+        <div key={type} className="space-y-0.5">
           <ul className="divide-y">
             {bills.map((bill) => {
               const billKey = JSON.stringify([bill.type, bill.amount, bill.paidAmount, bill.dueDate, bill.paidByCompany,
                 bill.meterReading, bill.previousMeterReadingOverride]);
               return (
-                <li key={bill.id} className="space-y-1 py-1 text-xs">
-                  <div className="flex items-center justify-between gap-2">
-                    <span className="text-muted-foreground">{formatDate(bill.dueDate, locale)}
-                      {paidByCompany(bill) ? ` · ${t("paidByCompanyBadge")}` : ""}
-                    </span>
-                    <EditUtilityBillDialog
-                      key={billKey} bill={bill} returnTo={invoicePath} fixedUnitId={bill.unitId}
-                      invoice={{ leaseId: id, month: selectedMonth, startDate: leaseStartDay }}
-                    />
-                  </div>
+                <li key={bill.id} className="py-1">
                   <InvoiceUtilityFields key={billKey + "-inline"} leaseId={id} month={selectedMonth}
                     dueDate={dhakaISO(bill.dueDate)} type={type} label={label} fixedAmount={fixedAmount}
-                    previous={bill.previousMeterReading} bill={bill} />
+                    previous={bill.previousMeterReading} bill={bill}
+                    dateLabel={formatDate(bill.dueDate, locale) + (paidByCompany(bill) ? ` · ${t("paidByCompanyBadge")}` : "")}
+                    editAction={<EditUtilityBillDialog
+                      bill={bill} returnTo={invoicePath} fixedUnitId={bill.unitId}
+                      invoice={{ leaseId: id, month: selectedMonth, startDate: leaseStartDay }}
+                    />} />
                 </li>
               );
             })}
           </ul>
           {newBill ? (
-            <details key={bills.length} className="pb-1">
-              <summary className="cursor-pointer py-1 text-xs font-medium text-primary">{t("invoiceAnotherUtilityBill")}</summary>
+            <details key={bills.length} className="pb-0.5">
+              <summary className="cursor-pointer py-0.5 text-xs font-medium text-primary">{t("invoiceAnotherUtilityBill")}</summary>
               {newBill}
             </details>
           ) : null}

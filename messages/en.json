@@ -642,6 +642,7 @@
     "invoiceElectricityCurrent": "Current reading",
     "invoiceElectricityRate": "Price per unit",
     "invoiceInlineBillAmount": "{bill} amount",
+    "invoiceInlineSaveShort": "Save",
     "invoiceInlineBillSave": "Save {bill}",
     "invoiceInlineBillSaved": "{bill} saved.",
     "invoiceAnotherUtilityBill": "Another bill",

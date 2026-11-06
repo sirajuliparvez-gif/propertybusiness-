@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useId, useState, useTransition } from "react";
+import { useEffect, useId, useState, useTransition, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
 import { toast } from "sonner";
@@ -14,7 +14,7 @@ import { electricityAmountAtRate } from "@/lib/electricity-consumption";
 import { formatTaka } from "@/lib/format";
 
 export function InvoiceUtilityFields({
-  leaseId, month, dueDate, type, label, fixedAmount, previous = null, bill, chooseDate = false, leaseStart,
+  leaseId, month, dueDate, type, label, fixedAmount, previous = null, bill, chooseDate = false, leaseStart, dateLabel, editAction,
 }: {
   leaseId: string;
   month: string;
@@ -25,6 +25,8 @@ export function InvoiceUtilityFields({
   previous?: number | null;
   chooseDate?: boolean;
   leaseStart?: string;
+  dateLabel?: string;
+  editAction?: ReactNode;
   bill?: {
     id: string;
     propertyId: string;
@@ -75,7 +77,7 @@ export function InvoiceUtilityFields({
     (units == null || units >= 0) && !belowPaid;
 
   return (
-    <form className="grid gap-2 pb-1" action={(data) => {
+    <form className="grid gap-1.5" action={(data) => {
       if (!canSave || pending) return;
       setFeedback("");
       startTransition(async () => {
@@ -106,9 +108,9 @@ export function InvoiceUtilityFields({
       <input type="hidden" name="type" value={type} />
       {chooseDate ? (
         <FormField label={t("billDueDate")} htmlFor={`${id}-date`}>
-          <Input id={`${id}-date`} name="dueDate" type="date" value={billDate} disabled={pending}
+          <Input id={`${id}-date`} name="dueDate" type="date" defaultValue={dueDate} disabled={pending}
             min={leaseStart && leaseStart > monthStart ? leaseStart : monthStart} max={`${month}-${lastDay}`}
-            onChange={(event) => setBillDate(event.target.value)} required />
+            onInput={(event) => setBillDate(event.currentTarget.value)} required />
         </FormField>
       ) : <input type="hidden" name="dueDate" value={dueDate} />}
       {bill ? (
@@ -130,7 +132,8 @@ export function InvoiceUtilityFields({
             value={rate} onChange={(event) => setRate(event.target.value)} disabled={fixedAmount != null} />
         </FormField>
       </fieldset> : null}
-      <div className="flex items-end gap-2">
+      <div className="flex items-center gap-1.5">
+        {dateLabel ? <span className="max-w-[34%] shrink-0 text-xs leading-tight text-muted-foreground">{dateLabel}</span> : null}
         <div className="min-w-0 flex-1">
           <label htmlFor={`${id}-amount`} className="sr-only">{t("invoiceInlineBillAmount", { bill: label })}</label>
           <Input id={`${id}-amount`} name="amount" type="number" step="0.01" min={bill ? 0 : 0.01}
@@ -138,9 +141,10 @@ export function InvoiceUtilityFields({
             readOnly={usingRate || fixedAmount != null} required onChange={(event) => setManualAmount(event.target.value)} />
         </div>
         <Button type="submit" size="sm" disabled={!canSave || pending}
-          aria-label={t("invoiceInlineBillSave", { bill: label })}>{t("save")}</Button>
+          aria-label={t("invoiceInlineBillSave", { bill: label })}>{t("invoiceInlineSaveShort")}</Button>
+        {editAction}
       </div>
-      <div className="text-xs" aria-live="polite">
+      <div className="text-xs empty:hidden" aria-live="polite">
         {usingRate && amount && units != null ? t("electricityRateCalculation", { units, amount: formatTaka(Number(amount), 2) }) : null}
         {fixedAmount != null ? <p className="text-muted-foreground">{t("utilityDefaultsLocked")}</p> : null}
         {belowPaid ? <p className="text-destructive">{t("billErrAmountBelowPaid", { amount: formatTaka(bill.paidAmount, 2) })}</p> : null}

@@ -644,6 +644,7 @@
     "invoiceElectricityCurrent": "বর্তমান রিডিং",
     "invoiceElectricityRate": "প্রতি ইউনিটের মূল্য",
     "invoiceInlineBillAmount": "{bill} কত টাকা",
+    "invoiceInlineSaveShort": "সেভ",
     "invoiceInlineBillSave": "{bill} সেভ করুন",
     "invoiceInlineBillSaved": "{bill} সেভ হয়েছে।",
     "invoiceAnotherUtilityBill": "আরেকটি বিল",

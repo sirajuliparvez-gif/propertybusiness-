@@ -77,15 +77,17 @@ export function RentBillPrintForm({
     <>
       <div className="print:hidden">
         {open ? (
-          <section className="space-y-3 rounded-lg border bg-card p-4">
+          <section className="space-y-2 rounded-lg border bg-card p-3">
             <div>
               <h2 className="font-semibold">{t(revision ? "rentBillCorrection" : "rentBillPrintOptions")}</h2>
               {utilityEditors ? <p className="text-xs text-muted-foreground">{t("invoiceInlineBillHint")}</p> : null}
               <p className="text-xs text-muted-foreground">{t("rentBillChooseLines")}</p>
             </div>
-            <fieldset disabled={pending} className="divide-y">
+            <fieldset disabled={pending} className="grid min-w-0 grid-cols-1 gap-2 min-[520px]:grid-cols-2">
               {rows.map((row) => (
-                <div key={row.key} className="py-1">
+                <div key={row.key} className={row.key === "RENT" || row.key === "ELECTRICITY"
+                  ? "min-w-0 rounded-md border px-2 py-1 min-[520px]:col-span-2"
+                  : "min-w-0 rounded-md border px-2 py-1"}>
                   <label className="flex cursor-pointer items-center gap-3 py-1 text-sm">
                     <input type="checkbox" checked={selected.includes(row.key)}
                       onChange={(event) => {
@@ -100,10 +102,10 @@ export function RentBillPrintForm({
                 </div>
               ))}
             </fieldset>
-            <p className="flex justify-between border-t pt-2 text-sm font-semibold">
-              <span>{t("rentBillExpected")}</span><span>{money(expected)}</span>
-            </p>
-            <div className="flex flex-wrap justify-end gap-2">
+            <div className="flex flex-wrap items-center gap-x-4 gap-y-2 border-t pt-2">
+              <p className="me-auto flex items-center gap-2 text-sm font-semibold">
+                <span>{t("rentBillExpected")}</span><span className="tabular-nums">{money(expected)}</span>
+              </p>
               <Button type="button" variant="ghost" disabled={pending} onClick={() => {
                 if (embedded && window.parent !== window) window.parent.postMessage("rent-bill-print-cancelled", window.location.origin);
                 else { setOpen(false); setPrintedDraft(null); }
