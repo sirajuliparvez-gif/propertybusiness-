@@ -18,6 +18,10 @@ import { InvoiceAddUtilityBillDialog } from "@/components/properties/add-utility
 import { invoicePaymentSnapshot } from "@/lib/invoice-payment";
 import { InvoicePrintButton } from "@/components/properties/invoice-print-button";
 import { rentTermsDueAmount, resolveRentTermsForMonth } from "@/lib/rent-terms";
+import { RentBillPrintForm } from "@/components/properties/rent-bill-print-form";
+import { RecordTenantRentPaymentDialog } from "@/components/properties/record-tenant-rent-payment-dialog";
+import { limitToPrintedBill, rentBillPrintRows, type RentBillPrintRow } from "@/lib/rent-bill-print";
+import { prisma } from "@/lib/prisma";
 
 function formatInvoiceAmount(amount: number) {
   return formatTaka(amount, 2);
@@ -36,11 +40,11 @@ export default async function TenantInvoicePage({
   fromRent = false,
 }: {
   params: Promise<{ id: string }>;
-  searchParams: Promise<{ month?: string; bill?: string; tenant?: string; print?: string }>;
+  searchParams: Promise<{ month?: string; bill?: string; tenant?: string; print?: string; receive?: string }>;
   fromRent?: boolean;
 }) {
   const { id } = await params;
-  const { month: requestedMonth, bill: highlightedBillId, tenant: tenantScope, print } = await searchParams;
+  const { month: requestedMonth, bill: highlightedBillId, tenant: tenantScope, print, receive } = await searchParams;
   const t = await getTranslations("Properties");
   const tNav = await getTranslations("Nav");
   const history = await getTranslations("TenantHistory");
@@ -168,6 +172,16 @@ export default async function TenantInvoicePage({
   const invoiceBasePath = `/${fromRent ? "rent" : "tenants"}/${id}/invoice`;
   const invoicePath = `${invoiceBasePath}?${invoiceQuery}`;
   const rentListPath = `/rent?month=${selectedMonth}${tenantScope === "1" ? `&tenant=${encodeURIComponent(id)}` : ""}`;
+  const printIssue = fromRent ? await prisma.rentBillPrint.findFirst({
+    where: { tenantLeaseId: id, month: selectedMonth }, orderBy: { revision: "desc" },
+  }) : null;
+  const printed = printIssue ? printIssue.rows as RentBillPrintRow[] : null;
+  const monthlyLines = paymentLines.filter((line) => line.month === selectedMonth);
+  const receiptLines = !fromRent ? paymentLines : printed
+    ? limitToPrintedBill(monthlyLines, printed).map((line) => ({
+        ...line, label: monthlyLines.find(({ id }) => id === line.id)!.label,
+      }))
+    : monthlyLines;
   const billNumber = `R-${selectedMonth.replace("-", "")}-${tenant.id.slice(-10).toUpperCase()}`;
   const memoHeader = {
     brand: tNav("brand"),
@@ -203,26 +217,53 @@ export default async function TenantInvoicePage({
       </div>
 
       <div className="flex flex-wrap items-center gap-2 print:hidden">
-        <InvoicePrintButton label={t("invoicePrintBill")} printOnOpen={fromRent && print === "1"} />
+        {!fromRent ? <InvoicePrintButton label={t("invoicePrintBill")} /> : null}
         {tenant.leaseStatus === "ACTIVE" && selectedMonth <= nowMonth ? (
           <>
-            {paymentLines.length > 0 ? (
+            {receiptLines.length > 0 && (!fromRent || print !== "1") ? (
               <InvoicePaymentDialog
-                key={invoicePaymentSnapshot(paymentLines)}
+                key={`${invoicePaymentSnapshot(receiptLines)}:${printIssue?.revision ?? 0}:${receive ?? ""}`}
                 tenantLeaseId={tenant.id}
                 tenantName={tenant.tenantName}
                 propertyId={tenant.propertyId}
                 month={selectedMonth}
-                lines={paymentLines}
+                lines={receiptLines}
                 returnTo={invoicePath}
+                reconciliation={fromRent ? {
+                  revision: printIssue?.revision ?? 0,
+                  open: receive === "1",
+                  printedCents: printed?.reduce((sum, row) => sum + row.remainingCents, 0),
+                } : undefined}
               />
             ) : null}
-            <InvoiceAddUtilityBillDialog key={selectedMonth} leaseId={id} month={selectedMonth} />
+            {fromRent ? (
+              print !== "1" ? <RecordTenantRentPaymentDialog
+                key={selectedMonth}
+                propertyId={tenant.propertyId} tenantLeaseId={id} tenantName={tenant.tenantName}
+                propertyName={tenant.propertyName} unitLabel={tenant.unitLabel}
+                collectionBalance={rentRemaining} monthlyRentAmount={tenant.monthlyRentAmount}
+                serviceChargeType={tenant.serviceChargeType} serviceChargeValue={tenant.serviceChargeValue}
+                currentDownpaymentBalance={tenant.currentDownpaymentBalance}
+                rentRates={tenant.rentRates} paymentProgress={tenant.paymentProgress} overdueMonths={tenant.overdueMonths}
+                initialBillingMonth={selectedMonth} returnTo={rentListPath}
+                triggerLabel={t("rentBillOtherCollection")}
+              /> : null
+            ) : <InvoiceAddUtilityBillDialog key={selectedMonth} leaseId={id} month={selectedMonth} />}
           </>
         ) : null}
       </div>
+      {fromRent && receive === "1" && !receiptLines.length ? (
+        <p className="rounded-md border px-3 py-2 text-sm print:hidden">{t("rentBillNoOutstanding")}</p>
+      ) : null}
+      {fromRent ? (
+        <RentBillPrintForm key={`${selectedMonth}:${printIssue?.revision ?? 0}:${print ?? ""}`}
+          leaseId={id} month={selectedMonth} rows={rentBillPrintRows(tenant, selectedMonth)}
+          printed={printed} revision={printIssue?.revision ?? 0} prepare={print === "1"} returnTo={rentListPath}
+          printedDate={printIssue ? formatDate(printIssue.printedAt, locale) : undefined}
+          header={{ ...memoHeader, title: t("cashMemoRentTitle"), contact: tenant.contactInfo }} />
+      ) : null}
 
-      <div data-testid="invoice" className="print-invoice-a4">
+      <div data-testid="invoice" className={cn("print-invoice-a4", fromRent && "print:hidden")}>
       <div
         data-testid="invoice-copy"
         className={cn(cashMemoClassName, "tenant-bill gap-4 rounded-lg border-sky-900/40 p-4 sm:p-5")}

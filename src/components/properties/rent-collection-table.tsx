@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { useTranslations } from "next-intl";
-import { Printer, Search } from "lucide-react";
+import { Search } from "lucide-react";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Link } from "@/i18n/navigation";
 import {
@@ -17,7 +17,7 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { InitialAvatar } from "@/components/properties/initial-avatar";
 import { StatusPill, isRentSettled, rentPillStatus } from "@/components/properties/status-pill";
-import { RecordTenantRentPaymentDialog } from "@/components/properties/record-tenant-rent-payment-dialog";
+import { RentBillRowActions } from "@/components/properties/rent-bill-row-actions";
 import { formatTaka } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import type { RentCollectionData } from "@/lib/tenants-data";
@@ -268,38 +268,7 @@ export function RentCollectionTable({
                     </div>
                   </TableCell>
                   <TableCell className="sticky right-0 bg-background text-right">
-                    <div className="flex items-center justify-end gap-1.5">
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        title={t("invoicePrintBill")}
-                        render={<Link prefetch={false} href={`/rent/${p.id}/invoice?month=${selectedMonth}&print=1${tenantLeaseId ? "&tenant=1" : ""}`} />}
-                        nativeButton={false}
-                        className="border-primary/40 text-primary hover:bg-primary/10"
-                      >
-                        <Printer className="size-3.5" />
-                        <span className="sr-only xl:not-sr-only">{t("invoicePrintBill")}</span>
-                      </Button>
-                      <RecordTenantRentPaymentDialog
-                        key={`${selectedMonth}:${p.overdueAmount}`}
-                        collectionBalance={p.overdueAmount}
-                        propertyId={p.propertyId}
-                        tenantLeaseId={p.id}
-                        tenantName={p.tenantName}
-                        propertyName={p.propertyName}
-                        unitLabel={p.unitLabel}
-                        monthlyRentAmount={p.monthlyRentAmount}
-                        currentDownpaymentBalance={p.currentDownpaymentBalance}
-                        serviceChargeType={p.serviceChargeType}
-                        serviceChargeValue={p.serviceChargeValue}
-                        rentRates={p.rentRates}
-                        paymentProgress={p.paymentProgress}
-                        overdueMonths={p.overdueMonths}
-                        returnTo={`/rent?month=${selectedMonth}${tenantLeaseId ? `&tenant=${encodeURIComponent(tenantLeaseId)}` : ""}`}
-                        initialBillingMonth={selectedMonth}
-                        triggerLabel={t("collectRent")}
-                      />
-                    </div>
+                    <RentBillRowActions leaseId={p.id} month={selectedMonth} revision={p.printRevision} scoped={!!tenantLeaseId} />
                   </TableCell>
                 </TableRow>
               );

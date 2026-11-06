@@ -173,7 +173,8 @@
      the normal muted/border tokens are intentionally pale, which makes them
      disappear on the white paper background. Keep these overrides scoped to
      printable invoices so the on-screen palette is unchanged. */
-  [data-testid="invoice"] {
+  [data-testid="invoice"],
+  [data-testid="issued-rent-bill-copy"] {
     --foreground: #000;
     --card-foreground: #000;
     --muted-foreground: #333;

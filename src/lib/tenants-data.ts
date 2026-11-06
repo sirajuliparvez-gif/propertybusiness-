@@ -295,6 +295,12 @@ export async function getRentCollectionData(requestedMonth?: string, tenantLease
     ? paymentMonthRange(LEDGER_START_MONTH, currentMonth, 600)
     : [];
   const rowByLease = new Map(selectedRows.map((row) => [row.tenantLeaseId, row]));
+  const printed = await prisma.rentBillPrint.groupBy({
+    by: ["tenantLeaseId"],
+    where: { month: selectedMonth, tenantLeaseId: { in: activeTenants.map((tenant) => tenant.id) } },
+    _max: { revision: true },
+  });
+  const printRevisions = new Map(printed.map((item) => [item.tenantLeaseId, item._max.revision ?? 0]));
   const [year, monthNumber] = selectedMonth.split("-").map(Number);
 
   const payments = activeTenants.flatMap((tenant) => {
@@ -322,6 +328,7 @@ export async function getRentCollectionData(requestedMonth?: string, tenantLease
       currentPaidAt: row?.paidAt ?? null,
       selectedPaidAmount: paidAmount,
       selectedDueAmount: dueAmount,
+      printRevision: printRevisions.get(tenant.id) ?? 0,
     }];
   });
   const totalDue = payments.reduce((sum, payment) => sum + payment.selectedDueAmount, 0);

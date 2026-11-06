@@ -24,11 +24,11 @@ export default async function MoneyReceiptPage({ params, searchParams }: {
   const entries = await prisma.transaction.findMany({
     where: {
       paymentReceiptId: receiptId, tenantLeaseId: id, direction: "INCOMING",
-      type: { in: ["RENT_RECEIVED_FROM_TENANT", "UTILITY_REIMBURSEMENT_FROM_TENANT"] },
+      type: { in: ["RENT_RECEIVED_FROM_TENANT", "UTILITY_REIMBURSEMENT_FROM_TENANT", "DOWNPAYMENT_RECEIVED_FROM_TENANT"] },
     },
     orderBy: { id: "asc" },
     select: {
-      id: true, amount: true, date: true, method: true,
+      id: true, amount: true, date: true, method: true, type: true,
       rentPayment: { select: { month: true } },
       utilityBill: { select: { month: true, type: true } },
       property: { select: { name: true } },
@@ -37,6 +37,7 @@ export default async function MoneyReceiptPage({ params, searchParams }: {
   });
   const first = entries[0];
   if (!first?.tenantLease) notFound();
+  const comparison = await prisma.rentBillReceiptCheck.findUnique({ where: { receiptId, tenantLeaseId: id } });
 
   const [t, nav, locale] = await Promise.all([getTranslations("Properties"), getTranslations("Nav"), getLocale()]);
   const utilityLabels = {
@@ -46,7 +47,8 @@ export default async function MoneyReceiptPage({ params, searchParams }: {
   const dates = new Set(entries.map(({ date }) => dhakaISO(date)));
   const lines = entries.map((entry) => ({
     ...entry,
-    label: entry.utilityBill ? utilityLabels[entry.utilityBill.type] : t("invoiceRentLabel"),
+    label: entry.type === "DOWNPAYMENT_RECEIVED_FROM_TENANT" ? t("rentBillAdvanceLabel")
+      : entry.utilityBill ? utilityLabels[entry.utilityBill.type] : t("invoiceRentLabel"),
     month: entry.rentPayment?.month ?? entry.utilityBill?.month ?? "",
   })).sort((a, b) => a.month.localeCompare(b.month));
   const total = entries.slice(1).reduce((sum, entry) => sum.plus(entry.amount), first.amount);
@@ -62,6 +64,15 @@ export default async function MoneyReceiptPage({ params, searchParams }: {
         <Button variant="outline" render={<Link href={backHref} />} nativeButton={false}>{t("receiptBack")}</Button>
         <InvoicePrintButton />
       </div>
+      {comparison ? (
+        <div className="mb-3 flex flex-wrap justify-between gap-2 rounded-md border px-3 py-2 text-sm print:hidden">
+          <span>{t("rentBillExpected")} <strong>{formatTaka(comparison.expectedCents / 100, 2)}</strong></span>
+          <span>{comparison.receivedCents === comparison.expectedCents ? t("rentBillMatched")
+            : comparison.receivedCents > comparison.expectedCents
+              ? t("rentBillExtraAdvance", { amount: formatTaka((comparison.receivedCents - comparison.expectedCents) / 100, 2) })
+              : t("overdueAfterPayment", { amount: formatTaka((comparison.expectedCents - comparison.receivedCents) / 100, 2) })}</span>
+        </div>
+      ) : null}
       <article data-testid="money-receipt" className="print-invoice-a4 space-y-4 rounded-lg border border-sky-900/40 bg-card p-4 text-sm sm:p-6 print:p-4">
         <InvoiceHeader brand={nav("brand")} title={t("moneyReceipt")}
           details={<address className="text-xs not-italic text-muted-foreground">

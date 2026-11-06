@@ -16,7 +16,7 @@ import { recordOverdueRentPayment } from "@/lib/actions/tenant-rent";
 const money = (cents: number) => formatTaka(cents / 100, 2);
 
 export function InvoicePaymentDialog({
-  tenantName, tenantLeaseId, propertyId, month, returnTo, lines,
+  tenantName, tenantLeaseId, propertyId, month, returnTo, lines, reconciliation,
 }: {
   tenantName: string;
   tenantLeaseId: string;
@@ -24,11 +24,13 @@ export function InvoicePaymentDialog({
   month: string;
   returnTo: string;
   lines: (InvoicePaymentLine & { label: string })[];
+  reconciliation?: { revision: number; open: boolean; printedCents?: number };
 }) {
   const t = useTranslations("Properties");
   const locale = useLocale();
   const router = useRouter();
-  const [open, setOpen] = useState(false);
+  const [open, setOpen] = useState(reconciliation?.open ?? false);
+  const [matches, setMatches] = useState(true);
   const [onlyRent, setOnlyRent] = useState(false);
   const [received, setReceived] = useState("");
   const [pending, startTransition] = useTransition();
@@ -37,10 +39,12 @@ export function InvoicePaymentDialog({
   const total = lines.reduce((sum, line) => sum + line.remainingCents, 0);
   const rentTotal = rent.reduce((sum, line) => sum + line.remainingCents, 0);
   const normalizedAmount = received.replace(/[০-৯]/g, (digit) => String(digit.charCodeAt(0) - 0x09e6)).trim();
-  const amount = /^\d+(\.\d{1,2})?$/.test(normalizedAmount)
+  const amount = reconciliation && matches ? total : /^\d+(\.\d{1,2})?$/.test(normalizedAmount)
     ? Math.round(Number(normalizedAmount) * 100) : 0;
-  const valid = Number.isSafeInteger(amount) && amount > 0 && amount <= total;
-  const planned = valid ? allocateInvoicePayment(onlyRent ? rent : lines, amount) : [];
+  const valid = Number.isSafeInteger(amount) && amount > 0 &&
+    (reconciliation ? amount <= 2_147_483_647 : amount <= total);
+  const planned = valid ? allocateInvoicePayment(onlyRent ? rent : lines, Math.min(amount, total)) : [];
+  const actionLabel = t(reconciliation ? "rentBillReceive" : "invoiceTakePayment");
   const labels = new Map(lines.map((line) => [line.id, line.label]));
   const today = dhakaTodayISO();
   const [date, setDate] = useState(today);
@@ -56,14 +60,15 @@ export function InvoicePaymentDialog({
       setOpen(next);
       if (!next) {
         setOnlyRent(false);
+        setMatches(true);
         setReceived("");
         setDate(today);
         setMethod("CASH");
       }
     }}>
-      <DialogTrigger render={<Button />}>{t("invoiceTakePayment")}</DialogTrigger>
+      <DialogTrigger render={<Button />}>{actionLabel}</DialogTrigger>
       <DialogContent className="max-h-[90dvh] overflow-y-auto sm:max-w-lg">
-        <DialogHeader><DialogTitle>{t("invoiceTakePayment")}</DialogTitle></DialogHeader>
+        <DialogHeader><DialogTitle>{actionLabel}</DialogTitle></DialogHeader>
         <p className="text-sm font-medium">{tenantName} · {monthLabel(month, locale)}</p>
         <form className="grid gap-4" action={(formData) => {
           if (!valid || pending) return;
@@ -83,11 +88,27 @@ export function InvoicePaymentDialog({
           <input type="hidden" name="propertyId" value={propertyId} />
           <input type="hidden" name="tenantLeaseId" value={tenantLeaseId} />
           <input type="hidden" name="invoiceMonth" value={month} />
-          <input type="hidden" name="invoiceChoice" value={onlyRent ? "rent" : "partial"} />
+          <input type="hidden" name="invoiceChoice" value={reconciliation ? "reconcile" : onlyRent ? "rent" : "partial"} />
+          {reconciliation ? <input type="hidden" name="printRevision" value={reconciliation.revision} /> : null}
           <input type="hidden" name="invoiceSnapshot" value={invoicePaymentSnapshot(lines)} />
           <input type="hidden" name="amount" value={(amount / 100).toFixed(2)} />
           <input type="hidden" name="returnTo" value={returnTo} />
-          <FormField label={t("invoicePaymentAmount")} htmlFor="invoice-received" required>
+          {reconciliation ? (
+            <fieldset className="space-y-3 rounded-lg border bg-muted/30 p-3">
+              <legend className="sr-only">{t("rentBillMatchQuestion")}</legend>
+              <p className="flex justify-between gap-2 font-semibold"><span>{t("rentBillExpected")}</span><span>{money(total)}</span></p>
+              {reconciliation.printedCents != null && reconciliation.printedCents !== total ? (
+                <p className="text-xs text-muted-foreground">{t("rentBillOriginalExpected", { amount: money(reconciliation.printedCents) })}</p>
+              ) : null}
+              <div className="flex flex-wrap gap-2">
+                <Button type="button" size="sm" variant={matches ? "default" : "outline"} aria-pressed={matches}
+                  disabled={pending} onClick={() => setMatches(true)}>{t("rentBillMatched")}</Button>
+                <Button type="button" size="sm" variant={!matches ? "default" : "outline"} aria-pressed={!matches}
+                  disabled={pending} onClick={() => setMatches(false)}>{t("rentBillDifferent")}</Button>
+              </div>
+            </fieldset>
+          ) : null}
+          {!reconciliation || !matches ? <FormField label={t("invoicePaymentAmount")} htmlFor="invoice-received" required>
             <Input
               id="invoice-received"
               value={received}
@@ -100,10 +121,12 @@ export function InvoicePaymentDialog({
               required
             />
             {received && !valid ? <p className="text-xs text-destructive">{t("invoicePaymentInvalid")}</p> : null}
-          </FormField>
+          </FormField> : null}
           {valid && (
             <section className="grid gap-2 rounded-lg border bg-muted/40 p-3 text-sm" aria-live="polite">
-              <p className="font-semibold">{t("invoicePaymentPreview", { amount: money(amount), remaining: money(total - amount) })}</p>
+              <p className="font-semibold">{amount > total
+                ? t("rentBillExtraAdvance", { amount: money(amount - total) })
+                : t("invoicePaymentPreview", { amount: money(amount), remaining: money(total - amount) })}</p>
               {onlyRent || hasEarlierUtilities ? (
                 <p className="text-xs text-muted-foreground">
                   {t(onlyRent ? "invoicePaymentOnlyRent" : "invoiceOldestFirst")}
@@ -122,7 +145,7 @@ export function InvoicePaymentDialog({
               </details>
             </section>
           )}
-          <details className="text-sm">
+          {!reconciliation ? <details className="text-sm">
             <summary className="cursor-pointer text-muted-foreground">{t("invoiceAmountShortcuts")}</summary>
             <div className="mt-2 flex flex-wrap gap-2">
               <Button type="button" size="sm" variant="outline" disabled={pending} onClick={() => {
@@ -136,7 +159,7 @@ export function InvoicePaymentDialog({
                 }}>{t("invoicePayMonthRent")}</Button>
               ) : null}
             </div>
-          </details>
+          </details> : null}
           <details className="text-sm">
             <summary className="cursor-pointer text-muted-foreground">
               {t("invoicePaymentDetails")} · {date ? formatDate(date, locale) : t("paymentDate")} · {t(methods.find(([value]) => value === method)![1])}

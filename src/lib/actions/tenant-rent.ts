@@ -22,6 +22,7 @@ import { isValidTransactionDate } from "@/lib/transaction-edit";
 import { withRentActionFeedback } from "@/lib/rent-action-feedback";
 import { allocateInvoicePayment, invoicePaymentSnapshot, type InvoicePaymentLine } from "@/lib/invoice-payment";
 import { tenantUtilityArrearsWhere } from "@/lib/tenant-utility-arrears";
+import { limitToPrintedBill, type RentBillPrintRow } from "@/lib/rent-bill-print";
 import { prepareTenantUtilityBillRows, validateTenantUtilityBills } from "@/lib/utility-bill-entry";
 import { numericRentRates, rentTermsDueAmount, resolveRentTermsForMonth } from "@/lib/rent-terms";
 
@@ -616,8 +617,14 @@ export async function recordOverdueRentPayment(formData: FormData) {
 
   const invoiceMonth = str(formData, "invoiceMonth");
   const invoiceChoice = str(formData, "invoiceChoice");
+  const reconciliation = invoiceChoice === "reconcile";
+  const printRevision = Number(str(formData, "printRevision"));
+  const receivedCents = Math.round(paymentAmount * 100);
+  if (reconciliation && (!invoiceMonth || !Number.isSafeInteger(printRevision) || printRevision < 0 || receivedCents > 2_147_483_647)) {
+    return { ok: false as const, reason: "invalid" as const };
+  }
   if (invoiceMonth && (!isPaymentMonth(invoiceMonth) || invoiceMonth > today.slice(0, 7) || period ||
-      utilityPayments.size || !["all", "rent", "partial"].includes(invoiceChoice ?? "") ||
+      utilityPayments.size || !["all", "rent", "partial", "reconcile"].includes(invoiceChoice ?? "") ||
       !Number.isSafeInteger(Math.round(paymentAmount * 100)) ||
       !/^\d+(\.\d{1,2})?$/.test(str(formData, "amount") ?? ""))) {
     return { ok: false as const, reason: "invalid" as const };
@@ -687,24 +694,33 @@ export async function recordOverdueRentPayment(formData: FormData) {
       const utilityWhere = tenantUtilityArrearsWhere(lease, today.slice(0, 7));
       const utilitySelect = { id: true, month: true, amount: true, paidAmount: true } as const;
       const invoiceBills = invoiceMonth ? await tx.utilityBill.findMany({
-        where: { ...utilityWhere, propertyId, month: { lte: invoiceMonth } },
+        where: { ...utilityWhere, propertyId, month: reconciliation ? invoiceMonth : { lte: invoiceMonth } },
         select: utilitySelect,
       }) : [];
       let allocations: ReturnType<typeof allocateRentPayment>;
+      let expectedCents = 0;
       if (invoiceMonth) {
-        const lines: InvoicePaymentLine[] = [
+        let lines: InvoicePaymentLine[] = [
           ...entries.map(({ month, gap }) => ({ id: month, month, kind: "rent" as const, remainingCents: Math.round(gap * 100) })),
           ...invoiceBills.map((bill) => ({
             id: bill.id, month: bill.month, kind: "utility" as const,
             remainingCents: Math.round(Number(bill.amount.minus(bill.paidAmount)) * 100),
           })),
         ].filter(({ remainingCents }) => remainingCents > 0);
+        if (reconciliation) {
+          const printed = await tx.rentBillPrint.findFirst({
+            where: { tenantLeaseId, month: invoiceMonth }, orderBy: { revision: "desc" },
+          });
+          if ((printed?.revision ?? 0) !== printRevision) return false;
+          if (printed) lines = limitToPrintedBill(lines, printed.rows as RentBillPrintRow[]);
+        }
         if (str(formData, "invoiceSnapshot") !== invoicePaymentSnapshot(lines)) return false;
         const eligible = invoiceChoice === "rent" ? lines.filter((line) => line.kind === "rent" && line.month === invoiceMonth) : lines;
-        const requested = Math.round(paymentAmount * 100);
         const limit = eligible.reduce((sum, line) => sum + line.remainingCents, 0);
-        if (requested > limit || (invoiceChoice !== "partial" && requested !== limit)) return false;
-        const planned = allocateInvoicePayment(eligible, requested);
+        expectedCents = limit;
+        if (reconciliation ? limit <= 0 || limit > 2_147_483_647
+          : receivedCents > limit || (invoiceChoice !== "partial" && receivedCents !== limit)) return false;
+        const planned = allocateInvoicePayment(eligible, Math.min(receivedCents, limit));
         allocations = planned.filter(({ kind }) => kind === "rent").map(({ month, remainingCents, paidCents }) => ({
           month, gap: remainingCents / 100, amount: paidCents / 100,
         }));
@@ -731,7 +747,7 @@ export async function recordOverdueRentPayment(formData: FormData) {
       for (const allocation of allocations) {
         const entry = entriesByMonth.get(allocation.month)!;
         const existing = byMonth.get(entry.month);
-        const settled = allocation.amount === allocation.gap;
+        const settled = Math.round(allocation.amount * 100) === Math.round(entry.gap * 100);
         const paidAmount = settled ? entry.dueAmount : entry.paidAmount + allocation.amount;
         const status = settled ? "PAID" : "PARTIAL";
         const rentPayment = existing
@@ -767,6 +783,28 @@ export async function recordOverdueRentPayment(formData: FormData) {
             propertyId, unitId: lease.unitId, tenantLeaseId, utilityBillId: bill.id,
             type: "UTILITY_REIMBURSEMENT_FROM_TENANT", direction: "INCOMING",
             amount, method, date: paidDate, recordedByUserId: user.id, paymentReceiptId,
+          },
+        });
+      }
+      if (reconciliation && invoiceMonth) {
+        const extra = Math.max(0, receivedCents - expectedCents) / 100;
+        if (extra > 0) {
+          await tx.tenantLease.update({
+            where: { id: tenantLeaseId },
+            data: { currentDownpaymentBalance: lease.currentDownpaymentBalance?.plus(extra) ?? extra },
+          });
+          await tx.transaction.create({
+            data: {
+              propertyId, unitId: lease.unitId, tenantLeaseId, amount: extra, method,
+              type: "DOWNPAYMENT_RECEIVED_FROM_TENANT", direction: "INCOMING",
+              date: paidDate, recordedByUserId: user.id, paymentReceiptId,
+            },
+          });
+        }
+        await tx.rentBillReceiptCheck.create({
+          data: {
+            receiptId: paymentReceiptId, tenantLeaseId, month: invoiceMonth,
+            printRevision: printRevision || null, expectedCents, receivedCents,
           },
         });
       }

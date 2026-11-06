@@ -435,10 +435,35 @@ model TenantLease {
   transactions           Transaction[]
   utilityBills           UtilityBill[]
   utilityBillDefaults    TenantUtilityBillDefault[]
+  rentBillPrints         RentBillPrint[]
+  rentBillReceiptChecks  RentBillReceiptCheck[]
 
   @@index([unitId])
   @@index([tenantId])
   @@index([status])
+}
+
+model RentBillPrint {
+  tenantLeaseId String
+  tenantLease   TenantLease @relation(fields: [tenantLeaseId], references: [id], onDelete: Cascade)
+  month         String
+  revision      Int
+  rows          Json
+  printedAt     DateTime @default(now())
+
+  @@id([tenantLeaseId, month, revision])
+}
+
+model RentBillReceiptCheck {
+  receiptId     String @id
+  tenantLeaseId String
+  tenantLease   TenantLease @relation(fields: [tenantLeaseId], references: [id], onDelete: Cascade)
+  month         String
+  printRevision Int?
+  expectedCents Int
+  receivedCents Int
+
+  @@index([tenantLeaseId, month])
 }
 
 model TenantUtilityBillDefault {
