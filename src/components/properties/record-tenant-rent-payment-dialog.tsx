@@ -1,7 +1,7 @@
 "use client";
 
 import { dhakaTodayISO } from "@/lib/dhaka-time";
-import { useEffect, useState, useTransition } from "react";
+import { useEffect, useRef, useState, useTransition } from "react";
 import { useLocale, useTranslations } from "next-intl";
 import { Loader2, Plus, Wallet } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -24,6 +24,7 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 import { AddUtilityBillForm } from "@/components/properties/add-utility-bill-dialog";
+import { addTenantUtilityBills } from "@/lib/actions/utility-bills";
 import { FormField } from "@/components/properties/form-field";
 import { formatDate, formatTaka, monthLabel } from "@/lib/format";
 import {
@@ -121,6 +122,8 @@ export function RecordTenantRentPaymentDialog({
   const simpleCollection = collectionBalance != null;
   const [open, setOpen] = useState(false);
   const [hasUtilityDraft, setHasUtilityDraft] = useState(false);
+  const [addingBill, setAddingBill] = useState(false);
+  const billFields = useRef<{ read: (data: FormData) => FormData[] | null }>(null);
   const todayValue = dhakaTodayISO();
   const [mode, setMode] = useState<Mode>(arrearsPeriod ? "overdue" : monthSettled && !initialBillingMonth ? "advance" : "cash");
   const [method, setMethod] = useState("NONE");
@@ -151,7 +154,7 @@ export function RecordTenantRentPaymentDialog({
   const [utilityLoadFailed, setUtilityLoadFailed] = useState(false);
   const [utilityRefresh, setUtilityRefresh] = useState(0);
   useEffect(() => {
-    if (!open || (mode !== "overdue" && !(simpleCollection && mode === "multiMonth"))) return;
+    if (!open || (mode !== "overdue" && !(simpleCollection && (mode === "cash" || mode === "multiMonth")))) return;
     let active = true;
     getTenantUtilityArrears(tenantLeaseId, simpleCollection).then(
       (bills) => { if (active) setUtilityArrears(bills); },
@@ -197,7 +200,7 @@ export function RecordTenantRentPaymentDialog({
   const monthPayments = monthRows
     .filter(({ amount }) => !simpleCollection || amount !== "")
     .map(({ month, amount }) => ({ month, amount, remainingCents: remainingByMonth.get(month) }));
-  const utilityPayments = simpleCollection && mode === "multiMonth" ? (utilityArrears ?? []).flatMap((bill) => {
+  const utilityPayments = simpleCollection && (mode === "cash" || mode === "multiMonth") ? (utilityArrears ?? []).flatMap((bill) => {
     const amount = utilityAmounts[bill.id];
     return amount ? [{ id: bill.id, amount, remainingCents: Math.round(bill.remaining * 100) }] : [];
   }) : [];
@@ -214,6 +217,7 @@ export function RecordTenantRentPaymentDialog({
   const cashPayment = Number(amount);
   const validCashPayment = /^\d+(\.\d{1,2})?$/.test(amount) && cashPayment > 0 &&
     Math.round(cashPayment * 100) <= cashCents;
+  const noRentPayment = amount === "" || cashPayment === 0;
   const currentMonth = todayValue.slice(0, 7);
 
   const utilityTypeLabels = {
@@ -239,7 +243,8 @@ export function RecordTenantRentPaymentDialog({
     const month = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`;
     return remainingForMonth(month);
   }).reduce((sum, value) => sum + value, 0);
-  const showUtilityBills = !simpleCollection && mode === "cash" && isPaymentMonth(billingMonth);
+  const billMonth = fixedBillingMonth ?? billingMonth;
+  const showUtilityBills = (mode === "cash" || mode === "multiMonth") && isPaymentMonth(billMonth);
   const actionMonth = mode === "advance" ? startMonth : billingMonth;
   const actionAmount =
     mode === "advance" ? advanceTotal : mode === "overdue" ? (Number.isFinite(overdueValue) ? overdueValue : 0) + utilityTotal : Number(amount);
@@ -283,11 +288,50 @@ export function RecordTenantRentPaymentDialog({
     setMode(next);
   }
 
+  function readNewBills(formData: FormData) {
+    const bills = addingBill && showUtilityBills ? billFields.current?.read(formData) : [];
+    if (!bills) toast.error(t("collectionCheckNewBill"));
+    return bills;
+  }
+
+  function createBillsOnly(formData: FormData) {
+    if (isPending) return;
+    const bills = readNewBills(formData);
+    if (!bills) return;
+    if (!bills.length) {
+      toast.error(t("collectionCheckNewBill"));
+      return;
+    }
+    if (bills.some((bill) => Number(bill.get("received")) > 0)) {
+      toast.error(t("collectionUseReceivedAction"));
+      return;
+    }
+    startTransition(async () => {
+      try {
+        const result = await addTenantUtilityBills(tenantLeaseId, billMonth, bills);
+        if (!result.ok) {
+          toast.error(t(result.error));
+          return;
+        }
+        toast.success(t("utilityBillsAddedToMonth", { count: bills.length, month: monthLabel(billMonth, locale) }));
+        setAddingBill(false);
+        setHasUtilityDraft(false);
+        setOpen(false);
+        router.refresh();
+      } catch {
+        toast.error(t("utilityBillAddFailed"));
+      }
+    });
+  }
+
   return (
     <Dialog open={open} onOpenChange={(next) => {
-      if (simpleCollection && isPending) return;
+      if (isPending) return;
       setOpen(next);
-      if (!next) setHasUtilityDraft(false);
+      if (!next) {
+        setHasUtilityDraft(false);
+        setAddingBill(false);
+      }
       if (!next && simpleCollection) {
         setMode("cash");
         setAmount(String(cashBalance || ""));
@@ -327,7 +371,7 @@ export function RecordTenantRentPaymentDialog({
           </>
         )}
       </DialogTrigger>
-      <DialogContent className={simpleCollection ? "max-h-[90dvh] overflow-y-auto sm:max-w-xl" : "sm:max-w-3xl sm:gap-5 sm:p-6"}>
+        <DialogContent className={simpleCollection ? "max-h-[90dvh] overflow-y-auto sm:max-w-xl" : "max-h-[90dvh] overflow-y-auto sm:max-w-3xl sm:gap-5 sm:p-6"}>
         <DialogHeader>
           <DialogTitle>{showUtilityBills ? t("rentAndUtilityTitle") : dialogTitle}</DialogTitle>
         </DialogHeader>
@@ -344,22 +388,31 @@ export function RecordTenantRentPaymentDialog({
             </p> : null}
           </div>
         ) : null}
-        <div className={showUtilityBills ? "grid min-w-0 gap-5 sm:grid-cols-2 sm:items-start sm:gap-6" : undefined}>
           <form
             action={(formData: FormData) =>
               startTransition(async () => {
-                if (mode === "multiMonth" || (simpleCollection && mode === "cash")) {
+                const bills = readNewBills(formData);
+                if (!bills || isPending) return;
+                const receivedUtility = bills.some((bill) => Number(bill.get("received")) > 0);
+                if (mode === "multiMonth" || (mode === "cash" && (simpleCollection || bills.length))) {
                   const single = mode === "cash";
-                  if (single ? !validCashPayment : !canSubmitMultiMonth) return;
+                  if (single ? !(validCashPayment || (noRentPayment && (receivedUtility || utilityPayments.length)))
+                    : !(canSubmitMultiMonth || (!plannedPayments.length && receivedUtility))) {
+                    toast.error(t("multiMonthInvalid"));
+                    return;
+                  }
                   if (single) {
                     formData.set("collectionMode", "single");
-                    formData.set("multiMonthPayments", JSON.stringify([{ month: billingMonth, amount, remainingCents: cashCents }]));
+                    formData.set("multiMonthPayments", JSON.stringify(validCashPayment ? [{ month: billMonth, amount, remainingCents: cashCents }] : []));
                   }
-                  if (simpleCollection && !single) {
+                  if (simpleCollection) {
                     formData.set("multiMonthUtilities", JSON.stringify(utilityPayments));
                   }
-                  const result = await recordMultiMonthRentPayment(formData);
-                  if (result?.reason === "changed") {
+                  formData.set("billingMonth", billMonth);
+                  const result = await recordMultiMonthRentPayment(formData, bills);
+                  if (result?.reason === "utility") {
+                    toast.error(t(result.error));
+                  } else if (result?.reason === "changed") {
                     toast.error(t("multiMonthChanged"));
                     if (simpleCollection) {
                       setUtilityArrears(null);
@@ -419,7 +472,7 @@ export function RecordTenantRentPaymentDialog({
                   {t(mode === "cash" ? "collectionMore" : "collectionOnlySelected")}
                 </Button>
                 {mode === "multiMonth" && currentDownpaymentBalance > 0 ? (
-                  <Button type="button" variant="ghost" size="sm" disabled={isPending}
+                  <Button type="button" variant="ghost" size="sm" disabled={isPending || hasUtilityDraft}
                     onClick={() => changeCollectionMode("downpaymentAdjustment")}>
                     {t("adjustFromDownpayment")}
                   </Button>
@@ -465,7 +518,7 @@ export function RecordTenantRentPaymentDialog({
                   type="month"
                   max={todayValue.slice(0, 7)}
                   readOnly={hasUtilityDraft}
-                  required
+                  required={mode !== "cash" || (!addingBill && !utilityPayments.length)}
                   value={billingMonth}
                   onChange={(e) => {
                     setBillingMonth(e.target.value);
@@ -690,7 +743,7 @@ export function RecordTenantRentPaymentDialog({
               </p>
             ) : null}
 
-            {mode === "overdue" || (simpleCollection && mode === "multiMonth") ? (
+            {mode === "overdue" || (simpleCollection && (mode === "multiMonth" || (mode === "cash" && utilityArrears?.length))) ? (
               <section className="space-y-3 rounded-lg border p-3" aria-label={t(simpleCollection ? "collectionUtilityBills" : "oldUtilityBills")}>
                 <h3 className="font-semibold">{t(simpleCollection ? "collectionUtilityBills" : "oldUtilityBills")}</h3>
                 {utilityLoadFailed ? (
@@ -779,42 +832,45 @@ export function RecordTenantRentPaymentDialog({
               </FormField>
             )}
 
-            {showUtilityBills && hasUtilityDraft ? (
-              <p role="status" className="text-xs text-muted-foreground">{t("saveUtilityBeforeRent")}</p>
+            {showUtilityBills ? (
+              <section className="grid min-w-0 gap-3 rounded-lg border p-3">
+                {addingBill ? (
+                  <>
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <h3 className="text-sm font-semibold">{t("addUtilityFromRent")}</h3>
+                      <Button type="button" variant="ghost" size="sm" disabled={isPending}
+                        onClick={() => { setAddingBill(false); setHasUtilityDraft(false); }}>
+                        {t("collectionRemoveNewBill")}
+                      </Button>
+                    </div>
+                    <AddUtilityBillForm key={billMonth} tenantBilling={{ leaseId: tenantLeaseId, month: billMonth }}
+                      collectionRef={billFields} onDraftChange={setHasUtilityDraft} />
+                  </>
+                ) : (
+                  <Button type="button" variant="outline" size="sm" className="justify-self-start" disabled={isPending}
+                    onClick={() => setAddingBill(true)}>
+                    <Plus className="size-4" />{t("collectionCreateBill")}
+                  </Button>
+                )}
+              </section>
             ) : null}
-            <div className={showUtilityBills ? "flex flex-wrap justify-end gap-2 border-t pt-3" : undefined}>
-              {showUtilityBills ? (
-                <Button type="submit" disabled={isPending || hasUtilityDraft}>
-                  {isPending ? <Loader2 className="size-4 animate-spin" /> : null}
-                  {submitLabel}
-                </Button>
-              ) : (
                 <DialogFooter>
                   <DialogClose render={<Button type="button" variant="outline" />}>
                     {t("cancel")}
                   </DialogClose>
-                  <Button type="submit" disabled={isPending || (simpleCollection && mode === "cash" && !validCashPayment) || (mode === "overdue" && !canSubmitOverdue) || (mode === "multiMonth" && !canSubmitMultiMonth)}>
+                  <Button type="submit" disabled={isPending || (!addingBill && simpleCollection && mode === "cash" &&
+                    !validCashPayment && !(noRentPayment && utilityPayments.length)) ||
+                    (mode === "overdue" && !canSubmitOverdue) || (!addingBill && mode === "multiMonth" && !canSubmitMultiMonth)}>
                     {isPending ? <Loader2 className="size-4 animate-spin" /> : null}
-                    {submitLabel}
+                    {showUtilityBills ? t("collectionReceivedAction") : submitLabel}
                   </Button>
+                  {showUtilityBills && addingBill ? (
+                    <Button type="submit" variant="outline" formAction={createBillsOnly} formNoValidate disabled={isPending}>
+                      {t("collectionCreateBill")}
+                    </Button>
+                  ) : null}
                 </DialogFooter>
-              )}
-            </div>
           </form>
-          {showUtilityBills ? (
-            <section className="grid min-w-0 gap-3 border-t pt-4 sm:border-s sm:border-t-0 sm:ps-6 sm:pt-0">
-              <div>
-                <h3 className="text-sm font-semibold">{t("addUtilityFromRent")}</h3>
-                <p className="mt-1 text-xs text-muted-foreground">{t("optionalUtilitySectionHint")}</p>
-              </div>
-              <AddUtilityBillForm
-                key={billingMonth}
-                tenantBilling={{ leaseId: tenantLeaseId, month: billingMonth }}
-                onDraftChange={setHasUtilityDraft}
-              />
-            </section>
-          ) : null}
-        </div>
       </DialogContent>
     </Dialog>
   );

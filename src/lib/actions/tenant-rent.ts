@@ -22,6 +22,7 @@ import { isValidTransactionDate } from "@/lib/transaction-edit";
 import { withRentActionFeedback } from "@/lib/rent-action-feedback";
 import { allocateInvoicePayment, invoicePaymentSnapshot, type InvoicePaymentLine } from "@/lib/invoice-payment";
 import { tenantUtilityArrearsWhere } from "@/lib/tenant-utility-arrears";
+import { prepareTenantUtilityBillRows, validateTenantUtilityBills } from "@/lib/utility-bill-entry";
 import { numericRentRates, rentTermsDueAmount, resolveRentTermsForMonth } from "@/lib/rent-terms";
 
 function leaseFallbackTerms(lease: {
@@ -869,7 +870,7 @@ function readCollectionPayments(input: string | null, key: "month" | "id") {
   return payments;
 }
 
-export async function recordMultiMonthRentPayment(formData: FormData) {
+export async function recordMultiMonthRentPayment(formData: FormData, newBills: FormData[] = []) {
   const user = await requireCurrentUser();
   const propertyId = str(formData, "propertyId");
   const tenantLeaseId = str(formData, "tenantLeaseId");
@@ -886,14 +887,31 @@ export async function recordMultiMonthRentPayment(formData: FormData) {
 
   const requested = readCollectionPayments(str(formData, "multiMonthPayments"), "month");
   const utilities = readCollectionPayments(str(formData, "multiMonthUtilities") ?? "[]", "id");
-  if (!requested || !utilities || requested.size > 36 || (!requested.size && !utilities.size)) return invalid;
+  const billingMonth = str(formData, "billingMonth");
+  if (!requested || !utilities || requested.size > 36 || newBills.length > 36) return invalid;
+  if (newBills.length && !isPaymentMonth(billingMonth)) return invalid;
+  const validated = newBills.length ? validateTenantUtilityBills(billingMonth!, newBills) : null;
+  if (validated && !validated.ok) return { ok: false, reason: "utility", error: validated.error } as const;
+  const newUtilityPayments = newBills.map((bill) => {
+    const value = str(bill, "received");
+    return value == null ? 0 : /^\d+(\.\d{1,2})?$/.test(value) ? Math.round(Number(value) * 100) : NaN;
+  });
+  if (newUtilityPayments.some((cents) => !Number.isSafeInteger(cents)) ||
+      (!requested.size && !utilities.size && !newUtilityPayments.some((cents) => cents > 0))) return invalid;
 
   const paidDate = new Date(date);
   const paymentReceiptId = randomUUID();
   try {
     const saved = await prisma.$transaction(async (tx) => {
-      const lease = await tx.tenantLease.findUnique({ where: { id: tenantLeaseId }, include: multiMonthLeaseInclude });
+      const lease = await tx.tenantLease.findUnique({
+        where: { id: tenantLeaseId }, include: { ...multiMonthLeaseInclude, utilityBillDefaults: !!validated },
+      });
       if (!lease || lease.unit.unitType.property.id !== propertyId || lease.unit.unitType.property.deletedAt) return false;
+      const billRows = validated ? prepareTenantUtilityBillRows(lease, propertyId, billingMonth!, validated.bills) : [];
+      if (!billRows || billRows.some((bill, index) => {
+        const received = newUtilityPayments[index];
+        return received > 0 && (bill.paidByCompany || received / 100 > Number(bill.amount));
+      })) return false;
       const selected = multiMonthBalances(lease, today.slice(0, 7)).flatMap((balance) => {
         const request = requested.get(balance.month);
         return request && request.remainingCents === balance.remainingCents
@@ -952,6 +970,26 @@ export async function recordMultiMonthRentPayment(formData: FormData) {
           },
         });
       }
+      for (const [index, row] of billRows.entries()) {
+        const paidCents = newUtilityPayments[index];
+        const paidAmount = paidCents / 100;
+        const bill = await tx.utilityBill.create({
+          data: {
+            ...row,
+            paidAmount,
+            status: !paidCents ? "UNPAID" : paidAmount === Number(row.amount) ? "PAID" : "PARTIAL",
+          },
+        });
+        if (paidCents) {
+          await tx.transaction.create({
+            data: {
+              propertyId, unitId: lease.unitId, tenantLeaseId, utilityBillId: bill.id, amount: paidAmount, method,
+              type: "UTILITY_REIMBURSEMENT_FROM_TENANT", direction: "INCOMING", date: paidDate,
+              recordedByUserId: user.id, paymentReceiptId,
+            },
+          });
+        }
+      }
       return true;
     }, { isolationLevel: "Serializable" });
     if (!saved) return changed;
@@ -975,8 +1013,9 @@ export async function recordMultiMonthRentPayment(formData: FormData) {
       locale,
     });
   }
-  const totalCents = [...requested.values(), ...utilities.values()].reduce((sum, row) => sum + row.amountCents, 0);
-  const feedback = utilities.size || str(formData, "collectionMode") === "single" ? "invoicePaid" : "multiMonth";
+  const totalCents = [...requested.values(), ...utilities.values()].reduce((sum, row) => sum + row.amountCents, 0)
+    + newUtilityPayments.reduce((sum, cents) => sum + cents, 0);
+  const feedback = utilities.size || newBills.length || str(formData, "collectionMode") === "single" ? "invoicePaid" : "multiMonth";
   redirect({ href: withRentActionFeedback(returnTo, feedback, { count: requested.size, amount: totalCents / 100 }), locale });
 }
 

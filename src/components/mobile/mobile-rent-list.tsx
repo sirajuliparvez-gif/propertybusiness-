@@ -152,6 +152,8 @@ export function MobileRentList({
               <li key={p.id} className={cn("flex items-stretch", p.pastDueAmount > 0 ? "bg-destructive/5" : undefined)}>
                 <div className="min-w-0 flex-1">
                 <RecordTenantRentPaymentDialog
+                  key={`${selectedMonth}:${p.overdueAmount}`}
+                  collectionBalance={p.overdueAmount}
                   propertyId={p.propertyId}
                   tenantLeaseId={p.id}
                   tenantName={p.tenantName}
@@ -168,7 +170,7 @@ export function MobileRentList({
                   returnTo={`/rent?month=${selectedMonth}`}
                   initialBillingMonth={selectedMonth}
                   variant="row"
-                  triggerLabel={settled ? t("advanceRentPayment") : t("collectRent")}
+                  triggerLabel={t("collectRent")}
                   rowContent={
                     <>
                       <InitialAvatar name={p.tenantName} />
@@ -184,7 +186,7 @@ export function MobileRentList({
                         </p>
                         <StatusPill status={rentPillStatus(p.rentStatus, p.rentPastDue)} labels={rentStatusLabels} />
                         <p className="mt-0.5 text-[10px] text-muted-foreground">
-                          {settled ? t("advanceRentPayment") : t("collectRent")}
+                          {t("collectRent")}
                         </p>
                         {p.pastDueMonthsCount > 1 ? (
                           <p className="text-xs font-medium text-destructive">

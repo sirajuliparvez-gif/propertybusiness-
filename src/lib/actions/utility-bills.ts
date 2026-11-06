@@ -4,7 +4,7 @@ import { dhakaISO, dhakaToday } from "@/lib/dhaka-time";
 import { revalidatePath } from "next/cache";
 import { getLocale } from "next-intl/server";
 import type { Prisma } from "@/generated/prisma/client";
-import { electricityAmountAtRate } from "@/lib/electricity-consumption";
+import { prepareTenantUtilityBillRows, readUtilityBillFields, validateTenantUtilityBills, validMeterReadings } from "@/lib/utility-bill-entry";
 import { prisma } from "@/lib/prisma";
 import { redirect } from "@/i18n/navigation";
 import { applyUtilityBillInstallment } from "@/lib/payment-progress";
@@ -66,41 +66,6 @@ export type UtilityBillErrorCode =
   | "invalidMeterReading";
 
 export type UtilityBillActionResult = { ok: true } | { ok: false; error: UtilityBillErrorCode };
-
-function readUtilityBillFields(formData: FormData) {
-  const typeRaw = formData.get("type");
-  const type =
-    typeRaw === "GAS" || typeRaw === "ELECTRICITY" || typeRaw === "WATER" || typeRaw === "OTHER"
-      ? typeRaw
-      : "OTHER";
-  let amount = str(formData, "amount");
-  const dueDate = str(formData, "dueDate");
-  if (!amount || !dueDate) return null;
-  // Water is company policy: always the company's own cost, never billed to
-  // a tenant — enforced here too (not just the disabled checkbox client-side)
-  // in case of a stale/tampered form.
-  const paidByCompany = type === "WATER" ? true : formData.get("paidByCompany") === "true";
-  // Only meaningful for electricity — the field is hidden for every other
-  // type client-side, but guard here too in case of a stale/tampered form.
-  const meterReadingRaw = type === "ELECTRICITY" ? str(formData, "meterReading") : null;
-  const meterReading = meterReadingRaw ? Number(meterReadingRaw) : null;
-
-  const previousRaw = type === "ELECTRICITY" ? str(formData, "previousMeterReadingOverride") : null;
-  const previousMeterReadingOverride = previousRaw == null ? null : Number(previousRaw);
-  const unitRate = type === "ELECTRICITY" ? str(formData, "electricityUnitRate") : null;
-  if (unitRate != null) {
-    const units = meterReading == null || previousMeterReadingOverride == null ? null : meterReading - previousMeterReadingOverride;
-    amount = electricityAmountAtRate(units, unitRate);
-    if (!amount) return null;
-  }
-  return { type, amount, dueDate, paidByCompany, meterReading, previousMeterReadingOverride } as const;
-}
-
-function validMeterReadings(current: number | null, previous: number | null) {
-  if (current != null && (!Number.isFinite(current) || current < 0)) return false;
-  if (previous == null) return true;
-  return Number.isFinite(previous) && previous >= 0 && (current == null || current >= previous);
-}
 
 export async function addUtilityBill(formData: FormData) {
   const locale = await getLocale();
@@ -173,49 +138,19 @@ export async function addTenantUtilityBills(
   bills: FormData[],
 ) {
   await requireCurrentUser();
-  const fields = bills.map(readUtilityBillFields);
-  if (!fields.length || !fields.every((bill) =>
-    bill != null && isValidTransactionDate(bill.dueDate) && bill.dueDate.slice(0, 7) === billingMonth
-  )) {
-    return { ok: false, error: "utilityBillInvalidDate" } as const;
-  }
-
-  const validatedBills = [];
-  for (const bill of fields) {
-    if (!bill || !Number.isFinite(Number(bill.amount)) || Number(bill.amount) <= 0 ||
-      !validMeterReadings(bill.meterReading, bill.previousMeterReadingOverride)) {
-      return { ok: false, error: "utilityBillInvalidAmount" } as const;
-    }
-    validatedBills.push(bill);
-  }
+  const validated = validateTenantUtilityBills(billingMonth, bills);
+  if (!validated.ok) return validated;
 
   const lease = await prisma.tenantLease.findUnique({
     where: { id: tenantLeaseId },
-    select: { status: true, startDate: true, unitId: true, utilityBillDefaults: true, unit: { select: { unitType: { select: { propertyId: true } } } } },
+    select: { id: true, status: true, startDate: true, unitId: true, utilityBillDefaults: true, unit: { select: { unitType: { select: { propertyId: true } } } } },
   });
   if (!lease || lease.status !== "ACTIVE") {
     return { ok: false, error: "utilityBillOutsideLease" } as const;
   }
-  const leaseStart = dhakaISO(lease.startDate);
-  if (validatedBills.some((bill) => bill.dueDate < leaseStart)) {
-    return { ok: false, error: "utilityBillOutsideLease" } as const;
-  }
-
-  await prisma.utilityBill.createMany({
-    data: validatedBills.map((bill) => {
-      const locked = lease.utilityBillDefaults.find((item) => item.type === bill.type);
-      return {
-        ...bill,
-        propertyId: lease.unit.unitType.propertyId,
-        unitId: lease.unitId,
-        tenantLeaseId,
-        amount: locked?.amount ?? bill.amount,
-        paidByCompany: locked?.paidByCompany ?? bill.paidByCompany,
-        month: billingMonth,
-        dueDate: new Date(bill.dueDate),
-      };
-    }),
-  });
+  const rows = prepareTenantUtilityBillRows(lease, lease.unit.unitType.propertyId, billingMonth, validated.bills);
+  if (!rows) return { ok: false, error: "utilityBillOutsideLease" } as const;
+  await prisma.utilityBill.createMany({ data: rows });
 
   const locale = await getLocale();
   revalidatePath(`/${locale}/tenants/${tenantLeaseId}`);

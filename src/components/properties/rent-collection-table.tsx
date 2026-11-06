@@ -17,7 +17,6 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { InitialAvatar } from "@/components/properties/initial-avatar";
 import { StatusPill, isRentSettled, rentPillStatus } from "@/components/properties/status-pill";
-import { InvoiceAddUtilityBillDialog } from "@/components/properties/add-utility-bill-dialog";
 import { RecordTenantRentPaymentDialog } from "@/components/properties/record-tenant-rent-payment-dialog";
 import { formatTaka, formatDate } from "@/lib/format";
 import { paymentMethodLabel } from "@/lib/payment-method";
@@ -281,7 +280,6 @@ export function RentCollectionTable({
                         <Printer className="size-3.5" />
                         <span className="sr-only">{t("invoiceLabel")}</span>
                       </Button>
-                      <InvoiceAddUtilityBillDialog leaseId={p.id} month={selectedMonth} compact />
                       <RecordTenantRentPaymentDialog
                         key={`${selectedMonth}:${p.overdueAmount}`}
                         collectionBalance={p.overdueAmount}

@@ -1,7 +1,7 @@
 "use client";
 
 import { dhakaTodayISO } from "@/lib/dhaka-time";
-import { useEffect, useRef, useState, useTransition } from "react";
+import { useEffect, useImperativeHandle, useRef, useState, useTransition, type Ref } from "react";
 import { useLocale, useTranslations } from "next-intl";
 import { Loader2, Plus, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -47,8 +47,19 @@ type PropertyBillFields = {
 };
 
 type BillFormProps =
-  | (PropertyBillFields & { tenantBilling?: never; onDraftChange?: never; onSaved?: never })
-  | { tenantBilling: { leaseId: string; month: string }; onDraftChange?: (hasDraft: boolean) => void; onSaved?: () => void };
+  | (PropertyBillFields & { tenantBilling?: never; onDraftChange?: never; onSaved?: never; collectionRef?: never })
+  | { tenantBilling: { leaseId: string; month: string }; onDraftChange?: (hasDraft: boolean) => void; onSaved?: () => void;
+    collectionRef?: Ref<{ read: (data: FormData) => FormData[] | null }> };
+
+function collectionBillData(formData: FormData) {
+  const bill = new FormData();
+  for (const field of ["type", "paidByCompany", "meterReading", "previousMeterReadingOverride", "electricityUnitRate", "dueDate", "received"]) {
+    const value = formData.get(field);
+    if (typeof value === "string") bill.set(field, value);
+  }
+  bill.set("amount", String(formData.get("utilityAmount") ?? ""));
+  return bill;
+}
 
 export function AddUtilityBillDialog(props: PropertyBillFields) {
   const t = useTranslations("Properties");
@@ -95,7 +106,9 @@ export function InvoiceAddUtilityBillDialog({ leaseId, month, compact = false }:
 }
 
 export function AddUtilityBillForm(props: BillFormProps) {
-  const { tenantBilling, onDraftChange, onSaved } = props;
+  const { tenantBilling, onDraftChange, onSaved, collectionRef } = props;
+  const embedded = collectionRef != null;
+  const Fields = embedded ? "div" : "form";
   const property = "propertyId" in props ? props : undefined;
   const { propertyId, units = [], fixedUnitId, returnTo, utilityDefaults, utilityDefaultsStart } = property ?? {};
   const t = useTranslations("Properties");
@@ -109,9 +122,11 @@ export function AddUtilityBillForm(props: BillFormProps) {
   const [unitRate, setUnitRate] = useState("");
   const [draftAmount, setDraftAmount] = useState<string | null>(null);
   const [draftDate, setDraftDate] = useState<string | null>(null);
+  const [received, setReceived] = useState("");
   const [queuedBills, setQueuedBills] = useState<{ id: number; data: FormData }[]>([]);
   const nextBillId = useRef(0);
-  const hasDraft = isPending || !!draftAmount || !!meterReading || !!manualPreviousReading || !!unitRate || queuedBills.length > 0;
+  const editingBill = !!draftAmount || !!meterReading || !!manualPreviousReading || !!unitRate || !!received;
+  const hasDraft = isPending || editingBill || queuedBills.length > 0;
   useEffect(() => {
     onDraftChange?.(hasDraft);
   }, [hasDraft, onDraftChange]);
@@ -198,6 +213,14 @@ export function AddUtilityBillForm(props: BillFormProps) {
   const billAmount = typeDefault?.amount ?? (usingUnitRate ? calculatedAmount : draftAmount ?? "");
   const includeDraft = !!billAmount && !(queuedBills.length && amountLocked && draftAmount === "" && !draftDate && !meterReading);
   const invalidCalculation = usingUnitRate && (!calculatedAmount || Number(calculatedAmount) <= 0);
+  useImperativeHandle(collectionRef, () => ({
+    read(formData) {
+      if (loadingDefaults || invalidCalculation || (editingBill && !includeDraft)) return null;
+      const bills = queuedBills.map(({ data }) => data);
+      if (includeDraft) bills.push(collectionBillData(formData));
+      return bills;
+    },
+  }));
 
   const typeLabels: Record<UtilityType, string> = {
     GAS: t("utilityTypeGas"),
@@ -216,6 +239,7 @@ export function AddUtilityBillForm(props: BillFormProps) {
     setMeterReading("");
     setManualPreviousReading(null);
     setUnitRate("");
+    setReceived("");
   }
   const isWater = type === "WATER";
 
@@ -241,6 +265,7 @@ export function AddUtilityBillForm(props: BillFormProps) {
                   {dueDate}
                   {data.get("meterReading") ? ` · ${t("meterReading")} ${data.get("meterReading")}` : null}
                   {data.get("paidByCompany") === "true" ? ` · ${t("paidByCompanyLabel")}` : null}
+                  {Number(data.get("received")) > 0 ? ` · ${t("collectionNewBillReceived")} ${formatTaka(Number(data.get("received")), 2)}` : null}
                 </p>
               </div>
               <Button type="button" variant="ghost" size="icon-sm" disabled={isPending}
@@ -253,8 +278,9 @@ export function AddUtilityBillForm(props: BillFormProps) {
         })}
       </ul>
     ) : null}
-    <form
-      action={(formData: FormData) => startTransition(async () => {
+    <Fields
+      data-collection-bill-fields={embedded || undefined}
+      action={embedded ? undefined : (formData: FormData) => startTransition(async () => {
         if (loadingDefaults) return;
         if (!tenantBilling) {
           await addUtilityBill(formData);
@@ -280,7 +306,7 @@ export function AddUtilityBillForm(props: BillFormProps) {
       })}
       className="grid gap-3 sm:grid-cols-2"
     >
-      <input type="hidden" name="propertyId" value={propertyId} />
+      {!embedded ? <input type="hidden" name="propertyId" value={propertyId} /> : null}
       <input type="hidden" name="type" value={type} />
       <input type="hidden" name="paidByCompany" value={isWater || paidByCompany ? "true" : "false"} />
       <input
@@ -347,13 +373,19 @@ export function AddUtilityBillForm(props: BillFormProps) {
       ) : null}
 
       <FormField label={t(tenantBilling ? "invoiceUtilityBillAmount" : "amount")} htmlFor="utilityBillAmount" required>
-        <Input id="utilityBillAmount" name="amount" type="number" step="any" min={tenantBilling ? 0.01 : 0}
-          required={!queuedBills.length || !!meterReading}
+        <Input id="utilityBillAmount" name={embedded ? "utilityAmount" : "amount"} type="number" step="any" min={tenantBilling ? 0.01 : 0}
+          required={!embedded && (!queuedBills.length || !!meterReading)}
           value={billAmount}
           readOnly={usingUnitRate || amountLocked}
           onChange={(event) => setDraftAmount(event.target.value)}
         />
       </FormField>
+      {embedded && !isWater && !paidByCompany ? (
+        <FormField label={t("collectionNewBillReceived")} htmlFor="collectionNewBillReceived">
+          <Input id="collectionNewBillReceived" name="received" type="number" min={0} max={billAmount || undefined}
+            step="0.01" value={received} onChange={(event) => setReceived(event.target.value)} />
+        </FormField>
+      ) : null}
       <FormField label={t("billDueDate")} htmlFor="utilityBillDueDate" required>
         <Input id="utilityBillDueDate" name="dueDate" type="date" min={minDate} max={maxDate} required
           value={readingDate}
@@ -369,7 +401,7 @@ export function AddUtilityBillForm(props: BillFormProps) {
           id="utilityBillPaidByCompany"
           checked={isWater || paidByCompany}
           disabled={isWater || payerLocked}
-          onCheckedChange={(checked) => setPayerOverride(checked === true)}
+          onCheckedChange={(checked) => { setPayerOverride(checked === true); if (checked) setReceived(""); }}
         />
         {isWater ? t("paidByCompanyWaterLocked") : t("paidByCompanyLabel")}
       </label>
@@ -407,18 +439,23 @@ export function AddUtilityBillForm(props: BillFormProps) {
           <Button type="button" variant="outline" disabled={isPending || loadingDefaults || !billAmount || invalidCalculation}
             onClick={(event) => {
               const form = event.currentTarget.form;
-              if (!form?.reportValidity()) return;
-              const item = { id: nextBillId.current++, data: new FormData(form) };
+              if (!form) return;
+              const group = event.currentTarget.closest("[data-collection-bill-fields]");
+              const valid = group ? [...group.querySelectorAll("input")]
+                .every((input) => input.reportValidity()) : form.reportValidity();
+              if (!valid) return;
+              const formData = new FormData(form);
+              const item = { id: nextBillId.current++, data: embedded ? collectionBillData(formData) : formData };
               setQueuedBills((bills) => [...bills, item]);
               resetDraft();
             }}>
             <Plus className="size-3.5" />
             {t("addAnotherUtilityBill")}
           </Button>
-          <Button type="submit" variant="secondary" disabled={isPending || loadingDefaults || invalidCalculation || (!includeDraft && !queuedBills.length)}>
+          {!embedded ? <Button type="submit" variant="secondary" disabled={isPending || loadingDefaults || invalidCalculation || (!includeDraft && !queuedBills.length)}>
             {isPending ? <Loader2 className="size-4 animate-spin" /> : null}
             {t("saveUtilityBills", { count: queuedBills.length + Number(includeDraft) })}
-          </Button>
+          </Button> : null}
         </div>
       ) : (
         <DialogFooter className="sm:col-span-2">
@@ -431,7 +468,7 @@ export function AddUtilityBillForm(props: BillFormProps) {
           </Button>
         </DialogFooter>
       )}
-    </form>
+    </Fields>
     </>
   );
 }
