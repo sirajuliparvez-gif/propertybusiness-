@@ -17,7 +17,6 @@ import {
   Settings,
   FileSpreadsheet,
   FileText,
-  FilePlus,
   HandCoins,
   Receipt,
   type LucideIcon,
@@ -47,22 +46,26 @@ export function AppSidebar() {
   const pathname = usePathname();
   const groups: { label?: string; items: SidebarItem[] }[] = [
     {
-      items: [{ href: "/", label: t("dashboard"), icon: LayoutDashboard }],
-    },
-    {
-      label: t("quickActions"),
       items: [
-        { href: "/rent/arrears", label: t("quickRentArrears"), icon: HandCoins, prefetch: false },
-        { href: "/utility-bills?add=bill", label: t("quickUtilityBill"), icon: FilePlus, prefetch: false },
-        { href: "/transactions?add=expense", label: t("quickExpense"), icon: Receipt, prefetch: false },
+        { href: "/", label: t("dashboard"), icon: LayoutDashboard },
       ],
     },
     {
-      label: t("sidebarMoney"),
+      label: t("sidebarMonthly"),
       items: [
         { href: "/rent", label: t("rent"), icon: Wallet },
         { href: "/utility-bills", label: t("utilityBills"), icon: Zap },
         { href: "/transactions", label: t("transactions"), icon: ArrowLeftRight },
+        { href: "/transactions?add=expense", label: t("quickExpense"), icon: Receipt, prefetch: false },
+        { href: "/rent/report", label: t("quickRentReport"), icon: FileText, prefetch: false },
+        { href: "/reports/market", label: t("allMarketReport"), icon: Building2, prefetch: false },
+      ],
+    },
+    {
+      label: t("sidebarArrears"),
+      items: [
+        { href: "/rent/arrears", label: t("rentArrears"), icon: HandCoins, prefetch: false },
+        { href: "/utility-bills/arrears", label: t("utilityArrears"), icon: Zap, prefetch: false },
       ],
     },
     {
@@ -78,8 +81,6 @@ export function AppSidebar() {
     {
       label: t("sidebarReports"),
       items: [
-        { href: "/rent/report", label: t("quickRentReport"), icon: FileText, prefetch: false },
-        { href: "/reports/market", label: t("allMarketReport"), icon: Building2, prefetch: false },
         { href: "/reports", label: t("reports"), icon: BarChart3 },
         { href: "/import-export", label: t("importExport"), icon: FileSpreadsheet },
       ],

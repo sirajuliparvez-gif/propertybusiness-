@@ -46,7 +46,8 @@ function HistoryTable({ title, columns, rows, numberFrom, empty, headingLevel = 
 }
 
 const utilityLabels = {
-  GAS: "utilityTypeGas", ELECTRICITY: "utilityTypeElectricity", WATER: "utilityTypeWater", OTHER: "utilityTypeOther",
+  GAS: "utilityTypeGas", ELECTRICITY: "utilityTypeElectricity", WATER: "utilityTypeWater",
+  WASTE: "utilityTypeWaste", SECURITY: "utilityTypeSecurity", OTHER: "utilityTypeOther",
 } as const;
 const documentLabels = {
   NID_CARD: "nidPhoto", TENANT_PHOTO: "tenantPhoto", AGREEMENT_COPY: "agreementCopyLabel",

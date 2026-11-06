@@ -10,8 +10,6 @@
 .overview .count { margin-inline-start:auto; font-size:13px; color:var(--muted-foreground); }
 .overview .count dd { font-size:13px; font-weight:400; }
 .filters { border:1px solid var(--border); border-radius:12px; background:var(--card); }
-.filters > summary { padding:13px 16px; cursor:pointer; font-size:14px; font-weight:500; }
-.filters form { padding:4px 16px 16px; }
 .ledger { padding:24px 28px; }
 .listHeading { display:flex; align-items:flex-start; justify-content:space-between; gap:12px; margin-bottom:18px; }
 .listHeading h2 { font-size:17px; font-weight:600; }

@@ -24,6 +24,7 @@ export async function getAllTransactionsData(requestedMonth?: string) {
       payrollRecord: { select: { employee: { select: { id: true, name: true } } } },
       guestStay: { select: { id: true, guestName: true } },
       rentPaymentId: true,
+      paymentReceiptId: true,
       payrollRecordId: true,
       utilityBillId: true,
       ownerRentPaymentId: true,
@@ -67,6 +68,9 @@ export async function getAllTransactionsData(requestedMonth?: string) {
           t.tenantLeaseId ||
           t.guestStayId
         ),
+      receiptHref: t.paymentReceiptId && t.tenantLeaseId
+        ? `/tenants/${t.tenantLeaseId}/receipts/${t.paymentReceiptId}`
+        : null,
       sourceHref: t.tenantLease?.tenant.id
         ? `/tenants/${t.tenantLease.tenant.id}`
         : t.payrollRecord?.employee.id

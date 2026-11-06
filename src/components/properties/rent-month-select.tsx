@@ -5,7 +5,9 @@ import { useRouter } from "@/i18n/navigation";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { monthLabel } from "@/lib/format";
 
-export function RentMonthSelect({ months, selectedMonth }: { months: string[]; selectedMonth: string }) {
+export function RentMonthSelect({ months, selectedMonth, tenantLeaseId }: {
+  months: string[]; selectedMonth: string; tenantLeaseId?: string;
+}) {
   const t = useTranslations("Properties");
   const locale = useLocale();
   const router = useRouter();
@@ -14,7 +16,7 @@ export function RentMonthSelect({ months, selectedMonth }: { months: string[]; s
     <Select
       value={selectedMonth}
       onValueChange={(month) => {
-        if (month) router.push(`/rent?month=${month}`);
+        if (month) router.push(`/rent?month=${month}${tenantLeaseId ? `&tenant=${encodeURIComponent(tenantLeaseId)}` : ""}`);
       }}
       items={months.map((month) => ({ value: month, label: monthLabel(month, locale) }))}
     >

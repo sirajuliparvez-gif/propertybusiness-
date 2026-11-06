@@ -17,7 +17,9 @@ import { localizedMutationPaths } from "@/lib/localized-revalidation";
 import { reportingMonthKey } from "@/lib/reporting-period";
 import { withRentActionFeedback } from "@/lib/rent-action-feedback";
 import { rentTermsDueAmount, resolveRentTermsForMonth } from "@/lib/rent-terms";
+import { allocateInvoicePayment, invoicePaymentSnapshot, reconcileInvoiceAllocation, type InvoicePaymentLine } from "@/lib/invoice-payment";
 import { allocateRentPayment, buildRentLedger } from "@/lib/rent-ledger";
+import { validateTenantUtilityBills } from "@/lib/utility-bill-entry";
 
 test("rent payment can settle September when money arrives in October", () => {
   assert.equal(resolvePaymentMonth("2026-09", "2026-10-03"), "2026-09");
@@ -230,4 +232,51 @@ test("oldest-first arrears preview settles full or partial payments against rema
     { ...balances[0], gap: 2_000, amount: 2_000 },
     { ...balances[1], amount: 1_000 },
   ]);
+});
+
+test("invoice partial payment settles older rent and utility before the selected month", () => {
+  const lines: InvoicePaymentLine[] = [
+    { id: "2026-11", month: "2026-11", kind: "rent", remainingCents: 600000 },
+    { id: "gas", month: "2026-10", kind: "utility", remainingCents: 3500 },
+    { id: "2026-10", month: "2026-10", kind: "rent", remainingCents: 33975 },
+  ];
+
+  assert.deepEqual(allocateInvoicePayment(lines, 40000).map(({ id, paidCents }) => [id, paidCents]), [
+    ["2026-10", 33975], ["gas", 3500], ["2026-11", 2525],
+  ]);
+  assert.equal(invoicePaymentSnapshot(lines), invoicePaymentSnapshot([...lines].reverse()));
+  assert.notEqual(invoicePaymentSnapshot(lines), invoicePaymentSnapshot([{ ...lines[0], remainingCents: 597475 }, ...lines.slice(1)]));
+});
+
+test("a short receipt can pay electricity in full and leave the difference on rent", () => {
+  const rent = { id: "2026-11", month: "2026-11", kind: "rent", remainingCents: 1_000_000 } as const;
+  const power = { id: "power", month: "2026-11", kind: "utility", remainingCents: 100_000 } as const;
+  const lines = [rent, power];
+  assert.deepEqual(reconcileInvoiceAllocation(lines, 900_000, [[rent.id, 800_000], [power.id, 100_000]]), [
+    { ...rent, paidCents: 800_000 }, { ...power, paidCents: 100_000 },
+  ]);
+  for (const input of [
+    [[rent.id, 900_000], [power.id, 1]],
+    [[rent.id, 750_000], [power.id, 150_000]],
+    [[rent.id, 800_000], ["another-tenant-bill", 100_000]],
+    [[rent.id, 800_000], [rent.id, 100_000]],
+    [[rent.id, 900_000.5]],
+    [[rent.id, 900_001], [power.id, -1]],
+  ]) assert.equal(reconcileInvoiceAllocation(lines, 900_000, input), null);
+});
+
+test("tenant billing accepts different charges but rejects the same charge twice in a month", () => {
+  function bill(type: string, dueDate: string) {
+    const form = new FormData();
+    form.set("type", type);
+    form.set("amount", "100");
+    form.set("dueDate", dueDate);
+    return form;
+  }
+
+  const gas = bill("GAS", "2026-11-07");
+  assert.equal(validateTenantUtilityBills("2026-11", [gas, bill("SECURITY", "2026-11-08")]).ok, true);
+  assert.deepEqual(validateTenantUtilityBills("2026-11", [gas, bill("GAS", "2026-11-08")]), {
+    ok: false, error: "utilityBillDuplicateMonth",
+  });
 });

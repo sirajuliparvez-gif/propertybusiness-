@@ -2,7 +2,8 @@ import { cache } from "react";
 import { dhakaISO, dhakaNow } from "@/lib/dhaka-time";
 import { prisma } from "@/lib/prisma";
 import { computeServiceChargeAmount } from "@/lib/service-charge";
-import { attachElectricityConsumption, latestElectricityReadingByUnit } from "@/lib/electricity-consumption";
+import { attachElectricityConsumption } from "@/lib/electricity-consumption";
+import { serializeUtilityBillDefaults } from "@/lib/utility-bill-defaults";
 import {
   buildRentLedger,
   overdueEntries,
@@ -14,7 +15,7 @@ import {
   RENT_DUE_DAY,
 } from "@/lib/rent-ledger";
 import { splitUtilityBillTransactions } from "@/lib/utility-bill-split";
-import { isPaymentMonth } from "@/lib/payment-month";
+import { isPaymentMonth, paymentMonthRange } from "@/lib/payment-month";
 import { numericRentRates, rentTermsDueAmount, resolveRentTermsForMonth } from "@/lib/rent-terms";
 
 function monthRange(now: Date) {
@@ -266,12 +267,12 @@ export type AllTenantsData = Awaited<ReturnType<typeof getAllTenantsData>>;
 // of this month's rent status per active lease, rather than the Tenants
 // page's full directory. Former/vacated leases don't owe current rent, so
 // they're excluded here (they still appear on the Tenants page).
-export async function getRentCollectionData(requestedMonth?: string) {
+export async function getRentCollectionData(requestedMonth?: string, tenantLeaseId?: string) {
   const data = await getAllTenantsData();
   const now = dhakaNow();
   const currentMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
   const selectedMonth = isPaymentMonth(requestedMonth) && requestedMonth <= currentMonth ? requestedMonth : currentMonth;
-  const activeTenants = data.tenants.filter((t) => t.leaseStatus === "ACTIVE");
+  const activeTenants = data.tenants.filter((t) => t.leaseStatus === "ACTIVE" && (!tenantLeaseId || t.id === tenantLeaseId));
   const selectedRows = await prisma.rentPayment.findMany({
     where: { tenantLeaseId: { in: activeTenants.map((t) => t.id) }, month: selectedMonth },
     select: {
@@ -290,7 +291,16 @@ export async function getRentCollectionData(requestedMonth?: string) {
     orderBy: { month: "desc" },
     select: { month: true },
   });
+  const trackedMonths = currentMonth >= LEDGER_START_MONTH
+    ? paymentMonthRange(LEDGER_START_MONTH, currentMonth, 600)
+    : [];
   const rowByLease = new Map(selectedRows.map((row) => [row.tenantLeaseId, row]));
+  const printed = await prisma.rentBillPrint.groupBy({
+    by: ["tenantLeaseId"],
+    where: { month: selectedMonth, tenantLeaseId: { in: activeTenants.map((tenant) => tenant.id) } },
+    _max: { revision: true },
+  });
+  const printRevisions = new Map(printed.map((item) => [item.tenantLeaseId, item._max.revision ?? 0]));
   const [year, monthNumber] = selectedMonth.split("-").map(Number);
 
   const payments = activeTenants.flatMap((tenant) => {
@@ -318,6 +328,7 @@ export async function getRentCollectionData(requestedMonth?: string) {
       currentPaidAt: row?.paidAt ?? null,
       selectedPaidAmount: paidAmount,
       selectedDueAmount: dueAmount,
+      printRevision: printRevisions.get(tenant.id) ?? 0,
     }];
   });
   const totalDue = payments.reduce((sum, payment) => sum + payment.selectedDueAmount, 0);
@@ -331,7 +342,7 @@ export async function getRentCollectionData(requestedMonth?: string) {
     totalRemaining,
     collectionRate: payments.length > 0 ? Math.round((settledCount / payments.length) * 100) : 0,
     selectedMonth,
-    availableMonths: Array.from(new Set([currentMonth, ...recordedMonths.map((row) => row.month)])).sort().reverse(),
+    availableMonths: Array.from(new Set([currentMonth, ...trackedMonths, ...recordedMonths.map((row) => row.month)])).sort().reverse(),
   };
 }
 
@@ -372,6 +383,7 @@ export async function getTenantProfile(leaseId: string) {
           },
         },
         rentRates: { orderBy: { effectiveMonth: "asc" } },
+        utilityBillDefaults: true,
         documents: { orderBy: { uploadedAt: "desc" } },
         downpaymentAdjustments: {
           orderBy: { createdAt: "desc" },
@@ -405,6 +417,7 @@ export async function getTenantProfile(leaseId: string) {
       status: true,
       paidByCompany: true,
       meterReading: true,
+      previousMeterReadingOverride: true,
       transactions: { orderBy: { date: "desc" }, select: { type: true, amount: true, method: true, date: true } },
     },
   });
@@ -416,22 +429,9 @@ export async function getTenantProfile(leaseId: string) {
       dueDate: b.dueDate,
       createdAt: b.createdAt,
       meterReading: b.meterReading != null ? Number(b.meterReading) : null,
+      previousMeterReadingOverride: b.previousMeterReadingOverride == null ? null : Number(b.previousMeterReadingOverride),
     }))
   );
-  const previousElectricityReadingByUnit = Object.fromEntries(
-    latestElectricityReadingByUnit(
-      unitUtilityBills.map((b) => ({
-        id: b.id,
-        type: b.type,
-        unitId: lease.unitId,
-        month: b.month,
-        dueDate: b.dueDate,
-        createdAt: b.createdAt,
-        meterReading: b.meterReading != null ? Number(b.meterReading) : null,
-      }))
-    )
-  );
-
   // Ended leases stop owing rent the day they left — same reasoning as
   // getAllTenantsData: build the ledger only through when they were actually
   // still renting, not all the way to today.
@@ -550,6 +550,7 @@ export async function getTenantProfile(leaseId: string) {
     nidNumber: lease.tenant.nidNumber,
     businessRegistrationNumber: lease.tenant.businessRegistrationNumber,
     leaseStatus: lease.status,
+    utilityBillDefaults: serializeUtilityBillDefaults(lease.utilityBillDefaults),
     propertyId: lease.unit.unitType.property.id,
     propertyName: lease.unit.unitType.property.name,
     unitId: lease.unitId,
@@ -628,11 +629,11 @@ export async function getTenantProfile(leaseId: string) {
         tenantLeaseId: lease.status === "ACTIVE" ? lease.id : null,
         propertyId: lease.unit.unitType.property.id,
         meterReading: b.meterReading != null ? Number(b.meterReading) : null,
+        previousMeterReadingOverride: b.previousMeterReadingOverride == null ? null : Number(b.previousMeterReadingOverride),
         previousMeterReading: unitConsumptionByBillId.get(b.id)?.previousReading ?? null,
         consumptionUnits: unitConsumptionByBillId.get(b.id)?.consumption ?? null,
       };
     }),
-    previousElectricityReadingByUnit,
     // Every time rent was settled by drawing down the deposit instead of a
     // real cash payment (round 16's "adjust from downpayment" mode) — this
     // is the ledger that explains initialDownpaymentAmount → currentDownpaymentBalance.

@@ -1,10 +1,12 @@
-// Meter-reading based electricity consumption — the taka amount on an
-// ELECTRICITY bill is still entered by hand from the real bill (tariffs are
-// tiered, not a flat rate), but the meter reading is cumulative, so how many
-// units were actually used a given month is always "this reading minus the
-// previous month's own reading for the same unit". Nothing stores the
-// consumption number itself — it's derived fresh every time from the chain
-// of readings, so it can never drift out of sync with the readings.
+// Readings are cumulative. A bill can store its own previous reading
+// without changing how later readings are chained.
+export function electricityAmountAtRate(units: number | null, unitRate: string) {
+  const rate = Number(unitRate);
+  const total = (units ?? 0) * rate;
+  if (units == null || units <= 0 || rate <= 0 || !Number.isFinite(total)) return "";
+  const rounded = total.toFixed(2);
+  return Number(rounded) > 0 ? rounded : "";
+}
 
 type ReadingBill = {
   id: string;
@@ -18,6 +20,7 @@ type ReadingBill = {
   // reading (even producing negative consumption).
   createdAt: Date;
   meterReading: number | null;
+  previousMeterReadingOverride?: number | null;
 };
 
 function unitKey(unitId: string | null) {
@@ -42,7 +45,7 @@ export function attachElectricityConsumption<T extends ReadingBill>(
 
   for (const b of sorted) {
     const key = unitKey(b.unitId);
-    const previousReading = lastReadingByUnit.get(key) ?? null;
+    const previousReading = b.previousMeterReadingOverride ?? lastReadingByUnit.get(key) ?? null;
     const consumption =
       b.meterReading != null && previousReading != null ? b.meterReading - previousReading : null;
     result.set(b.id, { previousReading, consumption });

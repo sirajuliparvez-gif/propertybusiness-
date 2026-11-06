@@ -1,8 +1,8 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { useLocale, useTranslations } from "next-intl";
-import { Printer, Search } from "lucide-react";
+import { useTranslations } from "next-intl";
+import { Search } from "lucide-react";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Link } from "@/i18n/navigation";
 import {
@@ -17,9 +17,8 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { InitialAvatar } from "@/components/properties/initial-avatar";
 import { StatusPill, isRentSettled, rentPillStatus } from "@/components/properties/status-pill";
-import { RecordTenantRentPaymentDialog } from "@/components/properties/record-tenant-rent-payment-dialog";
-import { formatTaka, formatDate } from "@/lib/format";
-import { paymentMethodLabel } from "@/lib/payment-method";
+import { RentBillRowActions } from "@/components/properties/rent-bill-row-actions";
+import { formatTaka } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import type { RentCollectionData } from "@/lib/tenants-data";
 
@@ -29,13 +28,15 @@ const ALL_PROPERTIES = "ALL";
 export function RentCollectionTable({
   payments,
   selectedMonth,
+  tenantLeaseId,
 }: {
   payments: RentCollectionData["payments"];
   selectedMonth: string;
+  tenantLeaseId?: string;
 }) {
   const t = useTranslations("Properties");
-  const locale = useLocale();
-  const [filter, setFilter] = useState<Filter>("pending");
+  const arrears = useTranslations("RentArrears");
+  const [filter, setFilter] = useState<Filter>(tenantLeaseId ? "all" : "pending");
   const [propertyFilter, setPropertyFilter] = useState(ALL_PROPERTIES);
   const [query, setQuery] = useState("");
   const [dateFrom, setDateFrom] = useState("");
@@ -144,7 +145,14 @@ export function RentCollectionTable({
               className="text-xs"
             />
           </InputGroup>
-
+        </div>
+      </div>
+      <details className="text-sm">
+        <summary className="w-fit cursor-pointer text-muted-foreground">
+          {arrears("moreFilters")}
+          {dateFrom || dateTo || propertyFilter !== ALL_PROPERTIES ? ` · ${t("rentFiltersApplied")}` : null}
+        </summary>
+        <div className="mt-2 flex flex-wrap items-center gap-2">
           <Input
             type="date"
             value={dateFrom}
@@ -198,7 +206,7 @@ export function RentCollectionTable({
             </Select>
           ) : null}
         </div>
-      </div>
+      </details>
 
       {filtered.length === 0 ? (
         <p className="py-8 text-center text-sm text-muted-foreground">{t("noRentSearchResults")}</p>
@@ -210,16 +218,14 @@ export function RentCollectionTable({
               <TableHead>{t("propertyLabel")}</TableHead>
               <TableHead>{t("unit")}</TableHead>
               <TableHead className="text-right">{t("rentAmountColumn")}</TableHead>
-              <TableHead>{t("rentDueDateColumn")}</TableHead>
-              <TableHead>{t("paidDate")}</TableHead>
-              <TableHead>{t("paymentMethod")}</TableHead>
+              <TableHead className="text-right">{t("invoiceSimplePaid")}</TableHead>
+              <TableHead className="text-right">{t("remaining")}</TableHead>
               <TableHead>{t("status")}</TableHead>
               <TableHead className="sticky right-0 bg-background text-right">{t("actions")}</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {filtered.map((p) => {
-              const settled = isRentSettled(p.rentStatus, p.overdueAmount);
               return (
                 <TableRow key={p.id} className={p.pastDueAmount > 0 ? "bg-destructive/5" : undefined}>
                   <TableCell>
@@ -243,20 +249,13 @@ export function RentCollectionTable({
                   </TableCell>
                   <TableCell className="font-mono text-muted-foreground">{p.unitLabel}</TableCell>
                   <TableCell className="text-right font-mono tabular-nums">
-                    {formatTaka(p.monthlyRentAmount + p.serviceChargeAmount)}
+                    {formatTaka(p.selectedDueAmount, 2)}
                   </TableCell>
-                  <TableCell className="font-mono text-muted-foreground">
-                    {p.currentDueDate ? formatDate(p.currentDueDate, locale) : "—"}
+                  <TableCell className="text-right font-mono tabular-nums">
+                    {formatTaka(p.selectedPaidAmount, 2)}
                   </TableCell>
-                  <TableCell className="font-mono text-muted-foreground">
-                    {p.currentPaidAt ? formatDate(p.currentPaidAt, locale) : "—"}
-                  </TableCell>
-                  <TableCell>
-                    {p.rentStatus === "ADJUSTED_FROM_DOWNPAYMENT" ? (
-                      <span className="text-xs font-medium text-primary">{t("adjustFromDownpayment")}</span>
-                    ) : (
-                      <span className="text-muted-foreground">{paymentMethodLabel(t, p.paymentMethod)}</span>
-                    )}
+                  <TableCell className={cn("text-right font-mono tabular-nums", p.overdueAmount > 0 && "font-semibold text-destructive")}>
+                    {formatTaka(p.overdueAmount, 2)}
                   </TableCell>
                   <TableCell>
                     <div className="flex flex-col gap-0.5">
@@ -269,38 +268,7 @@ export function RentCollectionTable({
                     </div>
                   </TableCell>
                   <TableCell className="sticky right-0 bg-background text-right">
-                    <div className="flex items-center justify-end gap-1.5">
-                      <Button
-                        variant="outline"
-                        size="icon-sm"
-                        title={t("invoiceLabel")}
-                        render={<Link href={`/tenants/${p.id}/invoice?month=${selectedMonth}`} />}
-                        nativeButton={false}
-                        className="border-primary/40 text-primary hover:bg-primary/10"
-                      >
-                        <Printer className="size-3.5" />
-                        <span className="sr-only">{t("invoiceLabel")}</span>
-                      </Button>
-                      <RecordTenantRentPaymentDialog
-                        propertyId={p.propertyId}
-                        tenantLeaseId={p.id}
-                        tenantName={p.tenantName}
-                        propertyName={p.propertyName}
-                        unitLabel={p.unitLabel}
-                        monthlyRentAmount={p.monthlyRentAmount}
-                        currentDownpaymentBalance={p.currentDownpaymentBalance}
-                        serviceChargeType={p.serviceChargeType}
-                        serviceChargeValue={p.serviceChargeValue}
-                        rentRates={p.rentRates}
-                        paymentProgress={p.paymentProgress}
-                        overdueMonths={p.overdueMonths}
-                        monthSettled={settled}
-                        returnTo={`/rent?month=${selectedMonth}`}
-                        initialBillingMonth={selectedMonth}
-                        iconOnly
-                        triggerLabel={settled ? t("advanceRentPayment") : t("collectRent")}
-                      />
-                    </div>
+                    <RentBillRowActions leaseId={p.id} month={selectedMonth} revision={p.printRevision} scoped={!!tenantLeaseId} />
                   </TableCell>
                 </TableRow>
               );

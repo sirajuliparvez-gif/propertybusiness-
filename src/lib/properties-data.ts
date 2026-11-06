@@ -2,7 +2,8 @@ import { dhakaISO, dhakaNow } from "@/lib/dhaka-time";
 import { prisma } from "@/lib/prisma";
 import { isIncomeType } from "@/lib/finance-types";
 import { computeServiceChargeAmount } from "@/lib/service-charge";
-import { attachElectricityConsumption, latestElectricityReadingByUnit } from "@/lib/electricity-consumption";
+import { attachElectricityConsumption } from "@/lib/electricity-consumption";
+import { serializeUtilityBillDefaults } from "@/lib/utility-bill-defaults";
 import {
   buildRentLedger,
   overdueEntries,
@@ -254,7 +255,7 @@ export async function getPropertyDetail(id: string) {
               // All leases (not just active) — the most recent ended one
               // supplies "last tenant" / "vacant since" info for a vacant unit.
               tenantLeases: {
-                orderBy: { startDate: "desc" },
+                orderBy: [{ startDate: "desc" }, { id: "asc" }],
                 select: {
                   id: true,
                   status: true,
@@ -267,6 +268,7 @@ export async function getPropertyDetail(id: string) {
                   endDate: true,
                   movedOutAt: true,
                   rentRates: { orderBy: { effectiveMonth: "asc" } },
+                  utilityBillDefaults: true,
                   tenant: { select: { name: true, contactInfo: true } },
                   // Full history, not just the latest month — the active
                   // lease's overdueAmount below needs every row to sum
@@ -356,6 +358,7 @@ export async function getPropertyDetail(id: string) {
           status: true,
           paidByCompany: true,
           meterReading: true,
+          previousMeterReadingOverride: true,
           transactions: {
             orderBy: { date: "desc" },
             select: { type: true, amount: true, method: true },
@@ -474,6 +477,7 @@ export async function getPropertyDetail(id: string) {
               downpaymentAmount: Number(activeLease.initialDownpaymentAmount),
               currentDownpaymentBalance: Number(activeLease.currentDownpaymentBalance),
               startDate: activeLease.startDate,
+              utilityDefaults: serializeUtilityBillDefaults(activeLease.utilityBillDefaults),
               endDate: activeLease.endDate,
               // Sum of every month still owing something (real rows AND
               // months nobody ever recorded) — not just the latest month.
@@ -790,6 +794,8 @@ export async function getPropertyDetail(id: string) {
       label: u.label,
       unitTypeLabel: ut.label,
       tenantName: u.tenantName,
+      leaseStart: u.currentTenant ? dhakaISO(u.currentTenant.startDate) : null,
+      utilityDefaults: u.currentTenant?.utilityDefaults,
       ownerRentAmount: u.ownerRentAmount,
       ownerDownpaymentAmount: u.ownerDownpaymentAmount,
       tenantDefaultNightlyRateAmount: u.tenantDefaultNightlyRateAmount,
@@ -818,23 +824,9 @@ export async function getPropertyDetail(id: string) {
     dueDate: b.dueDate,
     createdAt: b.createdAt,
     meterReading: b.meterReading != null ? Number(b.meterReading) : null,
+    previousMeterReadingOverride: b.previousMeterReadingOverride == null ? null : Number(b.previousMeterReadingOverride),
   }));
   const consumptionByBillId = attachElectricityConsumption(electricityBillsForConsumption);
-  // What a brand-new electricity bill entered right now would chain from —
-  // fed to the Add Bill dialog so it can show "আগের রিডিং" and a live
-  // consumption preview before the user even saves.
-  const previousElectricityReadingByUnit = latestElectricityReadingByUnit(
-    property.utilityBills.map((b) => ({
-      id: b.id,
-      type: b.type,
-      unitId: b.unitId,
-      month: b.month,
-      dueDate: b.dueDate,
-      createdAt: b.createdAt,
-      meterReading: b.meterReading != null ? Number(b.meterReading) : null,
-    }))
-  );
-
   const utilityBills = property.utilityBills.map((b) => {
     const split = splitUtilityBillTransactions(
       b.transactions.map((t) => ({ type: t.type, amount: Number(t.amount), method: t.method }))
@@ -859,6 +851,7 @@ export async function getPropertyDetail(id: string) {
       propertyId: property.id,
       propertyName: property.name,
       meterReading: b.meterReading != null ? Number(b.meterReading) : null,
+      previousMeterReadingOverride: b.previousMeterReadingOverride == null ? null : Number(b.previousMeterReadingOverride),
       previousMeterReading: consumptionByBillId.get(b.id)?.previousReading ?? null,
       consumptionUnits: consumptionByBillId.get(b.id)?.consumption ?? null,
     };
@@ -937,7 +930,6 @@ export async function getPropertyDetail(id: string) {
     staff,
     guestStays,
     expenses,
-    previousElectricityReadingByUnit: Object.fromEntries(previousElectricityReadingByUnit),
     utilityBills,
     expectedIncome,
     collectedIncome,

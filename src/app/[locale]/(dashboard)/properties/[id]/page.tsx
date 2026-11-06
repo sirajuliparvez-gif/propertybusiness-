@@ -530,7 +530,6 @@ export default async function PropertyDetailPage({
           <AddUtilityBillDialog
             propertyId={property.id}
             units={property.allUnits}
-            previousElectricityReadingByUnit={property.previousElectricityReadingByUnit}
           />
         </CardHeader>
         <CardContent>

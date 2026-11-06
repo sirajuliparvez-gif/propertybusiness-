@@ -149,6 +149,8 @@ export default async function UtilityBillInvoicePage({ params }: { params: Promi
     GAS: t("utilityTypeGas"),
     ELECTRICITY: t("utilityTypeElectricity"),
     WATER: t("utilityTypeWater"),
+    WASTE: t("utilityTypeWaste"),
+    SECURITY: t("utilityTypeSecurity"),
     OTHER: t("utilityTypeOther"),
   };
   const statusLabel =

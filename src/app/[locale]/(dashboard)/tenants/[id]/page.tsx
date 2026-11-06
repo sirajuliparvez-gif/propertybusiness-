@@ -20,7 +20,6 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { InitialAvatar } from "@/components/properties/initial-avatar";
 import { StatusPill, isRentSettled, rentPillStatus } from "@/components/properties/status-pill";
 import { StatTile } from "@/components/stat-tile";
-import { RecordTenantRentPaymentDialog } from "@/components/properties/record-tenant-rent-payment-dialog";
 import { VacateTenantDialog } from "@/components/properties/vacate-tenant-dialog";
 import { ChangeTenantRentDialog } from "@/components/properties/change-tenant-rent-dialog";
 import { EditTenantDialog } from "@/components/properties/edit-tenant-dialog";
@@ -28,7 +27,7 @@ import { EditRentPaymentDialog } from "@/components/properties/edit-rent-payment
 import { DeleteRentPaymentButton } from "@/components/properties/delete-rent-payment-button";
 import { AddRentArrearsDialog } from "@/components/properties/add-rent-arrears-dialog";
 import { CorrectHistoricalRentDialog } from "@/components/properties/correct-historical-rent-dialog";
-import { AddUtilityBillDialog } from "@/components/properties/add-utility-bill-dialog";
+import { TenantUtilityDefaultsDialog } from "@/components/properties/tenant-utility-defaults-dialog";
 import { UtilityBillsTable } from "@/components/properties/utility-bills-table";
 import { MobileUtilityBillsList } from "@/components/mobile/mobile-utility-bills-list";
 import { getTenantProfile } from "@/lib/tenants-data";
@@ -61,12 +60,8 @@ export default async function TenantProfilePage({
   const previousMonth = previousPaymentMonth(dhakaTodayISO().slice(0, 7));
   const leaseStartMonth = dhakaISO(tenant.startDate).slice(0, 7);
   const previousPayment = tenant.payments.find((payment) => payment.month === previousMonth);
-  const currentPayment = tenant.payments.find((payment) => payment.month === currentMonth);
   const previousMonthSettled = previousPayment
     ? isRentSettled(previousPayment.status, Math.max(0, previousPayment.dueAmount - previousPayment.paidAmount))
-    : false;
-  const currentMonthSettled = currentPayment
-    ? isRentSettled(currentPayment.status, Math.max(0, currentPayment.dueAmount - currentPayment.paidAmount))
     : false;
   const hasDownpaymentHistory =
     tenant.initialDownpaymentAmount > 0 ||
@@ -161,23 +156,10 @@ export default async function TenantProfilePage({
             returnTo={`/tenants/${tenant.id}`}
           />
           {!isFormer ? (
-            <RecordTenantRentPaymentDialog
-              propertyId={tenant.propertyId}
-              tenantLeaseId={tenant.id}
-              tenantName={tenant.tenantName}
-              propertyName={tenant.propertyName}
-              unitLabel={tenant.unitLabel}
-              monthlyRentAmount={tenant.monthlyRentAmount}
-              currentDownpaymentBalance={tenant.currentDownpaymentBalance}
-              serviceChargeType={tenant.serviceChargeType}
-              serviceChargeValue={tenant.serviceChargeValue}
-              rentRates={tenant.rentRates}
-              paymentProgress={tenant.paymentProgress}
-              overdueMonths={tenant.overdueMonths}
-              monthSettled={currentMonthSettled}
-              returnTo={`/tenants/${tenant.id}`}
-              triggerLabel={currentMonthSettled ? t("advanceRentPayment") : t("collectRent")}
-            />
+            <Button variant="outline" render={<Link href={`/rent?tenant=${encodeURIComponent(tenant.id)}`} />} nativeButton={false}>
+              <Wallet className="size-3.5" />
+              {t("openRentCollection")}
+            </Button>
           ) : null}
           {!isFormer && previousMonthSettled ? (
             <Button variant="outline" size="sm" render={<a href="#payment-history" />} nativeButton={false}>
@@ -513,27 +495,22 @@ export default async function TenantProfilePage({
         </Card>
       ) : null}
 
-      <Card id="payment-history" className="scroll-mt-20">
-        <CardHeader className="flex-row items-center justify-between space-y-0">
+      <Card>
+        <CardHeader className="flex-row flex-wrap items-center justify-between gap-2 space-y-0">
           <CardTitle className="text-base">{t("utilityBillsSection")}</CardTitle>
           {!isFormer ? (
-            <AddUtilityBillDialog
-              propertyId={tenant.propertyId}
-              fixedUnitId={tenant.unitId}
-              returnTo={`/tenants/${tenant.id}`}
-              previousElectricityReadingByUnit={tenant.previousElectricityReadingByUnit}
-            />
+            <TenantUtilityDefaultsDialog leaseId={tenant.id} defaults={tenant.utilityBillDefaults} />
           ) : null}
         </CardHeader>
         <CardContent>
-          <MobileUtilityBillsList bills={tenant.utilityBills} returnTo={`/tenants/${tenant.id}`} />
+          <MobileUtilityBillsList bills={tenant.utilityBills} returnTo={`/tenants/${tenant.id}`} allowPayment={false} />
           <div className="hidden md:block">
-            <UtilityBillsTable bills={tenant.utilityBills} returnTo={`/tenants/${tenant.id}`} />
+            <UtilityBillsTable bills={tenant.utilityBills} returnTo={`/tenants/${tenant.id}`} allowPayment={false} />
           </div>
         </CardContent>
       </Card>
 
-      <Card>
+      <Card id="payment-history" className="scroll-mt-20">
         <CardHeader>
           <CardTitle className="text-base">
             {t("paymentHistorySection")} — {tenant.payments.length} {t("months")}

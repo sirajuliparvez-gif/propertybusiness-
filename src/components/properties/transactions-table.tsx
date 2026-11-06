@@ -255,6 +255,11 @@ export function TransactionsTable({ transactions }: { transactions: AllTransacti
                   {tx.notes ?? "—"}
                 </TableCell>
                 <TableCell className="text-right">
+                  {tx.receiptHref ? (
+                    <Button size="sm" variant="outline" render={<Link href={tx.receiptHref} />} nativeButton={false}>
+                      {t("moneyReceipt")}
+                    </Button>
+                  ) : null}
                   {tx.canEditDirectly ? (
                     <div className="flex items-center justify-end gap-1">
                       <EditTransactionDialog transaction={tx} compact />

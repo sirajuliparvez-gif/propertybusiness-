@@ -2,13 +2,12 @@
 
 import { useMemo, useState } from "react";
 import { useTranslations } from "next-intl";
-import { Printer, Search } from "lucide-react";
-import { Link } from "@/i18n/navigation";
+import { Search } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { InputGroup, InputGroupAddon, InputGroupInput } from "@/components/ui/input-group";
 import { InitialAvatar } from "@/components/properties/initial-avatar";
 import { StatusPill, isRentSettled, rentPillStatus } from "@/components/properties/status-pill";
-import { RecordTenantRentPaymentDialog } from "@/components/properties/record-tenant-rent-payment-dialog";
+import { RentBillRowActions } from "@/components/properties/rent-bill-row-actions";
 import { formatTaka } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import type { RentCollectionData } from "@/lib/tenants-data";
@@ -24,9 +23,10 @@ export function MobileRentList({
   collectionRate,
   selectedMonth,
   availableMonths,
-}: RentCollectionData) {
+  tenantLeaseId,
+}: RentCollectionData & { tenantLeaseId?: string }) {
   const t = useTranslations("Properties");
-  const [filter, setFilter] = useState<Filter>("pending");
+  const [filter, setFilter] = useState<Filter>(tenantLeaseId ? "all" : "pending");
   const [query, setQuery] = useState("");
 
   const rentStatusLabels = {
@@ -77,7 +77,7 @@ export function MobileRentList({
           <h1 className="text-2xl font-bold tracking-tight">{t("rentCollectionTitle")}</h1>
           <p className="text-sm text-muted-foreground">{t("rentPageSubtitle")}</p>
         </div>
-        <RentMonthSelect months={availableMonths} selectedMonth={selectedMonth} />
+        <RentMonthSelect months={availableMonths} selectedMonth={selectedMonth} tenantLeaseId={tenantLeaseId} />
       </div>
 
       <Card>
@@ -146,67 +146,26 @@ export function MobileRentList({
       ) : (
         <Card className="overflow-hidden p-0">
           <ul className="divide-y">
-            {filtered.map((p) => {
-              const settled = isRentSettled(p.rentStatus, p.overdueAmount);
-              return (
-              <li key={p.id} className={cn("flex items-stretch", p.pastDueAmount > 0 ? "bg-destructive/5" : undefined)}>
-                <div className="min-w-0 flex-1">
-                <RecordTenantRentPaymentDialog
-                  propertyId={p.propertyId}
-                  tenantLeaseId={p.id}
-                  tenantName={p.tenantName}
-                  propertyName={p.propertyName}
-                  unitLabel={p.unitLabel}
-                  monthlyRentAmount={p.monthlyRentAmount}
-                  currentDownpaymentBalance={p.currentDownpaymentBalance}
-                  serviceChargeType={p.serviceChargeType}
-                  serviceChargeValue={p.serviceChargeValue}
-                  rentRates={p.rentRates}
-                  paymentProgress={p.paymentProgress}
-                  overdueMonths={p.overdueMonths}
-                  monthSettled={settled}
-                  returnTo={`/rent?month=${selectedMonth}`}
-                  initialBillingMonth={selectedMonth}
-                  variant="row"
-                  triggerLabel={settled ? t("advanceRentPayment") : t("collectRent")}
-                  rowContent={
-                    <>
-                      <InitialAvatar name={p.tenantName} />
-                      <div className="min-w-0 flex-1">
-                        <p className="truncate text-sm font-medium">{p.tenantName}</p>
-                        <p className="truncate text-xs text-muted-foreground">
-                          {p.propertyName} · {p.unitLabel}
-                        </p>
-                      </div>
-                      <div className="shrink-0 text-right">
-                        <p className="font-mono text-sm font-semibold tabular-nums">
-                          {formatTaka(p.monthlyRentAmount + p.serviceChargeAmount)}
-                        </p>
-                        <StatusPill status={rentPillStatus(p.rentStatus, p.rentPastDue)} labels={rentStatusLabels} />
-                        <p className="mt-0.5 text-[10px] text-muted-foreground">
-                          {settled ? t("advanceRentPayment") : t("collectRent")}
-                        </p>
-                        {p.pastDueMonthsCount > 1 ? (
-                          <p className="text-xs font-medium text-destructive">
-                            {t("monthsOverdueCount", { count: p.pastDueMonthsCount })}
-                          </p>
-                        ) : null}
-                      </div>
-                    </>
-                  }
-                />
+            {filtered.map((p) => (
+              <li key={p.id} className={cn("space-y-2 px-4 py-3", p.pastDueAmount > 0 ? "bg-destructive/5" : undefined)}>
+                <div className="flex min-w-0 items-center gap-3">
+                  <InitialAvatar name={p.tenantName} />
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-sm font-medium">{p.tenantName}</p>
+                    <p className="truncate text-xs text-muted-foreground">{p.propertyName} · {p.unitLabel}</p>
+                  </div>
+                  <div className="shrink-0 text-right">
+                    <p className="font-mono text-sm font-semibold tabular-nums">
+                      {p.overdueAmount > 0
+                        ? `${t("remaining")} ${formatTaka(p.overdueAmount, 2)}`
+                        : formatTaka(p.selectedDueAmount, 2)}
+                    </p>
+                    <StatusPill status={rentPillStatus(p.rentStatus, p.rentPastDue)} labels={rentStatusLabels} />
+                  </div>
                 </div>
-                <Link
-                  href={`/tenants/${p.id}/invoice?month=${selectedMonth}`}
-                  title={t("invoiceLabel")}
-                  className="flex w-12 shrink-0 items-center justify-center border-l text-primary transition-colors active:bg-muted/60"
-                >
-                  <Printer className="size-4" />
-                  <span className="sr-only">{t("invoiceLabel")}</span>
-                </Link>
+                <RentBillRowActions leaseId={p.id} month={selectedMonth} revision={p.printRevision} scoped={!!tenantLeaseId} />
               </li>
-              );
-            })}
+            ))}
           </ul>
         </Card>
       )}

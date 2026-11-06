@@ -51,7 +51,7 @@ export function RentArrearsLedger({ tenants, monthLabels, selectedTenant, arrear
             <tbody>{tenant.months.map((month) => <tr key={month.month}><th scope="row">{monthLabels[month.month]}</th><td>{formatTaka(month.due)}</td><td>{formatTaka(month.collected)}{month.adjusted > 0 && <small>{p("monthlyReportAdjusted")}: {formatTaka(month.adjusted)}</small>}</td><td>{formatTaka(month.remaining)}</td></tr>)}</tbody>
             <tfoot><tr><th scope="row">{p("total")}</th><td>{formatTaka(tenant.totals.due)}</td><td>{formatTaka(tenant.totals.collected)}</td><td>{formatTaka(tenant.totals.remaining)}</td></tr></tfoot>
           </table></div>
-          {expanded.has(tenant.id) && tenant.totals.remaining > 0 ? (
+          {tenant.totals.remaining > 0 ? (
             <div className="flex justify-end pt-3 print:hidden">
               <RecordTenantRentPaymentDialog
                 key={tenant.months.map(({ month, remaining }) => `${month}:${remaining}`).join(",")}

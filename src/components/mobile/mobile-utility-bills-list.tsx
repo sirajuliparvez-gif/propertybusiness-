@@ -23,9 +23,13 @@ type Filter = "all" | "unpaid" | "paid";
 
 export function MobileUtilityBillsList({
   bills,
+  unpaidOnly = false,
+  allowPayment = true,
   returnTo = "/utility-bills",
 }: {
   bills: UtilityBillRow[];
+  unpaidOnly?: boolean;
+  allowPayment?: boolean;
   returnTo?: string;
 }) {
   const t = useTranslations("Properties");
@@ -43,7 +47,7 @@ export function MobileUtilityBillsList({
   }, [bills, filter, query]);
 
   if (bills.length === 0) {
-    return <p className="py-8 text-center text-sm text-muted-foreground md:hidden">{t("noUtilityBills")}</p>;
+    return <p className="py-8 text-center text-sm text-muted-foreground md:hidden">{t(unpaidOnly ? "noUtilityArrears" : "noUtilityBills")}</p>;
   }
 
   const filters: { key: Filter; label: string }[] = [
@@ -64,7 +68,7 @@ export function MobileUtilityBillsList({
           placeholder={t("utilitySearchPlaceholder")}
         />
       </InputGroup>
-      <div className="flex flex-wrap gap-1.5">
+      {!unpaidOnly && <div className="flex flex-wrap gap-1.5">
         {filters.map((f) => (
           <button
             key={f.key}
@@ -80,10 +84,10 @@ export function MobileUtilityBillsList({
             {f.label}
           </button>
         ))}
-      </div>
+      </div>}
 
       {filtered.length === 0 ? (
-        <p className="py-8 text-center text-sm text-muted-foreground">{t("noUtilityBills")}</p>
+        <p className="py-8 text-center text-sm text-muted-foreground">{t(unpaidOnly ? "noUtilityArrears" : "noUtilityBills")}</p>
       ) : (
         <Card className="overflow-hidden p-0">
           <ul className="divide-y">
@@ -105,7 +109,7 @@ export function MobileUtilityBillsList({
                     </p>
                   </div>
                   <div className="shrink-0 text-right">
-                    <p className="font-mono text-sm font-semibold tabular-nums">{formatTaka(b.amount)}</p>
+                    <p className="font-mono text-sm font-semibold tabular-nums">{unpaidOnly ? formatTaka(b.amount - b.paidAmount, 2) : formatTaka(b.amount)}</p>
                     <Badge
                       className={cn(
                         "border-transparent",
@@ -124,7 +128,7 @@ export function MobileUtilityBillsList({
               return (
                 <li key={b.id} className="flex items-stretch">
                   <div className="min-w-0 flex-1">
-                    {b.status !== "PAID" ? (
+                    {allowPayment && b.status !== "PAID" ? (
                       <PayUtilityBillButton
                         billId={b.id}
                         propertyId={b.propertyId}

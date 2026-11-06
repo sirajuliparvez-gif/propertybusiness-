@@ -15,6 +15,8 @@ const utilityTypes = [
   ["ELECTRICITY", "utilityTypeElectricity"],
   ["WATER", "utilityTypeWater"],
   ["GAS", "utilityTypeGas"],
+  ["WASTE", "utilityTypeWaste"],
+  ["SECURITY", "utilityTypeSecurity"],
   ["OTHER", "utilityTypeOther"],
 ] as const;
 const filterClass = "h-10 w-full rounded-lg border bg-card px-3 text-sm sm:w-auto";
@@ -38,7 +40,7 @@ export default async function MonthlyMarketReportPage({
   const otherTransactions = report?.otherTransactions.filter((entry) =>
     entry.type !== "PAYROLL_EXPENSE" && entry.type !== "UTILITY_EXPENSE"
   ) ?? [];
-  const utilityCosts = { ELECTRICITY: 0, WATER: 0, GAS: 0, OTHER: 0 };
+  const utilityCosts = { ELECTRICITY: 0, WATER: 0, GAS: 0, WASTE: 0, SECURITY: 0, OTHER: 0 };
   for (const entry of utilities) {
     utilityCosts[entry.utilityBill?.type ?? "OTHER"] += Math.round(entry.outgoing * 100);
   }

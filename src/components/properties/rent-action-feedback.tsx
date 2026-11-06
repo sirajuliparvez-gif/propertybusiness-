@@ -9,6 +9,7 @@ import { formatTaka, monthLabel } from "@/lib/format";
 import type { RentActionResult } from "@/lib/rent-action-feedback";
 
 const RESULTS = new Set<RentActionResult>([
+  "invoicePaid",
   "recorded",
   "alreadyPaid",
   "advance",
@@ -39,7 +40,9 @@ export function RentActionFeedback() {
     const monthText = month ? monthLabel(month, locale) : "";
     const amountText = amount > 0 ? formatTaka(amount) : "";
     const message =
-      resultValue === "multiMonth"
+      resultValue === "invoicePaid"
+        ? t("invoicePaymentSaved", { amount: formatTaka(amount, 2) })
+        : resultValue === "multiMonth"
         ? t("rentFeedbackMultiMonth", { count, amount: formatTaka(amount, 2) })
         : resultValue === "recorded"
         ? t("rentFeedbackRecorded", { month: monthText, amount: amountText })

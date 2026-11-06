@@ -133,7 +133,7 @@ export async function generateMonthlyWorkbook(
       // not just what happens to exist within this one month.
       prisma.utilityBill.findMany({
         where: { propertyId, type: "ELECTRICITY" },
-        select: { id: true, unitId: true, month: true, dueDate: true, createdAt: true, meterReading: true },
+        select: { id: true, unitId: true, month: true, dueDate: true, createdAt: true, meterReading: true, previousMeterReadingOverride: true },
       }),
     ]);
   if (!property) throw new Error("প্রপার্টি পাওয়া যায়নি");
@@ -152,6 +152,7 @@ export async function generateMonthlyWorkbook(
     dueDate: b.dueDate,
     createdAt: b.createdAt,
     meterReading: b.meterReading != null ? Number(b.meterReading) : null,
+    previousMeterReadingOverride: b.previousMeterReadingOverride == null ? null : Number(b.previousMeterReadingOverride),
   }));
   const electricityConsumptionByBillId = attachElectricityConsumption(electricityBillsForConsumption);
   // What a brand-new electricity bill added THIS month would chain from —
