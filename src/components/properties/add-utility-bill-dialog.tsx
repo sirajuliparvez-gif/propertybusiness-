@@ -25,7 +25,8 @@ import {
 import { Checkbox } from "@/components/ui/checkbox";
 import { FormField } from "@/components/properties/form-field";
 import { PreviousMeterReadingField } from "@/components/properties/previous-meter-reading-field";
-import { addTenantUtilityBills, addUtilityBill, getPreviousTenantMeterReading } from "@/lib/actions/utility-bills";
+import { addTenantUtilityBills, addUtilityBill, getPreviousPropertyMeterReading, getPreviousTenantMeterReading } from "@/lib/actions/utility-bills";
+import { electricityAmountAtRate } from "@/lib/electricity-consumption";
 import { formatDate, formatTaka, monthLabel } from "@/lib/format";
 import { toast } from "sonner";
 import { useRouter } from "next/navigation";
@@ -39,7 +40,6 @@ type PropertyBillFields = {
   units?: { id: string; label: string; unitTypeLabel: string; tenantName?: string | null }[];
   fixedUnitId?: string;
   returnTo?: string;
-  previousElectricityReadingByUnit?: Record<string, number>;
 };
 
 type BillFormProps =
@@ -93,7 +93,7 @@ export function InvoiceAddUtilityBillDialog({ leaseId, month, compact = false }:
 export function AddUtilityBillForm(props: BillFormProps) {
   const { tenantBilling, onDraftChange, onSaved } = props;
   const property = "propertyId" in props ? props : undefined;
-  const { propertyId, units = [], fixedUnitId, returnTo, previousElectricityReadingByUnit = {} } = property ?? {};
+  const { propertyId, units = [], fixedUnitId, returnTo } = property ?? {};
   const t = useTranslations("Properties");
   const locale = useLocale();
   const [isPending, startTransition] = useTransition();
@@ -120,30 +120,33 @@ export function AddUtilityBillForm(props: BillFormProps) {
 
   const readingDate = draftDate ?? defaultDate;
   const leaseId = tenantBilling?.leaseId;
+  const effectiveUnitId = fixedUnitId ?? (unitId === NONE_VALUE ? "" : unitId);
+  const readingKey = JSON.stringify([leaseId, propertyId, effectiveUnitId, readingDate]);
   const [readingRefresh, setReadingRefresh] = useState(0);
   const [readingLookup, setReadingLookup] = useState<{
-    date: string;
+    key: string;
     previous: Awaited<ReturnType<typeof getPreviousTenantMeterReading>>;
     failed?: boolean;
   } | null>(null);
 
   useEffect(() => {
-    if (!leaseId || type !== "ELECTRICITY" || !readingDate) return;
+    if (type !== "ELECTRICITY" || !readingDate || (!leaseId && !propertyId)) return;
     let current = true;
-    getPreviousTenantMeterReading(leaseId, readingDate).then(
+    const lookup = leaseId ? getPreviousTenantMeterReading(leaseId, readingDate)
+      : getPreviousPropertyMeterReading(propertyId!, effectiveUnitId, readingDate);
+    lookup.then(
       (previous) => {
-        if (current) setReadingLookup({ date: readingDate, previous });
+        if (current) setReadingLookup({ key: readingKey, previous });
       },
       () => {
-        if (current) setReadingLookup({ date: readingDate, previous: null, failed: true });
+        if (current) setReadingLookup({ key: readingKey, previous: null, failed: true });
       },
     );
     return () => { current = false; };
-  }, [leaseId, readingDate, readingRefresh, type]);
+  }, [leaseId, propertyId, effectiveUnitId, readingDate, readingKey, readingRefresh, type]);
 
-  const effectiveUnitId = fixedUnitId ?? (unitId === NONE_VALUE ? "" : unitId);
-  let previousReading: number | null = previousElectricityReadingByUnit[effectiveUnitId || "__property__"] ?? null;
-  const lookupForDate = readingLookup?.date === readingDate ? readingLookup : null;
+  const lookupForDate = readingLookup?.key === readingKey ? readingLookup : null;
+  let previousReading = lookupForDate?.previous?.reading ?? null;
   if (tenantBilling) {
     let previous = lookupForDate?.previous ?? null;
     for (const { data } of queuedBills) {
@@ -161,12 +164,8 @@ export function AddUtilityBillForm(props: BillFormProps) {
   const consumption =
     meterReading && effectivePreviousReading != null ? Number(meterReading) - effectivePreviousReading : null;
 
-  const usingUnitRate = !!tenantBilling && type === "ELECTRICITY" && unitRate !== "";
-  const rateTotal = (consumption ?? 0) * Number(unitRate);
-  const calculatedAmount = usingUnitRate && (consumption ?? 0) > 0 &&
-    Number.isFinite(rateTotal) && rateTotal > 0
-    ? rateTotal.toFixed(2)
-    : "";
+  const usingUnitRate = type === "ELECTRICITY" && unitRate !== "";
+  const calculatedAmount = usingUnitRate ? electricityAmountAtRate(consumption, unitRate) : "";
   const billAmount = usingUnitRate ? calculatedAmount : draftAmount;
   const invalidCalculation = usingUnitRate && (!calculatedAmount || Number(calculatedAmount) <= 0);
 
@@ -284,7 +283,7 @@ export function AddUtilityBillForm(props: BillFormProps) {
       {type === "ELECTRICITY" ? (
         <div className="grid gap-3 sm:col-span-2 sm:grid-cols-2">
           <PreviousMeterReadingField id="utilityBillPreviousMeterReading" automatic={previousReading}
-            manual={manualPreviousReading} onChange={setManualPreviousReading} />
+            manual={manualPreviousReading} onChange={setManualPreviousReading} recordAutomatic={usingUnitRate} />
           <FormField label={t("currentMeterReading")} htmlFor="utilityBillMeterReading">
             <Input
               id="utilityBillMeterReading"
@@ -296,12 +295,10 @@ export function AddUtilityBillForm(props: BillFormProps) {
               onChange={(event) => setMeterReading(event.target.value)}
             />
           </FormField>
-          {tenantBilling ? (
-            <FormField label={t("electricityUnitRate")} htmlFor="utilityBillUnitRate" className="sm:col-span-2">
-              <Input id="utilityBillUnitRate" type="number" step="any" min={0} value={unitRate}
-                onChange={(event) => setUnitRate(event.target.value)} />
-            </FormField>
-          ) : null}
+          <FormField label={t("electricityUnitRate")} htmlFor="utilityBillUnitRate" className="sm:col-span-2">
+            <Input id="utilityBillUnitRate" name="electricityUnitRate" type="number" step="any" min={0} value={unitRate}
+              onChange={(event) => setUnitRate(event.target.value)} />
+          </FormField>
           <p aria-live="polite" className="text-xs text-muted-foreground sm:col-span-2">
             {calculatedAmount
               ? t("electricityRateCalculation", { units: consumption ?? 0, amount: formatTaka(Number(calculatedAmount), 2) })
@@ -309,7 +306,7 @@ export function AddUtilityBillForm(props: BillFormProps) {
                 ? t("consumptionPreview", { units: consumption })
               : effectivePreviousReading == null
                 ? t(lookupForDate?.failed ? "meterReadingLookupFailed"
-                  : tenantBilling && !lookupForDate && readingDate ? "meterReadingLoading" : "noPreviousMeterReading")
+                  : !lookupForDate && readingDate ? "meterReadingLoading" : "noPreviousMeterReading")
                 : null}
           </p>
           {invalidCalculation ? <p className="text-xs text-destructive sm:col-span-2">{t("electricityRateNeedsReadings")}</p> : null}
@@ -319,16 +316,15 @@ export function AddUtilityBillForm(props: BillFormProps) {
       <FormField label={t(tenantBilling ? "invoiceUtilityBillAmount" : "amount")} htmlFor="utilityBillAmount" required>
         <Input id="utilityBillAmount" name="amount" type="number" step="any" min={tenantBilling ? 0.01 : 0}
           required={!queuedBills.length || !!meterReading}
-          value={tenantBilling ? billAmount : undefined}
+          value={billAmount}
           readOnly={usingUnitRate}
-          onChange={tenantBilling ? (event) => setDraftAmount(event.target.value) : undefined}
+          onChange={(event) => setDraftAmount(event.target.value)}
         />
       </FormField>
       <FormField label={t("billDueDate")} htmlFor="utilityBillDueDate" required>
         <Input id="utilityBillDueDate" name="dueDate" type="date" min={minDate} max={maxDate} required
-          defaultValue={tenantBilling ? undefined : defaultDate}
-          value={tenantBilling ? draftDate ?? defaultDate : undefined}
-          onInput={tenantBilling ? (event) => setDraftDate(event.currentTarget.value) : undefined}
+          value={readingDate}
+          onChange={(event) => setDraftDate(event.target.value)}
         />
       </FormField>
 
@@ -349,7 +345,7 @@ export function AddUtilityBillForm(props: BillFormProps) {
         <FormField label={t("unitOptional")} htmlFor="utilityBillUnit" className="sm:col-span-2">
           <Select
             value={unitId}
-            onValueChange={(v) => { setUnitId(v ?? NONE_VALUE); setManualPreviousReading(null); }}
+            onValueChange={(v) => { setUnitId(v ?? NONE_VALUE); setManualPreviousReading(null); setMeterReading(""); }}
             items={[
               { value: NONE_VALUE, label: t("noSpecificUnit") },
               ...units.map((u) => ({ value: u.id, label: unitPickerLabel(u) })),
@@ -393,7 +389,7 @@ export function AddUtilityBillForm(props: BillFormProps) {
           <DialogClose render={<Button type="button" variant="outline" />}>
             {t("cancel")}
           </DialogClose>
-          <Button type="submit" disabled={isPending}>
+          <Button type="submit" disabled={isPending || invalidCalculation}>
             {isPending ? <Loader2 className="size-4 animate-spin" /> : null}
             {t("save")}
           </Button>

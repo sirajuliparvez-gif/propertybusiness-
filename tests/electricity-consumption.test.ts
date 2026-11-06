@@ -1,6 +1,6 @@
 import { strict as assert } from "node:assert";
 import test from "node:test";
-import { attachElectricityConsumption } from "@/lib/electricity-consumption";
+import { attachElectricityConsumption, electricityAmountAtRate } from "@/lib/electricity-consumption";
 
 test("a manual previous reading applies only to its own electricity bill", () => {
   const bill = (month: string, meterReading: number, previousMeterReadingOverride?: number) => ({
@@ -12,4 +12,12 @@ test("a manual previous reading applies only to its own electricity bill", () =>
   assert.deepEqual(readings.get("01"), { previousReading: null, consumption: null });
   assert.deepEqual(readings.get("02"), { previousReading: 0, consumption: 40 });
   assert.deepEqual(readings.get("03"), { previousReading: 40, consumption: 20 });
+});
+
+test("a positive unit price calculates the bill and requires usable readings", () => {
+  assert.equal(electricityAmountAtRate(10, "8.50"), "85.00");
+  assert.equal(electricityAmountAtRate(37, "8.50"), "314.50");
+  assert.equal(electricityAmountAtRate(null, "8.50"), "");
+  assert.equal(electricityAmountAtRate(-10, "8.50"), "");
+  assert.equal(electricityAmountAtRate(10, "0"), "");
 });

@@ -1,7 +1,7 @@
 "use client";
 
 import { dhakaTodayISO } from "@/lib/dhaka-time";
-import { useMemo, useState, useTransition } from "react";
+import { useEffect, useMemo, useState, useTransition } from "react";
 import { useTranslations } from "next-intl";
 import { useRouter } from "@/i18n/navigation";
 import { Loader2, Plus } from "lucide-react";
@@ -26,8 +26,10 @@ import {
 import { Checkbox } from "@/components/ui/checkbox";
 import { FormField } from "@/components/properties/form-field";
 import { PreviousMeterReadingField } from "@/components/properties/previous-meter-reading-field";
-import { addUtilityBill } from "@/lib/actions/utility-bills";
+import { addUtilityBill, getPreviousPropertyMeterReading } from "@/lib/actions/utility-bills";
 import type { AllUtilityBillsData } from "@/lib/utility-bills-data";
+import { electricityAmountAtRate } from "@/lib/electricity-consumption";
+import { formatTaka } from "@/lib/format";
 import { unitPickerLabel } from "@/lib/unit-label";
 
 const NONE_VALUE = "NONE";
@@ -49,17 +51,32 @@ export function AddUtilityBillDialogGlobal({
   const [paidByCompany, setPaidByCompany] = useState(false);
   const [meterReading, setMeterReading] = useState("");
   const [manualPreviousReading, setManualPreviousReading] = useState<string | null>(null);
-  const todayValue = dhakaTodayISO();
+  const [open, setOpen] = useState(dismissTo != null);
+  const [unitRate, setUnitRate] = useState("");
+  const [amount, setAmount] = useState("");
+  const [dueDate, setDueDate] = useState(dhakaTodayISO);
+  const [readingLookup, setReadingLookup] = useState<{ key: string; reading: number | null; failed?: boolean } | null>(null);
 
   const effectiveUnitId = unitId === NONE_VALUE ? "" : unitId;
-  const previousReading =
-    properties.find((p) => p.id === propertyId)?.previousElectricityReadingByUnit[
-      effectiveUnitId || "__property__"
-    ] ?? null;
+  const readingKey = JSON.stringify([propertyId, effectiveUnitId, dueDate]);
+  useEffect(() => {
+    if (!open || !propertyId || type !== "ELECTRICITY" || !dueDate) return;
+    let active = true;
+    getPreviousPropertyMeterReading(propertyId, effectiveUnitId, dueDate).then(
+      (result) => { if (active) setReadingLookup({ key: readingKey, reading: result?.reading ?? null }); },
+      () => { if (active) setReadingLookup({ key: readingKey, reading: null, failed: true }); },
+    );
+    return () => { active = false; };
+  }, [open, propertyId, effectiveUnitId, type, dueDate, readingKey]);
+  const lookup = readingLookup?.key === readingKey ? readingLookup : null;
+  const previousReading = lookup?.reading ?? null;
   const effectivePreviousReading = manualPreviousReading == null ? previousReading
     : manualPreviousReading === "" ? null : Number(manualPreviousReading);
   const consumption =
     meterReading && effectivePreviousReading != null ? Number(meterReading) - effectivePreviousReading : null;
+
+  const usingUnitRate = type === "ELECTRICITY" && unitRate !== "";
+  const calculatedAmount = usingUnitRate ? electricityAmountAtRate(consumption, unitRate) : "";
 
   const typeLabels: Record<UtilityType, string> = {
     GAS: t("utilityTypeGas"),
@@ -73,6 +90,7 @@ export function AddUtilityBillDialogGlobal({
     setPaidByCompany(next === "WATER");
     setMeterReading("");
     setManualPreviousReading(null);
+    setUnitRate("");
   }
   const isWater = type === "WATER";
 
@@ -90,16 +108,17 @@ export function AddUtilityBillDialogGlobal({
 
   return (
     <Dialog
-      defaultOpen={dismissTo != null}
-      onOpenChange={(open) => {
-        if (!open && dismissTo) router.replace(dismissTo, { scroll: false });
+      open={open}
+      onOpenChange={(next) => {
+        setOpen(next);
+        if (!next && dismissTo) router.replace(dismissTo, { scroll: false });
       }}
     >
       <DialogTrigger render={<Button size="sm" />}>
         <Plus className="size-3.5" />
         {t("addUtilityBill")}
       </DialogTrigger>
-      <DialogContent>
+      <DialogContent className="max-h-[90dvh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>{t("addUtilityBill")}</DialogTitle>
         </DialogHeader>
@@ -154,53 +173,10 @@ export function AddUtilityBillDialogGlobal({
             </Select>
           </FormField>
 
-          <FormField label={t("amount")} htmlFor="utilityBillAmount" required>
-            <Input id="utilityBillAmount" name="amount" type="number" step="any" min={0} required />
-          </FormField>
-          <FormField label={t("billDueDate")} htmlFor="utilityBillDueDate" required>
-            <Input id="utilityBillDueDate" name="dueDate" type="date" defaultValue={todayValue} required />
-          </FormField>
-
-          {type === "ELECTRICITY" ? (
-            <div className="grid gap-3 sm:col-span-2 sm:grid-cols-2">
-              <PreviousMeterReadingField id="utilityBillGlobalPreviousReading" automatic={previousReading}
-                manual={manualPreviousReading} onChange={setManualPreviousReading} />
-              <FormField label={t("currentMeterReading")} htmlFor="utilityBillMeterReadingGlobal">
-                <Input
-                  id="utilityBillMeterReadingGlobal"
-                  name="meterReading"
-                  type="number"
-                  step="any"
-                  min={manualPreviousReading ? Number(manualPreviousReading) : 0}
-                  value={meterReading}
-                  onChange={(e) => setMeterReading(e.target.value)}
-                />
-                {consumption != null ? (
-                  <p className="mt-1 text-xs text-muted-foreground">
-                    {t("consumptionPreview", { units: consumption })}
-                  </p>
-                ) : null}
-              </FormField>
-            </div>
-          ) : null}
-
-          <label
-            htmlFor="utilityBillPaidByCompanyGlobal"
-            className="flex items-center gap-2 rounded-lg border px-3 py-2 text-sm sm:col-span-2"
-          >
-            <Checkbox
-              id="utilityBillPaidByCompanyGlobal"
-              checked={isWater || paidByCompany}
-              disabled={isWater}
-              onCheckedChange={(checked) => setPaidByCompany(checked === true)}
-            />
-            {isWater ? t("paidByCompanyWaterLocked") : t("paidByCompanyLabel")}
-          </label>
-
           <FormField label={t("unitOptional")} htmlFor="utilityBillUnit" className="sm:col-span-2">
             <Select
               value={unitId}
-              onValueChange={(v) => { setUnitId(v ?? NONE_VALUE); setManualPreviousReading(null); }}
+              onValueChange={(v) => { setUnitId(v ?? NONE_VALUE); setManualPreviousReading(null); setMeterReading(""); }}
               items={[
                 { value: NONE_VALUE, label: t("noSpecificUnit") },
                 ...unitsForProperty.map((u) => ({ value: u.id, label: unitPickerLabel(u) })),
@@ -220,11 +196,67 @@ export function AddUtilityBillDialogGlobal({
             </Select>
           </FormField>
 
+          {type === "ELECTRICITY" ? (
+            <div className="grid gap-3 sm:col-span-2 sm:grid-cols-2">
+              <PreviousMeterReadingField id="utilityBillGlobalPreviousReading" automatic={previousReading}
+                manual={manualPreviousReading} onChange={setManualPreviousReading} recordAutomatic={usingUnitRate} />
+              <FormField label={t("currentMeterReading")} htmlFor="utilityBillMeterReadingGlobal">
+                <Input
+                  id="utilityBillMeterReadingGlobal"
+                  name="meterReading"
+                  type="number"
+                  step="any"
+                  min={manualPreviousReading ? Number(manualPreviousReading) : 0}
+                  value={meterReading}
+                  onChange={(e) => setMeterReading(e.target.value)}
+                />
+              </FormField>
+              <FormField label={t("electricityUnitRate")} htmlFor="utilityBillGlobalUnitRate" className="sm:col-span-2">
+                <Input id="utilityBillGlobalUnitRate" name="electricityUnitRate" type="number" min={0} step="any"
+                  value={unitRate} onChange={(event) => setUnitRate(event.target.value)} />
+              </FormField>
+              <p aria-live="polite" className="text-xs text-muted-foreground sm:col-span-2">
+                {calculatedAmount
+                  ? t("electricityRateCalculation", { units: consumption ?? 0, amount: formatTaka(calculatedAmount, 2) })
+                  : consumption != null ? t("consumptionPreview", { units: consumption })
+                  : effectivePreviousReading == null ? t(lookup?.failed ? "meterReadingLookupFailed"
+                    : !lookup && dueDate ? "meterReadingLoading" : "noPreviousMeterReading")
+                  : null}
+              </p>
+              {usingUnitRate && !calculatedAmount ? (
+                <p className="text-xs text-destructive sm:col-span-2">{t("electricityRateNeedsReadings")}</p>
+              ) : null}
+            </div>
+          ) : null}
+
+          <FormField label={t("invoiceUtilityBillAmount")} htmlFor="utilityBillAmount" required>
+            <Input id="utilityBillAmount" name="amount" type="number" step="any" min={0}
+              value={usingUnitRate ? calculatedAmount : amount} readOnly={usingUnitRate} required
+              onChange={(event) => setAmount(event.target.value)} />
+          </FormField>
+          <FormField label={t("billDueDate")} htmlFor="utilityBillDueDate" required>
+            <Input id="utilityBillDueDate" name="dueDate" type="date" value={dueDate} required
+              onChange={(event) => setDueDate(event.target.value)} />
+          </FormField>
+
+          <label
+            htmlFor="utilityBillPaidByCompanyGlobal"
+            className="flex items-center gap-2 rounded-lg border px-3 py-2 text-sm sm:col-span-2"
+          >
+            <Checkbox
+              id="utilityBillPaidByCompanyGlobal"
+              checked={isWater || paidByCompany}
+              disabled={isWater}
+              onCheckedChange={(checked) => setPaidByCompany(checked === true)}
+            />
+            {isWater ? t("paidByCompanyWaterLocked") : t("paidByCompanyLabel")}
+          </label>
+
           <DialogFooter className="sm:col-span-2">
             <DialogClose render={<Button type="button" variant="outline" />}>
               {t("cancel")}
             </DialogClose>
-            <Button type="submit" disabled={isPending || !propertyId}>
+            <Button type="submit" disabled={isPending || !propertyId || (usingUnitRate && !calculatedAmount)}>
               {isPending ? <Loader2 className="size-4 animate-spin" /> : null}
               {t("save")}
             </Button>

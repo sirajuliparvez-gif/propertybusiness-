@@ -1,6 +1,6 @@
 import { resolveListMonth, listMonthOptions } from "@/lib/list-month";
 import { prisma } from "@/lib/prisma";
-import { attachElectricityConsumption, latestElectricityReadingByUnit } from "@/lib/electricity-consumption";
+import { attachElectricityConsumption } from "@/lib/electricity-consumption";
 import { splitUtilityBillTransactions } from "@/lib/utility-bill-split";
 
 function getPropertiesWithBills() {
@@ -68,19 +68,6 @@ export async function getAllUtilityBillsData(requestedMonth?: string) {
         unitTypeLabel: ut.label,
         tenantName: u.tenantLeases[0]?.tenant.name ?? null,
       }))
-    ),
-    previousElectricityReadingByUnit: Object.fromEntries(
-      latestElectricityReadingByUnit(
-        p.utilityBills.map((b) => ({
-          id: b.id,
-          type: b.type,
-          unitId: b.unitId,
-          month: b.month,
-          dueDate: b.dueDate,
-          createdAt: b.createdAt,
-          meterReading: b.meterReading != null ? Number(b.meterReading) : null,
-        }))
-      )
     ),
   }));
 

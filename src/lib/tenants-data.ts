@@ -2,7 +2,7 @@ import { cache } from "react";
 import { dhakaISO, dhakaNow } from "@/lib/dhaka-time";
 import { prisma } from "@/lib/prisma";
 import { computeServiceChargeAmount } from "@/lib/service-charge";
-import { attachElectricityConsumption, latestElectricityReadingByUnit } from "@/lib/electricity-consumption";
+import { attachElectricityConsumption } from "@/lib/electricity-consumption";
 import {
   buildRentLedger,
   overdueEntries,
@@ -423,20 +423,6 @@ export async function getTenantProfile(leaseId: string) {
       previousMeterReadingOverride: b.previousMeterReadingOverride == null ? null : Number(b.previousMeterReadingOverride),
     }))
   );
-  const previousElectricityReadingByUnit = Object.fromEntries(
-    latestElectricityReadingByUnit(
-      unitUtilityBills.map((b) => ({
-        id: b.id,
-        type: b.type,
-        unitId: lease.unitId,
-        month: b.month,
-        dueDate: b.dueDate,
-        createdAt: b.createdAt,
-        meterReading: b.meterReading != null ? Number(b.meterReading) : null,
-      }))
-    )
-  );
-
   // Ended leases stop owing rent the day they left — same reasoning as
   // getAllTenantsData: build the ledger only through when they were actually
   // still renting, not all the way to today.
@@ -638,7 +624,6 @@ export async function getTenantProfile(leaseId: string) {
         consumptionUnits: unitConsumptionByBillId.get(b.id)?.consumption ?? null,
       };
     }),
-    previousElectricityReadingByUnit,
     // Every time rent was settled by drawing down the deposit instead of a
     // real cash payment (round 16's "adjust from downpayment" mode) — this
     // is the ledger that explains initialDownpaymentAmount → currentDownpaymentBalance.

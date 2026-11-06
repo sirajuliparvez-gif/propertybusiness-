@@ -521,7 +521,6 @@ export default async function TenantProfilePage({
               propertyId={tenant.propertyId}
               fixedUnitId={tenant.unitId}
               returnTo={`/tenants/${tenant.id}`}
-              previousElectricityReadingByUnit={tenant.previousElectricityReadingByUnit}
             />
           ) : null}
         </CardHeader>

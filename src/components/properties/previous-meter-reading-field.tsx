@@ -5,11 +5,12 @@ import { FormField } from "@/components/properties/form-field";
 import { Input } from "@/components/ui/input";
 
 export function PreviousMeterReadingField({
-  id, automatic, manual, onChange,
+  id, automatic, manual, onChange, recordAutomatic = false,
 }: {
   id: string;
   automatic: number | null;
   manual: string | null;
+  recordAutomatic?: boolean;
   onChange: (value: string) => void;
 }) {
   const t = useTranslations("Properties");
@@ -18,7 +19,7 @@ export function PreviousMeterReadingField({
       <Input id={id} type="number" step="any" min={0} placeholder="—"
         value={manual ?? automatic ?? ""}
         onChange={(event) => onChange(event.target.value)} />
-      <input type="hidden" name="previousMeterReadingOverride" value={manual ?? ""} />
+      <input type="hidden" name="previousMeterReadingOverride" value={manual ?? (recordAutomatic ? automatic ?? "" : "")} />
     </FormField>
   );
 }

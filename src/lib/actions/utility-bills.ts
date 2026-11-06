@@ -3,6 +3,8 @@
 import { dhakaISO, dhakaToday } from "@/lib/dhaka-time";
 import { revalidatePath } from "next/cache";
 import { getLocale } from "next-intl/server";
+import type { Prisma } from "@/generated/prisma/client";
+import { electricityAmountAtRate } from "@/lib/electricity-consumption";
 import { prisma } from "@/lib/prisma";
 import { redirect } from "@/i18n/navigation";
 import { applyUtilityBillInstallment } from "@/lib/payment-progress";
@@ -34,7 +36,7 @@ function readUtilityBillFields(formData: FormData) {
     typeRaw === "GAS" || typeRaw === "ELECTRICITY" || typeRaw === "WATER" || typeRaw === "OTHER"
       ? typeRaw
       : "OTHER";
-  const amount = str(formData, "amount");
+  let amount = str(formData, "amount");
   const dueDate = str(formData, "dueDate");
   if (!amount || !dueDate) return null;
   // Water is company policy: always the company's own cost, never billed to
@@ -48,6 +50,12 @@ function readUtilityBillFields(formData: FormData) {
 
   const previousRaw = type === "ELECTRICITY" ? str(formData, "previousMeterReadingOverride") : null;
   const previousMeterReadingOverride = previousRaw == null ? null : Number(previousRaw);
+  const unitRate = type === "ELECTRICITY" ? str(formData, "electricityUnitRate") : null;
+  if (unitRate != null) {
+    const units = meterReading == null || previousMeterReadingOverride == null ? null : meterReading - previousMeterReadingOverride;
+    amount = electricityAmountAtRate(units, unitRate);
+    if (!amount) return null;
+  }
   return { type, amount, dueDate, paidByCompany, meterReading, previousMeterReadingOverride } as const;
 }
 
@@ -86,12 +94,22 @@ export async function addUtilityBill(formData: FormData) {
 export async function getPreviousTenantMeterReading(tenantLeaseId: string, dueDate: string) {
   await requireCurrentUser();
   if (!isValidTransactionDate(dueDate)) return null;
+  return findPreviousMeterReading(dueDate, { unit: { tenantLeases: { some: { id: tenantLeaseId } } } });
+}
+
+export async function getPreviousPropertyMeterReading(propertyId: string, unitId: string, dueDate: string) {
+  await requireCurrentUser();
+  if (!propertyId || !isValidTransactionDate(dueDate)) return null;
+  return findPreviousMeterReading(dueDate, { propertyId, unitId: unitId || null, property: { deletedAt: null } });
+}
+
+async function findPreviousMeterReading(dueDate: string, scope: Prisma.UtilityBillWhereInput) {
   const previousBill = await prisma.utilityBill.findFirst({
     where: {
       type: "ELECTRICITY",
       meterReading: { not: null },
       dueDate: { lte: new Date(dueDate) },
-      unit: { tenantLeases: { some: { id: tenantLeaseId } } },
+      ...scope,
     },
     orderBy: [{ dueDate: "desc" }, { createdAt: "desc" }],
     select: { dueDate: true, meterReading: true },
