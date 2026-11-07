@@ -78,7 +78,7 @@ export default async function EmployeeSalarySlipPage({
 
       <div
         data-testid="invoice"
-        className="flex flex-col gap-6 rounded-xl border bg-card p-6 text-sm print:rounded-none print:border-0 print:p-0 sm:p-8"
+        className="print-invoice-a4 flex flex-col gap-6 rounded-xl border bg-card p-6 text-sm print:rounded-none print:border-0 print:p-0 sm:p-8"
       >
         <InvoiceHeader brand={tNav("brand")} title={t("salarySlipTitle")} subtitle={monthLabel(selectedMonth)}>
           {employee.propertyName ? (

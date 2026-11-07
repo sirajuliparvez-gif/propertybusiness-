@@ -21,8 +21,11 @@ export function ReportPrintMetadata({ initialDate, locale, dateLabel, pageLabel,
     return () => window.removeEventListener("beforeprint", updateDate);
   }, [locale]);
   return <>
-    <p>{dateLabel}: {printDate}</p>
-    <style>{`@page ${pageName} {
+    <p data-report-print-page={pageName}>{dateLabel}: {printDate}</p>
+    <style>{`@media print {
+      html:has([data-report-print-page="${pageName}"]) { page: ${pageName}; }
+    }
+    @page ${pageName} {
       size: A4 landscape;
       margin: 18mm 12mm;
       @top-left { content: ${JSON.stringify(title)}; font-family: var(--font-sans), sans-serif; font-size: 10pt; font-weight: 600; color: #222; }
