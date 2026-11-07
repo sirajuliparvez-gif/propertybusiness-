@@ -268,6 +268,7 @@
   .rent-bill-paper-copy > table { flex-grow: 1; }
   .rent-bill-paper-copy thead { height: 7mm; }
   .rent-bill-paper-copy > * + * { margin-top: 4px; }
+  .rent-bill-paper-copy .cash-memo-reading { margin-top: 0; font-size: 8pt; line-height: 1.1; }
   .rent-bill-paper-copy .cash-memo-signatures { margin-top: auto; padding-top: 11mm; }
   .rent-bill-paper-copy .cash-memo-signatures > span { min-inline-size: 44mm; }
   .rent-bill-paper-copy .cash-memo-signatures > :last-child { text-align: end; }

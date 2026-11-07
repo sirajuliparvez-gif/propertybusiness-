@@ -794,6 +794,7 @@
     "cashMemoDate": "তারিখ",
     "cashMemoReading": "কথায়",
     "cashMemoUnits": "ইউনিট",
+    "cashMemoConsumption": "ব্যবহৃত ইউনিট",
     "cashMemoReadingMissing": "ব্যবহৃত ইউনিট পাওয়া যায়নি",
     "cashMemoTenantSignature": "ভাড়াটিয়ার স্বাক্ষর",
     "cashMemoCompanySignature": "রেশমি এন্টারপ্রাইজের স্বাক্ষর",
