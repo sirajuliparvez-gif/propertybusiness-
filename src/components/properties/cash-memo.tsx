@@ -41,7 +41,7 @@ export function CashMemoHeader({ brand, title, month, property, unit, name, cont
           [labels.name, name],
         ].map(([label, value]) => (
           <div key={label} className="flex min-w-0 flex-wrap items-baseline gap-x-2 border-b border-dashed pb-1">
-            <dt className="font-semibold">{label}</dt>
+            <dt className="font-semibold">{label}:</dt>
             <dd className="min-w-0 break-words font-medium tabular-nums">
               {value}
               {label === labels.name && contact ? (
