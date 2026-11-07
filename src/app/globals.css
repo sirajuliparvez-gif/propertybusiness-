@@ -250,9 +250,25 @@
 }
 
 @media print {
-  .rent-bill-paper-copy { padding: 3mm; }
+  .print-invoice-a4:has(> .rent-bill-paper-copy) {
+    width: 190mm;
+    max-width: 100%;
+  }
+  .rent-bill-paper-copy {
+    box-sizing: border-box;
+    width: 100%;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 0;
+    min-height: 132mm;
+    padding: 3mm;
+  }
+  .rent-bill-paper-copy > * { flex-shrink: 0; }
+  .rent-bill-paper-copy > table { flex-grow: 1; }
+  .rent-bill-paper-copy thead { height: 7mm; }
   .rent-bill-paper-copy > * + * { margin-top: 4px; }
-  .rent-bill-paper-copy .cash-memo-signatures { padding-top: 11mm; }
+  .rent-bill-paper-copy .cash-memo-signatures { margin-top: auto; padding-top: 11mm; }
   .rent-bill-paper-copy .cash-memo-signatures > span { min-inline-size: 44mm; }
   .rent-bill-paper-copy .cash-memo-signatures > :last-child { text-align: end; }
   .rent-bill-copy-label {
