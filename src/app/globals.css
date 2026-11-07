@@ -174,6 +174,7 @@
      disappear on the white paper background. Keep these overrides scoped to
      printable invoices so the on-screen palette is unchanged. */
   [data-testid="invoice"],
+  [data-testid="money-receipt"],
   [data-testid="issued-rent-bill-copy"] {
     --foreground: #000;
     --card-foreground: #000;
@@ -195,6 +196,10 @@
 @page invoiceA4 {
   size: A4;
   margin: 10mm;
+  @top-left { content: ""; }
+  @top-right { content: ""; }
+  @bottom-left { content: ""; }
+  @bottom-right { content: ""; }
 }
 
 /* Reserve the tenant invoice margins without Chromium's automatic print text. */
@@ -213,6 +218,11 @@
 
 .print-two-up {
   page: invoiceA4;
+}
+
+@media print {
+  html:has(.print-invoice-a4) { page: tenantInvoiceA4; }
+  html:has(.print-two-up) { page: invoiceA4; }
 }
 
 /* Monthly collection statements repeat headings and keep tenant rows intact. */
@@ -241,6 +251,7 @@
   .cash-memo-header > :first-child { padding-bottom: 4px; gap: 8px; }
   .cash-memo-header img { width: 32px; height: 32px; }
   .cash-memo-header dl { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 3px 12px; margin-top: 4px; }
+  .cash-memo-header dl > :last-child { grid-column: 1 / -1; }
   .cash-memo-fields { padding-block: 4px; gap: 3px 12px; }
   .cash-memo-totals { padding-block: 4px; }
   .cash-memo [data-slot="table-container"] { overflow: visible; }
@@ -250,9 +261,26 @@
 }
 
 @media print {
-  .rent-bill-paper-copy { padding: 3mm; }
+  .print-invoice-a4:has(> .rent-bill-paper-copy) {
+    width: 190mm;
+    max-width: 100%;
+  }
+  .rent-bill-paper-copy {
+    box-sizing: border-box;
+    width: 100%;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 0;
+    min-height: 132mm;
+    padding: 3mm;
+  }
+  .rent-bill-paper-copy > * { flex-shrink: 0; }
+  .rent-bill-paper-copy > table { flex-grow: 1; }
+  .rent-bill-paper-copy thead { height: 7mm; }
   .rent-bill-paper-copy > * + * { margin-top: 4px; }
-  .rent-bill-paper-copy .cash-memo-signatures { padding-top: 11mm; }
+  .rent-bill-paper-copy .cash-memo-reading { margin-top: 0; font-size: 8pt; line-height: 1.1; }
+  .rent-bill-paper-copy .cash-memo-signatures { margin-top: auto; padding-top: 11mm; }
   .rent-bill-paper-copy .cash-memo-signatures > span { min-inline-size: 44mm; }
   .rent-bill-paper-copy .cash-memo-signatures > :last-child { text-align: end; }
   .rent-bill-copy-label {

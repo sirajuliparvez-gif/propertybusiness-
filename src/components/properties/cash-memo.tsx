@@ -41,7 +41,7 @@ export function CashMemoHeader({ brand, title, month, property, unit, name, cont
           [labels.name, name],
         ].map(([label, value]) => (
           <div key={label} className="flex min-w-0 flex-wrap items-baseline gap-x-2 border-b border-dashed pb-1">
-            <dt className="font-semibold">{label}</dt>
+            <dt className="font-semibold">{label}:</dt>
             <dd className="min-w-0 break-words font-medium tabular-nums">
               {value}
               {label === labels.name && contact ? (
@@ -68,12 +68,24 @@ export function CashMemoReading({ current, previous, units, label, unitLabel, mi
   const format = new Intl.NumberFormat(locale === "bn" ? "bn-BD" : "en-US", { maximumFractionDigits: 6 });
   return (
     <p className="cash-memo-reading mt-1 whitespace-normal text-xs" data-testid="cash-memo-reading">
-      <strong>{label} </strong>
-      <span className="tabular-nums">
-        <span className="whitespace-nowrap">{t("invoiceElectricityCurrent")} {format.format(current)}</span>
-        {" − "}
-        <span className="whitespace-nowrap">{t("previousMeterReading")} {previous == null ? "—" : format.format(previous)}</span>
-        {units == null ? ` · ${missing}` : ` = ${format.format(units)} ${unitLabel}`}
+      <span className="sr-only">{label}</span>
+      <span className="inline-flex items-end gap-1.5 tabular-nums">
+        <span className="grid text-center">
+          <span className="font-normal">{t("invoiceElectricityCurrent")}</span>
+          <strong>{format.format(current)}</strong>
+        </span>
+        <span>−</span>
+        <span className="grid text-center">
+          <span className="font-normal">{t("previousMeterReading")}</span>
+          <strong>{previous == null ? "—" : format.format(previous)}</strong>
+        </span>
+        <span>=</span>
+        <span className="grid text-center">
+          <span className="font-normal">{t("cashMemoConsumption")}</span>
+          <strong title={units == null ? missing : undefined}>
+            {units == null ? "—" : format.format(units)} {unitLabel}
+          </strong>
+        </span>
       </span>
     </p>
   );

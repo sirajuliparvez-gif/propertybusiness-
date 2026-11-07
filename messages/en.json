@@ -792,6 +792,7 @@
     "cashMemoDate": "Date",
     "cashMemoReading": "Meter calculation",
     "cashMemoUnits": "units",
+    "cashMemoConsumption": "Units used",
     "cashMemoReadingMissing": "Previous reading unavailable",
     "cashMemoTenantSignature": "Tenant signature",
     "cashMemoCompanySignature": "Authorized signature",
