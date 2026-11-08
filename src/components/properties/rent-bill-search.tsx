@@ -23,8 +23,8 @@ export async function RentBillSearch({ markets, month, query, marketId, billMont
         <p className="text-xs text-muted-foreground">{t("rentBillSearchHint")}</p>
       </div>
       <div className="flex flex-wrap items-center gap-2">
-        <Input className="min-w-40 flex-1" name="billSearch" aria-label={t("cashMemoBillNumber")}
-          placeholder="R-M01-202611-0001" defaultValue={query} maxLength={48} required />
+        <Input key={`bill-search:${query ?? ""}`} className="min-w-40 flex-1" name="billSearch" aria-label={t("cashMemoBillNumber")}
+          placeholder="R-M01-202611-0001" defaultValue={query ?? ""} maxLength={48} required />
         <select name="billMarket" aria-label={t("rentBillSearchMarket")} defaultValue={marketId ?? ""}
           className="h-8 max-w-full rounded-lg border bg-background px-2 text-sm sm:max-w-64">
           <option value="">{t("rentBillSearchMarket")}</option>
@@ -32,7 +32,7 @@ export async function RentBillSearch({ markets, month, query, marketId, billMont
             <option key={id} value={id}>{rentBillMarketCode(billMarketCode)} · {name}</option>
           ))}
         </select>
-        <Input className="w-auto" type="month" name="billMonth" aria-label={t("invoiceBillMonth")} defaultValue={billMonth ?? month} />
+        <Input key={`bill-month:${billMonth ?? month}`} className="w-auto" type="month" name="billMonth" aria-label={t("invoiceBillMonth")} defaultValue={billMonth ?? month} />
         <Button type="submit" size="sm"><Search className="size-4" />{t("rentBillSearchSubmit")}</Button>
       </div>
       {error ? <p role="alert" className="text-sm text-destructive">{t(error)}</p> : null}
