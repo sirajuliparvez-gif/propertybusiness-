@@ -1,5 +1,6 @@
 "use client";
 
+import { receiptAttempt, type ReceiptAttempt } from "@/lib/receipt-request";
 import { dhakaTodayISO } from "@/lib/dhaka-time";
 import { useEffect, useRef, useState, useTransition } from "react";
 import { useLocale, useTranslations } from "next-intl";
@@ -119,6 +120,7 @@ export function RecordTenantRentPaymentDialog({
   const locale = useLocale();
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
+  const receiptRequest = useRef<ReceiptAttempt | null>(null);
   const simpleCollection = collectionBalance != null;
   const [open, setOpen] = useState(false);
   const [hasUtilityDraft, setHasUtilityDraft] = useState(false);
@@ -407,6 +409,7 @@ export function RecordTenantRentPaymentDialog({
           <form
             action={(formData: FormData) =>
               startTransition(async () => {
+                try {
                 const bills = readNewBills(formData);
                 if (!bills || isPending) return;
                 const receivedUtility = bills.some((bill) => Number(bill.get("received")) > 0);
@@ -425,6 +428,8 @@ export function RecordTenantRentPaymentDialog({
                     formData.set("multiMonthUtilities", JSON.stringify(utilityPayments));
                   }
                   formData.set("billingMonth", billMonth);
+                  receiptRequest.current = receiptAttempt(formData, receiptRequest.current, bills);
+                  formData.set("receiptRequestId", receiptRequest.current.id);
                   const result = await recordMultiMonthRentPayment(formData, bills);
                   if (result?.reason === "utility") {
                     toast.error(t(result.error));
@@ -449,6 +454,8 @@ export function RecordTenantRentPaymentDialog({
                 } else if (mode === "overdue") {
                   if (!canSubmitOverdue || isPending) return;
                   formData.set("amount", String(overdueValue));
+                  receiptRequest.current = receiptAttempt(formData, receiptRequest.current);
+                  formData.set("receiptRequestId", receiptRequest.current.id);
                   const result = await recordOverdueRentPayment(formData);
                   if (result?.reason === "changed") {
                     toast.error(t(utilityTotal > 0 ? "overdueUtilityBalanceChanged" : "overdueBalanceChanged"));
@@ -464,6 +471,10 @@ export function RecordTenantRentPaymentDialog({
                   await recordAdvanceRentPayment(formData);
                 } else {
                   await recordTenantRentPayment(formData);
+                }
+                } catch (error) {
+                  if (error && typeof error === "object" && "digest" in error) throw error;
+                  toast.error(t("receiptRetrySame"));
                 }
               })
             }

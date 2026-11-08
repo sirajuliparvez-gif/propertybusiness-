@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useRef, useState, useTransition } from "react";
 import { useLocale, useTranslations } from "next-intl";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
@@ -12,6 +12,7 @@ import { dhakaTodayISO } from "@/lib/dhaka-time";
 import { formatDate, formatTaka, monthLabel } from "@/lib/format";
 import { allocateInvoicePayment, invoicePaymentSnapshot, reconcileInvoiceAllocation, type InvoicePaymentLine } from "@/lib/invoice-payment";
 import { useBillDraft, useBillSession } from "@/components/properties/bill-form-session";
+import { receiptAttempt, type ReceiptAttempt } from "@/lib/receipt-request";
 import { recordOverdueRentPayment } from "@/lib/actions/tenant-rent";
 
 const money = (cents: number) => formatTaka(cents / 100, 2);
@@ -43,6 +44,7 @@ export function InvoicePaymentDialog({
   const [received, setReceived] = useBillDraft(scope + "received", "");
   const [split, setSplit] = useBillDraft<Record<string, string>>(scope + "split", {});
   const [pending, startTransition] = useTransition();
+  const attempt = useRef<ReceiptAttempt | null>(null);
   const rent = lines.filter((line) => line.kind === "rent" && line.month === month);
   const hasEarlierUtilities = lines.some((line) => line.kind === "utility" && line.month < month);
   const total = lines.reduce((sum, line) => sum + line.remainingCents, 0);
@@ -73,6 +75,9 @@ export function InvoicePaymentDialog({
         <form className="grid gap-4" action={(formData) => {
           if (!valid || !validSplit || pending || session?.blocked) return;
           startTransition(async () => {
+            try {
+            attempt.current = receiptAttempt(formData, attempt.current);
+            formData.set("receiptRequestId", attempt.current.id);
             const result = await recordOverdueRentPayment(formData);
             if (result && !result.ok) {
               toast.error(t(result.reason === "changed" ? "invoicePaymentChanged" : "invoicePaymentInvalid"));
@@ -83,6 +88,10 @@ export function InvoicePaymentDialog({
                 setSplit({});
                 router.refresh();
               }
+            }
+            } catch (error) {
+              if (error && typeof error === "object" && "digest" in error) throw error;
+              toast.error(t("receiptRetrySame"));
             }
           });
         }}>

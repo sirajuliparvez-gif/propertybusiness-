@@ -35,6 +35,8 @@ export function RentBillRowActions({ leaseId, month, revision, scoped }: {
   const router = useRouter();
   const [popup, setPopup] = useState<BillPopup | null>(null);
   const frame = useRef<HTMLIFrameElement>(null);
+  const dirty = useRef(false);
+  const [confirmClose, setConfirmClose] = useState(false);
   const query = new URLSearchParams({ month, embed: "1", ...(scoped ? { tenant: "1" } : {}) });
   if (popup === "print" || popup === "receive") query.set(popup, "1");
   const href = `/rent/${leaseId}/invoice?${query}`;
@@ -45,14 +47,21 @@ export function RentBillRowActions({ leaseId, month, revision, scoped }: {
     if (!popup) return;
     function handleMessage(event: MessageEvent) {
       if (event.origin !== window.location.origin || event.source !== frame.current?.contentWindow) return;
+      if (event.data?.type === "rent-bill-dirty") dirty.current = event.data.dirty === true;
       if (event.data === "rent-bill-print-saved") {
+        dirty.current = false;
         setPopup(null);
         router.refresh();
       }
-      if (event.data === "rent-bill-print-cancelled") setPopup(null);
+      if (event.data === "rent-bill-print-cancelled") {
+        if (dirty.current) setConfirmClose(true);
+        else setPopup(null);
+      }
     }
+    const warn = (event: BeforeUnloadEvent) => { if (dirty.current) { event.preventDefault(); event.returnValue = ""; } };
+    window.addEventListener("beforeunload", warn);
     window.addEventListener("message", handleMessage);
-    return () => window.removeEventListener("message", handleMessage);
+    return () => { window.removeEventListener("message", handleMessage); window.removeEventListener("beforeunload", warn); };
   }, [popup, router]);
 
   return (
@@ -76,12 +85,26 @@ export function RentBillRowActions({ leaseId, month, revision, scoped }: {
       </Button>
       <Dialog open={popup != null} onOpenChange={(open) => {
         if (open) return;
+        if (dirty.current) { setConfirmClose(true); return; }
+        dirty.current = false;
         setPopup(null);
         router.refresh();
       }}>
         <DialogContent className="gap-2 p-3 sm:max-w-2xl sm:p-4">
           <DialogHeader><DialogTitle>{title}</DialogTitle></DialogHeader>
           {popup ? <iframe ref={frame} src={`/${locale}${href}`} title={title} className={popup === "receive" ? "h-[min(80dvh,44rem)] w-full rounded-lg border" : "h-[min(84dvh,48rem)] w-full rounded-lg border"} /> : null}
+        </DialogContent>
+      </Dialog>
+      <Dialog open={confirmClose} onOpenChange={setConfirmClose}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader><DialogTitle>{t("invoiceUnsavedTitle")}</DialogTitle></DialogHeader>
+          <p className="text-sm text-muted-foreground">{t("invoiceDiscardDraft")}</p>
+          <div className="flex justify-end gap-2">
+            <Button variant="outline" onClick={() => setConfirmClose(false)}>{t("cancel")}</Button>
+            <Button variant="destructive" onClick={() => {
+              dirty.current = false; setConfirmClose(false); setPopup(null); router.refresh();
+            }}>{t("invoiceDiscardAndClose")}</Button>
+          </div>
         </DialogContent>
       </Dialog>
     </div>

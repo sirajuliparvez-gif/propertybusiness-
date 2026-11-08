@@ -86,6 +86,7 @@ export function InvoiceUtilityFields({
               return;
             }
           }
+          session?.clear(scope);
           if (!bill) setSavedNew(true);
           toast.success(t("invoiceInlineBillSaved", { bill: label }));
           router.refresh();
