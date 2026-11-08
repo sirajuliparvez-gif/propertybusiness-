@@ -17,6 +17,8 @@ export function InvoiceMonthSelect({
   selectedMonth,
   basePath,
   tenantScope = false,
+  embedded = false,
+  action,
 }: {
   leaseId: string;
   months: string[];
@@ -24,6 +26,8 @@ export function InvoiceMonthSelect({
   // Defaults to the tenant invoice; the salary slip passes its own route.
   basePath?: string;
   tenantScope?: boolean;
+  embedded?: boolean;
+  action?: "receive" | "print";
 }) {
   const t = useTranslations("Properties");
   const locale = useLocale();
@@ -34,7 +38,12 @@ export function InvoiceMonthSelect({
       <Select
         value={selectedMonth}
         onValueChange={(v) => {
-          if (v) router.push(`${basePath ?? `/tenants/${leaseId}/invoice`}?month=${v}${tenantScope ? "&tenant=1" : ""}`);
+          if (!v || v === selectedMonth) return;
+          const query = new URLSearchParams({ month: v });
+          if (tenantScope) query.set("tenant", "1");
+          if (embedded) query.set("embed", "1");
+          if (action) query.set(action, "1");
+          router.push(`${basePath ?? `/tenants/${leaseId}/invoice`}?${query}`);
         }}
         items={months.map((m) => ({ value: m, label: monthLabel(m, locale) }))}
       >

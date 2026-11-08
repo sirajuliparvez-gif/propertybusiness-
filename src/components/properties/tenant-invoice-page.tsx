@@ -303,6 +303,12 @@ export default async function TenantInvoicePage({
   if (embedded) {
     return (
       <div data-rent-bill-embed className="space-y-3">
+        <div className="flex flex-wrap items-center justify-between gap-2 border-b pb-3 print:hidden">
+          <span className="text-sm font-medium">{t("rentMonthFilter")}</span>
+          <InvoiceMonthSelect leaseId={id} months={availableMonths} selectedMonth={selectedMonth}
+            basePath={invoiceBasePath} tenantScope={tenantScope === "1"} embedded
+            action={receive === "1" ? "receive" : print === "1" ? "print" : undefined} />
+        </div>
         {receive === "1" ? (
           <>
             {receiveForm ?? noOutstanding}
