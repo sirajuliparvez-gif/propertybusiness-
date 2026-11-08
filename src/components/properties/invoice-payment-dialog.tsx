@@ -11,6 +11,7 @@ import { FormField } from "@/components/properties/form-field";
 import { dhakaTodayISO } from "@/lib/dhaka-time";
 import { formatDate, formatTaka, monthLabel } from "@/lib/format";
 import { allocateInvoicePayment, invoicePaymentSnapshot, reconcileInvoiceAllocation, type InvoicePaymentLine } from "@/lib/invoice-payment";
+import { useBillDraft, useBillSession } from "@/components/properties/bill-form-session";
 import { recordOverdueRentPayment } from "@/lib/actions/tenant-rent";
 
 const money = (cents: number) => formatTaka(cents / 100, 2);
@@ -35,10 +36,12 @@ export function InvoicePaymentDialog({
   const locale = useLocale();
   const router = useRouter();
   const [open, setOpen] = useState(reconciliation?.open ?? false);
-  const [matches, setMatches] = useState(true);
-  const [onlyRent, setOnlyRent] = useState(false);
-  const [received, setReceived] = useState("");
-  const [split, setSplit] = useState<Record<string, string>>({});
+  const session = useBillSession();
+  const scope = `receive:${month}:`;
+  const [matches, setMatches] = useBillDraft(scope + "matches", true);
+  const [onlyRent, setOnlyRent] = useBillDraft(scope + "onlyRent", false);
+  const [received, setReceived] = useBillDraft(scope + "received", "");
+  const [split, setSplit] = useBillDraft<Record<string, string>>(scope + "split", {});
   const [pending, startTransition] = useTransition();
   const rent = lines.filter((line) => line.kind === "rent" && line.month === month);
   const hasEarlierUtilities = lines.some((line) => line.kind === "utility" && line.month < month);
@@ -57,18 +60,18 @@ export function InvoicePaymentDialog({
   const actionLabel = t(reconciliation ? "rentBillReceive" : "invoiceTakePayment");
   const labels = new Map(lines.map((line) => [line.id, line.label]));
   const today = dhakaTodayISO();
-  const [date, setDate] = useState(today);
+  const [date, setDate] = useBillDraft("paymentDate", today);
   const methods = [
     ["CASH", "paymentMethodCash"], ["BKASH", "paymentMethodBkash"], ["NAGAD", "paymentMethodNagad"],
     ["BANK", "paymentMethodBank"], ["BANK_CHECK", "paymentMethodBankCheck"], ["OTHER", "paymentMethodOther"],
   ] as const;
-  const [method, setMethod] = useState<(typeof methods)[number][0]>("CASH");
+  const [method, setMethod] = useBillDraft<(typeof methods)[number][0]>("paymentMethod", "CASH");
 
   const paymentForm = (
     <>
         <p className="text-sm font-medium">{tenantName} · {monthLabel(month, locale)}</p>
         <form className="grid gap-4" action={(formData) => {
-          if (!valid || !validSplit || pending) return;
+          if (!valid || !validSplit || pending || session?.blocked) return;
           startTransition(async () => {
             const result = await recordOverdueRentPayment(formData);
             if (result && !result.ok) {
@@ -203,7 +206,7 @@ export function InvoicePaymentDialog({
             </summary>
             <div className="mt-2 grid gap-3 sm:grid-cols-2">
               <FormField label={t("paymentDate")} htmlFor="invoice-payment-date" required>
-                <Input id="invoice-payment-date" name="date" type="date" value={date} onChange={(event) => setDate(event.target.value)} max={today} required />
+                <Input id="invoice-payment-date" name="date" type="date" value={date} onInput={(event) => setDate(event.currentTarget.value)} onChange={(event) => setDate(event.target.value)} max={today} required />
               </FormField>
               <FormField label={t("invoiceMoneyMethod")} htmlFor="invoice-payment-method">
                 <select id="invoice-payment-method" name="method" value={method} onChange={(event) => setMethod(event.target.value as typeof method)} className="h-8 w-full rounded-lg border bg-background px-2">
@@ -215,7 +218,7 @@ export function InvoicePaymentDialog({
           {date ? <p className="text-sm text-muted-foreground" role="status">
             {t("collectionCashMonthHint", { month: monthLabel(date.slice(0, 7), locale) })}
           </p> : null}
-          <Button type="submit" disabled={!valid || !validSplit || !date || date > today || pending}>{t("invoicePaymentSave")}</Button>
+          <Button type="submit" disabled={!valid || !validSplit || !date || date > today || pending || session?.blocked}>{t("invoicePaymentSave")}</Button>
         </form>
     </>
   );

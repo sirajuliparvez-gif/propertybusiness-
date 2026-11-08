@@ -11,6 +11,7 @@ import {
 } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { useBillSession } from "@/components/properties/bill-form-session";
 import { monthLabel } from "@/lib/format";
 
 export function InvoiceMonthSelect({
@@ -38,6 +39,7 @@ export function InvoiceMonthSelect({
   const t = useTranslations("Properties");
   const locale = useLocale();
   const router = useRouter();
+  const session = useBillSession();
 
   function changeMonth(value: string | null) {
     if (!value || value === selectedMonth || (minMonth && value < minMonth) || (maxMonth && value > maxMonth)) return;
@@ -45,18 +47,23 @@ export function InvoiceMonthSelect({
     if (tenantScope) query.set("tenant", "1");
     if (embedded) query.set("embed", "1");
     if (action) query.set(action, "1");
-    router.push(`${basePath ?? `/tenants/${leaseId}/invoice`}?${query}`);
+    const href = `${basePath ?? `/tenants/${leaseId}/invoice`}?${query}`;
+    if (session) session.navigate(href);
+    else router.push(href);
   }
 
   if (embedded) {
     return <form className="flex items-center gap-2 print:hidden" onSubmit={(event) => {
       event.preventDefault();
       const value = new FormData(event.currentTarget).get("month");
-      if (typeof value === "string") changeMonth(value);
+      if (typeof value === "string") { session?.setRequestedMonth(value); changeMonth(value); }
     }}>
       <Input key={selectedMonth} className="w-44" type="month" name="month" required
-        aria-label={t("selectInvoiceMonth")} defaultValue={selectedMonth} min={minMonth} max={maxMonth} />
-      <Button type="submit" size="sm" variant="outline">{t("invoiceOpenMonth")}</Button>
+        aria-label={t("selectInvoiceMonth")} defaultValue={selectedMonth} min={minMonth} max={maxMonth}
+        disabled={session?.loading}
+        onInput={(event) => session?.setRequestedMonth(event.currentTarget.value)}
+        onChange={(event) => session?.setRequestedMonth(event.currentTarget.value)} />
+      <Button type="submit" size="sm" variant="outline" disabled={session?.loading}>{t("invoiceOpenMonth")}</Button>
     </form>;
   }
 

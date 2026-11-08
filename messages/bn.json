@@ -1112,6 +1112,8 @@
 
     "rentCollectionTitle": "ভাড়া আদায়",
     "rentPageSubtitle": "সাধারণত আগের মাসের ভাড়া নেওয়া হয়। চাইলে মাস বদলান। আয় দেখাবে টাকা পাওয়ার মাসে।",
+    "invoiceMonthApplyFirst": "মাস বদলেছেন। আগে ‘দেখুন’ চাপুন, তারপর এই মাসের হিসাবে সেভ করুন।",
+    "invoiceMonthLoading": "নতুন মাসের হিসাব আসছে। অপেক্ষা করুন…",
     "invoiceOpenMonth": "দেখুন",
     "invoiceMonthNoRentRecord": "এই মাসের ভাড়ার হিসাব এন্ট্রি করা নেই। পুরোনো বকেয়া থাকলে আগে ভাড়াটিয়ার হিসাবে যোগ করুন।",
     "collectionCashMonthHint": "এই টাকা {month} মাসের আয়ের হিসাবে যোগ হবে।",

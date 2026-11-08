@@ -12,6 +12,7 @@ import { paymentMethodLabel } from "@/lib/payment-method";
 import { isMonthPastDue, LEDGER_START_MONTH, RENT_DUE_DAY } from "@/lib/rent-ledger";
 import { cn } from "@/lib/utils";
 import { CashMemoHandwritingRow, CashMemoHeader, CashMemoReading, CashMemoSignatures, cashMemoClassName } from "@/components/properties/cash-memo";
+import { BillFormSession, BillMonthContent } from "@/components/properties/bill-form-session";
 import { InvoiceMonthSelect } from "@/components/properties/invoice-month-select";
 import { InvoicePaymentDialog } from "@/components/properties/invoice-payment-dialog";
 import { InvoiceUtilityFields } from "@/components/properties/invoice-utility-fields";
@@ -302,6 +303,7 @@ export default async function TenantInvoicePage({
 
   if (embedded) {
     return (
+      <BillFormSession key={id} month={selectedMonth}>
       <div data-rent-bill-embed className="space-y-3">
         <div className="flex flex-wrap items-center justify-between gap-2 border-b pb-3 print:hidden">
           <span className="text-sm font-medium">{t("rentMonthFilter")}</span>
@@ -310,6 +312,7 @@ export default async function TenantInvoicePage({
             minMonth={[leaseStartDay.slice(0, 7), ...availableMonths].sort()[0]} maxMonth={availableMonths[0]}
             action={receive === "1" ? "receive" : print === "1" ? "print" : undefined} />
         </div>
+        <BillMonthContent>
         {!rentTracked ? <p className="rounded-md border px-3 py-2 text-sm print:hidden">{t("invoiceMonthNoRentRecord")}</p> : null}
         {receive === "1" ? (
           <>
@@ -322,7 +325,9 @@ export default async function TenantInvoicePage({
             {printForm}
           </>
         )}
+        </BillMonthContent>
       </div>
+      </BillFormSession>
     );
   }
 
