@@ -1111,8 +1111,9 @@
     "companyExpenseRowLabel": "Company Staff / Admin Expense",
 
     "rentCollectionTitle": "Rent Collection",
-    "rentPageSubtitle": "Choose a month to collect rent and bills and see what is still due.",
-    "rentMonthFilter": "Billing Month",
+    "rentPageSubtitle": "Last month’s rent is selected first. Change the rent month if needed. Income is counted when the money is received.",
+    "collectionCashMonthHint": "This money will count as income for {month}.",
+    "rentMonthFilter": "Rent month",
     "collectedForMonth": "Collected for Month",
     "collectionPendingAmount": "Still to Collect",
     "filterCollectionPending": "To Collect",

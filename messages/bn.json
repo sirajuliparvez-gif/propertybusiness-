@@ -1111,8 +1111,9 @@
     "companyExpenseRowLabel": "কোম্পানি স্টাফ / প্রশাসনিক খরচ",
 
     "rentCollectionTitle": "ভাড়া আদায়",
-    "rentPageSubtitle": "মাস বেছে ভাড়া ও বিলের টাকা নিন, আর কত বাকি দেখুন।",
-    "rentMonthFilter": "যে মাসের হিসাব দেখবেন",
+    "rentPageSubtitle": "সাধারণত আগের মাসের ভাড়া নেওয়া হয়। চাইলে মাস বদলান। আয় দেখাবে টাকা পাওয়ার মাসে।",
+    "collectionCashMonthHint": "এই টাকা {month} মাসের আয়ের হিসাবে যোগ হবে।",
+    "rentMonthFilter": "কোন মাসের ভাড়া",
     "collectedForMonth": "টাকা নেওয়া হয়েছে",
     "collectionPendingAmount": "এখনো আদায় বাকি",
     "filterCollectionPending": "আদায় বাকি",

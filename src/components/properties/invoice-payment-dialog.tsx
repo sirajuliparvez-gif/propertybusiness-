@@ -212,6 +212,9 @@ export function InvoicePaymentDialog({
               </FormField>
             </div>
           </details>
+          {date ? <p className="text-sm text-muted-foreground" role="status">
+            {t("collectionCashMonthHint", { month: monthLabel(date.slice(0, 7), locale) })}
+          </p> : null}
           <Button type="submit" disabled={!valid || !validSplit || !date || date > today || pending}>{t("invoicePaymentSave")}</Button>
         </form>
     </>

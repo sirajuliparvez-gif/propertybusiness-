@@ -12,8 +12,10 @@ import {
   paymentMonthRange,
   previousPaymentMonth,
   resolvePaymentMonth,
+  resolveRentCollectionMonth,
 } from "@/lib/payment-month";
 import { localizedMutationPaths } from "@/lib/localized-revalidation";
+import { transactionReportRange } from "@/lib/monthly-transaction-report";
 import { reportingMonthKey } from "@/lib/reporting-period";
 import { withRentActionFeedback } from "@/lib/rent-action-feedback";
 import { rentTermsDueAmount, resolveRentTermsForMonth } from "@/lib/rent-terms";
@@ -279,4 +281,25 @@ test("tenant billing accepts different charges but rejects the same charge twice
   assert.deepEqual(validateTenantUtilityBills("2026-11", [gas, bill("GAS", "2026-11-08")]), {
     ok: false, error: "utilityBillDuplicateMonth",
   });
+});
+
+
+test("November collection defaults to October rent and allows November explicitly", () => {
+  assert.equal(resolveRentCollectionMonth(undefined, "2026-11"), "2026-10");
+  assert.equal(resolveRentCollectionMonth("2026-11", "2026-11"), "2026-11");
+  assert.equal(resolveRentCollectionMonth("2026-08", "2026-11"), "2026-08");
+  assert.equal(resolveRentCollectionMonth(undefined, "2027-01"), "2026-12");
+  assert.equal(resolveRentCollectionMonth("2026-13", "2026-11"), "2026-10");
+  assert.equal(resolveRentCollectionMonth("2026-12", "2026-11"), "2026-10");
+});
+
+test("October rent received in November settles October while reporting November income", () => {
+  const receivedDate = "2026-11-08";
+  const rentMonth = resolveRentCollectionMonth(undefined, "2026-11");
+  assert.equal(resolvePaymentMonth(rentMonth, receivedDate), "2026-10");
+  const transactionDate = new Date(`${receivedDate}T00:00:00+06:00`);
+  const november = transactionReportRange("2026-11");
+  const october = transactionReportRange("2026-10");
+  assert.ok(transactionDate >= november.start && transactionDate < november.end);
+  assert.ok(transactionDate >= october.end);
 });

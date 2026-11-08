@@ -54,3 +54,11 @@ export function resolvePaymentMonth(billingMonth: string | null | undefined, pay
   if (!isPaymentMonth(month)) throw new Error("Invalid billing month");
   return month;
 }
+
+// Rent is normally collected one month later; cash reports still use the
+// actual payment date, independently of this worklist's billing month.
+export function resolveRentCollectionMonth(requestedMonth: string | undefined, currentMonth: string) {
+  return isPaymentMonth(requestedMonth) && requestedMonth <= currentMonth
+    ? requestedMonth
+    : previousPaymentMonth(currentMonth);
+}

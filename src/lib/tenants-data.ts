@@ -15,7 +15,7 @@ import {
   RENT_DUE_DAY,
 } from "@/lib/rent-ledger";
 import { splitUtilityBillTransactions } from "@/lib/utility-bill-split";
-import { isPaymentMonth, paymentMonthRange } from "@/lib/payment-month";
+import { paymentMonthRange, resolveRentCollectionMonth } from "@/lib/payment-month";
 import { numericRentRates, rentTermsDueAmount, resolveRentTermsForMonth } from "@/lib/rent-terms";
 
 function monthRange(now: Date) {
@@ -271,7 +271,7 @@ export async function getRentCollectionData(requestedMonth?: string, tenantLease
   const data = await getAllTenantsData();
   const now = dhakaNow();
   const currentMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
-  const selectedMonth = isPaymentMonth(requestedMonth) && requestedMonth <= currentMonth ? requestedMonth : currentMonth;
+  const selectedMonth = resolveRentCollectionMonth(requestedMonth, currentMonth);
   const activeTenants = data.tenants.filter((t) => t.leaseStatus === "ACTIVE" && (!tenantLeaseId || t.id === tenantLeaseId));
   const leaseFilter = { in: activeTenants.map((tenant) => tenant.id) };
   const [selectedRows, recordedMonths, printed, received] = await Promise.all([
