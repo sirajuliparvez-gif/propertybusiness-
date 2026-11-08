@@ -1112,6 +1112,8 @@
 
     "rentCollectionTitle": "Rent Collection",
     "rentPageSubtitle": "Last month’s rent is selected first. Change the rent month if needed. Income is counted when the money is received.",
+    "invoiceOpenMonth": "Show",
+    "invoiceMonthNoRentRecord": "No rent record has been entered for this month. Add any old rent due to the tenant’s account first.",
     "collectionCashMonthHint": "This money will count as income for {month}.",
     "rentMonthFilter": "Rent month",
     "collectedForMonth": "Collected for Month",

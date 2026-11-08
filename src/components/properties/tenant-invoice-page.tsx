@@ -25,6 +25,7 @@ import { RentBillPrintForm } from "@/components/properties/rent-bill-print-form"
 import { RecordTenantRentPaymentDialog } from "@/components/properties/record-tenant-rent-payment-dialog";
 import { limitToPrintedBill, rentBillPrintKeys, rentBillPrintRows, type RentBillPrintRow } from "@/lib/rent-bill-print";
 import { formatRentBillNumber, legacyRentBillNumber } from "@/lib/rent-bill-number";
+import { resolveInvoiceMonth } from "@/lib/payment-month";
 import { prisma } from "@/lib/prisma";
 
 function formatInvoiceAmount(amount: number) {
@@ -71,8 +72,7 @@ export default async function TenantInvoicePage({
   const availableMonths = Array.from(
     new Set([...tenant.payments.map((p) => p.month), ...unitBills.map((b) => b.month), nowMonth])
   ).sort((a, b) => (a < b ? 1 : -1));
-  const selectedMonth =
-    requestedMonth && availableMonths.includes(requestedMonth) ? requestedMonth : availableMonths[0];
+  const selectedMonth = resolveInvoiceMonth(requestedMonth, availableMonths, leaseStartDay.slice(0, 7), nowMonth);
 
   // ---- rent
   const payment = tenant.payments.find((p) => p.month === selectedMonth) ?? null;
@@ -307,8 +307,10 @@ export default async function TenantInvoicePage({
           <span className="text-sm font-medium">{t("rentMonthFilter")}</span>
           <InvoiceMonthSelect leaseId={id} months={availableMonths} selectedMonth={selectedMonth}
             basePath={invoiceBasePath} tenantScope={tenantScope === "1"} embedded
+            minMonth={[leaseStartDay.slice(0, 7), ...availableMonths].sort()[0]} maxMonth={availableMonths[0]}
             action={receive === "1" ? "receive" : print === "1" ? "print" : undefined} />
         </div>
+        {!rentTracked ? <p className="rounded-md border px-3 py-2 text-sm print:hidden">{t("invoiceMonthNoRentRecord")}</p> : null}
         {receive === "1" ? (
           <>
             {receiveForm ?? noOutstanding}
