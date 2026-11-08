@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import { CashMemoHeader, CashMemoReading, CashMemoSignatures, cashMemoClassName } from "@/components/properties/cash-memo";
 import { useRouter } from "@/i18n/navigation";
 import { confirmRentBillPrint, reserveRentBillNumber } from "@/lib/actions/rent-bill-print";
+import { useBillDraft, useBillSession } from "@/components/properties/bill-form-session";
 import { formatTaka } from "@/lib/format";
 import type { RentBillPrintKey, RentBillPrintRow } from "@/lib/rent-bill-print";
 
@@ -32,11 +33,12 @@ export function RentBillPrintForm({
   const t = useTranslations("Properties");
   const locale = useLocale();
   const router = useRouter();
+  const session = useBillSession();
   const [open, setOpen] = useState(prepare);
   const [billNumber, setBillNumber] = useState(header.billNumber);
   const [printedDraft, setPrintedDraft] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
-  const [selected, setSelected] = useState<RentBillPrintKey[]>(() => (printed ?? rows).map(({ key }) => key));
+  const [selected, setSelected] = useBillDraft<RentBillPrintKey[]>(`print:${month}:selected`, () => (printed ?? rows).map(({ key }) => key));
   const labels = {
     RENT: t("invoiceRentLabel"), ELECTRICITY: t("utilityTypeElectricity"), GAS: t("utilityTypeGas"),
     WATER: t("utilityTypeWater"), WASTE: t("utilityTypeWaste"),
@@ -48,6 +50,7 @@ export function RentBillPrintForm({
   const expected = copy.reduce((sum, row) => sum + row.remainingCents, 0);
 
   function print() {
+    if (session?.blocked) return;
     startTransition(async () => {
       try {
         if (!billNumber) {
@@ -68,7 +71,7 @@ export function RentBillPrintForm({
   }
 
   function confirm() {
-    if (printedDraft !== draftSnapshot) return;
+    if (session?.blocked || printedDraft !== draftSnapshot) return;
     startTransition(async () => {
       try {
         if (await confirmRentBillPrint(leaseId, month, revision, selected, printedDraft)) {

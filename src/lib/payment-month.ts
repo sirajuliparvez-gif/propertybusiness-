@@ -62,3 +62,10 @@ export function resolveRentCollectionMonth(requestedMonth: string | undefined, c
     ? requestedMonth
     : previousPaymentMonth(currentMonth);
 }
+
+// A missing record must not hide an otherwise valid month in the bill picker.
+export function resolveInvoiceMonth(requestedMonth: string | undefined, recordedMonths: string[], leaseStartMonth: string, currentMonth: string) {
+  if (isPaymentMonth(requestedMonth) && (recordedMonths.includes(requestedMonth) ||
+      (requestedMonth >= leaseStartMonth && requestedMonth <= currentMonth))) return requestedMonth;
+  return recordedMonths[0] ?? currentMonth;
+}

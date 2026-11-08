@@ -11,6 +11,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { addTenantUtilityBills, updateUtilityBill } from "@/lib/actions/utility-bills";
 import { electricityAmountAtRate } from "@/lib/electricity-consumption";
+import { useBillDraft, useBillSession } from "@/components/properties/bill-form-session";
 import { formatTaka } from "@/lib/format";
 
 export function InvoiceUtilityFields({
@@ -38,10 +39,12 @@ export function InvoiceUtilityFields({
   const t = useTranslations("Properties");
   const router = useRouter();
   const id = useId();
-  const [previousInput, setPreviousInput] = useState<string | null>(null);
-  const [current, setCurrent] = useState(bill?.meterReading?.toString() ?? "");
-  const [manualAmount, setManualAmount] = useState(bill?.amount.toString() ?? "");
-  const [rate, setRate] = useState("");
+  const session = useBillSession();
+  const scope = `utility:${month}:${type}:${bill?.id ?? "new"}:`;
+  const [previousInput, setPreviousInput] = useBillDraft<string | null>(scope + "previous", null);
+  const [current, setCurrent] = useBillDraft(scope + "current", bill?.meterReading?.toString() ?? "");
+  const [manualAmount, setManualAmount] = useBillDraft(scope + "amount", bill?.amount.toString() ?? "");
+  const [rate, setRate] = useBillDraft(scope + "rate", "");
   const [savedNew, setSavedNew] = useState(false);
   const [feedback, setFeedback] = useState("");
   const [pending, startTransition] = useTransition();
@@ -59,7 +62,7 @@ export function InvoiceUtilityFields({
 
   return (
     <form className="grid gap-1.5" action={(data) => {
-      if (!canSave || pending) return;
+      if (!canSave || pending || session?.blocked) return;
       setFeedback("");
       startTransition(async () => {
         try {
@@ -83,6 +86,7 @@ export function InvoiceUtilityFields({
               return;
             }
           }
+          session?.clear(scope);
           if (!bill) setSavedNew(true);
           toast.success(t("invoiceInlineBillSaved", { bill: label }));
           router.refresh();
@@ -120,7 +124,7 @@ export function InvoiceUtilityFields({
             placeholder={t("invoiceUtilityBillAmount")} value={amount} disabled={pending}
             readOnly={usingRate || fixedAmount != null} required onChange={(event) => setManualAmount(event.target.value)} />
         </div>
-        <Button type="submit" size="sm" disabled={!canSave || pending}
+        <Button type="submit" size="sm" disabled={!canSave || pending || session?.blocked}
           aria-label={t("invoiceInlineBillSave", { bill: label })}>{t("invoiceInlineSaveShort")}</Button>
         {editAction}
       </div>

@@ -1,5 +1,6 @@
 "use server";
 
+import { validReceiptRequestId } from "@/lib/receipt-request";
 import { randomUUID } from "node:crypto";
 import { dhakaISO, dhakaNow, dhakaTodayISO } from "@/lib/dhaka-time";
 import { revalidatePath } from "next/cache";
@@ -319,6 +320,7 @@ export async function createHistoricalRentArrears(formData: FormData): Promise<R
 // adjustments have multiple audit entries, so they are deliberately refused
 // here instead of silently rewriting only part of their history.
 export async function updateTenantRentPayment(formData: FormData): Promise<RentPaymentEditResult> {
+  await requireCurrentUser();
   const locale = await getLocale();
   const rentPaymentId = str(formData, "rentPaymentId");
   const tenantLeaseId = str(formData, "tenantLeaseId");
@@ -334,7 +336,7 @@ export async function updateTenantRentPayment(formData: FormData): Promise<RentP
   }
 
   const amount = Number(amountRaw);
-  if (!Number.isFinite(amount) || amount <= 0) return { ok: false, error: "invalidAmount" };
+  if (!Number.isFinite(amount) || amount <= 0 || !isValidTransactionDate(dateRaw) || dateRaw > dhakaTodayISO()) return { ok: false, error: "invalidAmount" };
 
   const methodRaw = formData.get("method");
   const method =
@@ -348,13 +350,15 @@ export async function updateTenantRentPayment(formData: FormData): Promise<RentP
       : null;
   const paidDate = new Date(dateRaw);
 
+  let changedReceiptId: string | null = null;
   const problem = await prisma.$transaction(async (tx) => {
     const payment = await tx.rentPayment.findFirst({
       where: { id: rentPaymentId, tenantLeaseId },
       select: {
         month: true,
         dueAmount: true,
-        transactions: { select: { id: true } },
+        paidAmount: true,
+        transactions: { select: { id: true, paymentReceiptId: true } },
         downpaymentAdjustments: { select: { id: true }, take: 1 },
       },
     });
@@ -386,11 +390,30 @@ export async function updateTenantRentPayment(formData: FormData): Promise<RentP
       where: { id: payment.transactions[0].id },
       data: { amount, date: paidDate, method },
     });
+    const receiptId = payment.transactions[0].paymentReceiptId;
+    if (receiptId) {
+      const check = await tx.rentBillReceiptCheck.findUnique({ where: { receiptId } });
+      if (check) {
+        const delta = Math.round((amount - Number(payment.paidAmount)) * 100);
+        const lines = Array.isArray(check.lines) ? check.lines.map((line) => {
+          if (line && typeof line === "object" && !Array.isArray(line) && line.id === payment.month && !line.utilityType) {
+            return { ...line, id: billingMonth, paidCents: Math.round(amount * 100) };
+          }
+          return line;
+        }) : undefined;
+        await tx.rentBillReceiptCheck.update({ where: { receiptId }, data: {
+          receivedCents: check.receivedCents + delta,
+          ...(lines ? { lines } : {}),
+        } });
+      }
+      changedReceiptId = receiptId;
+    }
     return null;
-  });
+  }, { isolationLevel: "Serializable" });
   if (problem) return { ok: false, error: problem };
+  if (changedReceiptId) revalidateLocalizedPath(locale, `/tenants/${tenantLeaseId}/receipts/${changedReceiptId}`);
 
-  revalidateLocalizedPath(locale, returnTo);
+  for (const path of new Set([returnTo, "/rent", "/rent/arrears", "/rent/report", "/reports/market", "/transactions", "/dashboard", "/tenants", `/tenants/${tenantLeaseId}`, `/tenants/${tenantLeaseId}/history`, `/tenants/${tenantLeaseId}/invoice`])) revalidateLocalizedPath(locale, path);
   redirect({ href: withRentActionFeedback(returnTo, "updated", { month: billingMonth, amount }), locale });
   return { ok: true };
 }
@@ -651,11 +674,16 @@ export async function recordOverdueRentPayment(formData: FormData) {
       ? methodRaw
       : null;
 
-  const paymentReceiptId = randomUUID();
+  const requestId = str(formData, "receiptRequestId");
+  if (!validReceiptRequestId(requestId)) return { ok: false as const, reason: "invalid" as const };
+  const paymentReceiptId = requestId ?? randomUUID();
   const expected = str(formData, "rentAllocation");
   let saved: boolean;
   try {
     saved = await prisma.$transaction(async (tx) => {
+      if (requestId && await tx.transaction.findFirst({ where: {
+        paymentReceiptId, tenantLeaseId, recordedByUserId: user.id,
+      }, select: { id: true } })) return true;
       const lease = await tx.tenantLease.findUnique({
         where: { id: tenantLeaseId },
         include: {
@@ -836,7 +864,9 @@ export async function recordOverdueRentPayment(formData: FormData) {
   } catch (error) {
     // A concurrent payment may have changed or created a bill after the read.
     if (!(error instanceof Error && "code" in error && (error.code === "P2034" || error.code === "P2002"))) throw error;
-    saved = false;
+    saved = !!requestId && !!await prisma.transaction.findFirst({ where: {
+      paymentReceiptId, tenantLeaseId, recordedByUserId: user.id,
+    }, select: { id: true } });
   }
   if (!saved) return { ok: false as const, reason: "changed" as const };
 
@@ -965,9 +995,14 @@ export async function recordMultiMonthRentPayment(formData: FormData, newBills: 
       (!requested.size && !utilities.size && !newUtilityPayments.some((cents) => cents > 0))) return invalid;
 
   const paidDate = new Date(date);
-  const paymentReceiptId = randomUUID();
+  const requestId = str(formData, "receiptRequestId");
+  if (!validReceiptRequestId(requestId)) return { ok: false as const, reason: "invalid" as const };
+  const paymentReceiptId = requestId ?? randomUUID();
   try {
     const saved = await prisma.$transaction(async (tx) => {
+      if (requestId && await tx.transaction.findFirst({ where: {
+        paymentReceiptId, tenantLeaseId, recordedByUserId: user.id,
+      }, select: { id: true } })) return true;
       const lease = await tx.tenantLease.findUnique({
         where: { id: tenantLeaseId }, include: { ...multiMonthLeaseInclude, utilityBillDefaults: !!validated },
       });
@@ -1063,8 +1098,10 @@ export async function recordMultiMonthRentPayment(formData: FormData, newBills: 
     if (saved === duplicate) return duplicate;
     if (!saved) return changed;
   } catch (error) {
-    if (error instanceof Error && "code" in error && (error.code === "P2034" || error.code === "P2002")) return changed;
-    throw error;
+    if (error instanceof Error && "code" in error && (error.code === "P2034" || error.code === "P2002")) {
+      const replay = requestId && await prisma.transaction.findFirst({ where: { paymentReceiptId, tenantLeaseId, recordedByUserId: user.id }, select: { id: true } });
+      if (!replay) return changed;
+    } else throw error;
   }
 
   const locale = await getLocale();

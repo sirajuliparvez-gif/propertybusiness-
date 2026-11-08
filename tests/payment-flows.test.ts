@@ -12,6 +12,7 @@ import {
   paymentMonthRange,
   previousPaymentMonth,
   resolvePaymentMonth,
+  resolveInvoiceMonth,
   resolveRentCollectionMonth,
 } from "@/lib/payment-month";
 import { localizedMutationPaths } from "@/lib/localized-revalidation";
@@ -302,4 +303,13 @@ test("October rent received in November settles October while reporting November
   const october = transactionReportRange("2026-10");
   assert.ok(transactionDate >= november.start && transactionDate < november.end);
   assert.ok(transactionDate >= october.end);
+});
+
+
+test("invoice picker opens September even when only August and October have records", () => {
+  const months = ["2026-11", "2026-10", "2026-08"];
+  assert.equal(resolveInvoiceMonth("2026-09", months, "2023-12", "2026-11"), "2026-09");
+  assert.equal(resolveInvoiceMonth("2026-01", months, "2023-12", "2026-11"), "2026-01");
+  assert.equal(resolveInvoiceMonth("2023-11", months, "2023-12", "2026-11"), "2026-11");
+  assert.equal(resolveInvoiceMonth("2026-13", months, "2023-12", "2026-11"), "2026-11");
 });
