@@ -31,8 +31,13 @@ export default async function MonthlyMarketReportPage({
     getTranslations("Properties"), getTranslations("Nav"), getLocale(),
     getMonthlyMarketReport(query.month, query.market),
   ]);
-  const { month, currentMonth, markets, market, report } = data;
+  const { month, prevMonth, currentMonth, markets, market, report } = data;
   const period = monthLabel(month, locale);
+  const prevPeriod = monthLabel(prevMonth, locale);
+  const tenantTotals = (report?.tenants ?? []).reduce((sum, row) => ({
+    prev: sum.prev + row.prevMonthCents, current: sum.current + row.thisMonthCents,
+    other: sum.other + row.otherMonthsCents, received: sum.received + row.receivedCents,
+  }), { prev: 0, current: 0, other: 0, received: 0 });
   const title = t(market ? "marketMonthlyReportTitle" : "allMarketsMonthlyTitle");
   const reportName = market?.name ?? t("allMarketsOption");
   const salaries = report?.otherTransactions.filter((entry) => entry.type === "PAYROLL_EXPENSE") ?? [];
@@ -116,25 +121,31 @@ export default async function MonthlyMarketReportPage({
               <h2 id="market-rent-heading" className={styles.sectionTitle}>{t("marketReportRentSection")}</h2>
               <div className={styles.tableWrap}>
                 <table className={styles.table} aria-labelledby="market-rent-heading">
-                  <colgroup span={3} />
-                  <colgroup span={3} />
+                  <colgroup span={2} />
+                  <colgroup span={4} />
+                  <colgroup span={2} />
                   <thead>
                     <tr>
                       <th scope="col" rowSpan={2} className="text-left">{t("tenantName")}</th>
                       <th scope="col" rowSpan={2} className="text-left">{t("unit")}</th>
-                      <th scope="col" rowSpan={2} className="text-right">{t("marketReportRentReceived", { month: period })}</th>
-                      <th scope="colgroup" colSpan={3} className={`${styles.rentBillStart} border-b text-center`}>
+                      <th scope="colgroup" colSpan={4} className={`${styles.rentBillStart} border-b text-center`}>
+                        {t("marketReportRentReceived", { month: period })}
+                      </th>
+                      <th scope="colgroup" colSpan={2} className={`${styles.rentBillStart} border-b text-center`}>
                         {t("marketReportBillGroup", { month: period })}
                       </th>
                     </tr>
                     <tr>
+                      <th scope="col" className={`${styles.rentBillStart} text-right`}>{t("marketReportRentForMonth", { month: prevPeriod })}</th>
+                      <th scope="col" className="text-right">{t("marketReportRentForMonth", { month: period })}</th>
+                      <th scope="col" className="text-right">{t("marketReportOtherMonths")}</th>
+                      <th scope="col" className="text-right">{t("marketReportReceivedTotal")}</th>
                       <th scope="col" className={`${styles.rentBillStart} text-right`}>{t("marketReportMonthBilled")}</th>
-                      <th scope="col" className="text-right">{t("marketReportMonthSettled")}</th>
                       <th scope="col" className="text-right">{t("marketReportBillRemaining")}</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {report.tenants.length === 0 && <tr><td colSpan={6} className="text-center text-muted-foreground">{t("monthlyReportEmpty")}</td></tr>}
+                    {report.tenants.length === 0 && <tr><td colSpan={8} className="text-center text-muted-foreground">{t("monthlyReportEmpty")}</td></tr>}
                     {report.tenants.map((row) => (
                       <tr key={row.id} className={styles.tenant}>
                         <th scope="row" className={`${styles.name} text-left`}>
@@ -146,17 +157,20 @@ export default async function MonthlyMarketReportPage({
                           ))}
                         </th>
                         <td className={styles.unit}>{row.unit ?? "—"}</td>
+                        <td className={`${styles.number} ${styles.rentBillStart}`}>{money(row.prevMonthCents / 100)}</td>
+                        <td className={styles.number}>{money(row.thisMonthCents / 100)}</td>
+                        <td className={styles.number}>{money(row.otherMonthsCents / 100)}</td>
                         <td className={`${styles.number} ${styles.collected}`}>{money(row.receivedCents / 100)}</td>
                         <td className={`${styles.number} ${styles.rentBillStart}`}>{row.bill ? money(row.bill.due) : "—"}</td>
-                        <td className={styles.number}>{row.bill ? money(row.bill.settled) : "—"}</td>
                         <td className={`${styles.number} ${row.bill?.remaining ? styles.remaining : ""}`}>{row.bill ? money(row.bill.remaining) : "—"}</td>
                       </tr>
                     ))}
                   </tbody>
                   <tfoot><tr className={styles.total}>
                     <th scope="row" colSpan={2} className="text-left">{t("total")}</th>
-                    {[report.rentReceived, report.rentTotals.due, report.rentTotals.settled, report.rentTotals.remaining].map((amount, index) => (
-                      <td key={index} className={`${styles.number} ${index === 1 ? styles.rentBillStart : ""}`}>{money(amount)}</td>
+                    {[tenantTotals.prev / 100, tenantTotals.current / 100, tenantTotals.other / 100, report.rentReceived,
+                      report.rentTotals.due, report.rentTotals.remaining].map((amount, index) => (
+                      <td key={index} className={`${styles.number} ${index === 0 || index === 4 ? styles.rentBillStart : ""}`}>{money(amount)}</td>
                     ))}
                   </tr></tfoot>
                 </table>

@@ -756,7 +756,8 @@ export async function recordOverdueRentPayment(formData: FormData) {
         const eligible = invoiceChoice === "rent" ? lines.filter((line) => line.kind === "rent" && line.month === invoiceMonth) : lines;
         const limit = eligible.reduce((sum, line) => sum + line.remainingCents, 0);
         expectedCents = limit;
-        if (reconciliation ? limit <= 0 || limit > 2_147_483_647
+        // Deposits only ever get adjusted, never topped up: a receipt can't take more than the bill.
+        if (reconciliation ? limit <= 0 || limit > 2_147_483_647 || receivedCents > limit
           : receivedCents > limit || (invoiceChoice !== "partial" && receivedCents !== limit)) return false;
         const appliedCents = Math.min(receivedCents, limit);
         const planned = reconciliation && manualAllocation !== undefined
@@ -838,20 +839,6 @@ export async function recordOverdueRentPayment(formData: FormData) {
         });
       }
       if (reconciliation && invoiceMonth) {
-        const extra = Math.max(0, receivedCents - expectedCents) / 100;
-        if (extra > 0) {
-          await tx.tenantLease.update({
-            where: { id: tenantLeaseId },
-            data: { currentDownpaymentBalance: lease.currentDownpaymentBalance?.plus(extra) ?? extra },
-          });
-          await tx.transaction.create({
-            data: {
-              propertyId, unitId: lease.unitId, tenantLeaseId, amount: extra, method,
-              type: "DOWNPAYMENT_RECEIVED_FROM_TENANT", direction: "INCOMING",
-              date: paidDate, recordedByUserId: user.id, paymentReceiptId,
-            },
-          });
-        }
         await tx.rentBillReceiptCheck.create({
           data: {
             receiptId: paymentReceiptId, tenantLeaseId, month: invoiceMonth,

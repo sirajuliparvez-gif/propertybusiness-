@@ -2,7 +2,7 @@ import { dhakaTodayISO } from "@/lib/dhaka-time";
 import { EXPENSE_TYPES, INCOME_TYPES } from "@/lib/finance-types";
 import { getMonthlyRentReport } from "@/lib/monthly-rent-report-data";
 import { buildMonthlyTransactionReport, transactionReportRange } from "@/lib/monthly-transaction-report";
-import { isPaymentMonth } from "@/lib/payment-month";
+import { isPaymentMonth, previousPaymentMonth } from "@/lib/payment-month";
 import { prisma } from "@/lib/prisma";
 
 export async function getMonthlyMarketReport(requestedMonth?: string, propertyId?: string) {
@@ -14,7 +14,7 @@ export async function getMonthlyMarketReport(requestedMonth?: string, propertyId
     orderBy: [{ name: "asc" }, { id: "asc" }],
   });
   const market = markets.find((item) => item.id === propertyId) ?? null;
-  if (!markets.length) return { month, currentMonth, markets, market, report: null };
+  if (!markets.length) return { month, prevMonth: previousPaymentMonth(month), currentMonth, markets, market, report: null };
   const selectedMarkets = market ? [market] : markets;
   const propertyIds = selectedMarkets.map(({ id }) => id);
 
@@ -47,6 +47,10 @@ export async function getMonthlyMarketReport(requestedMonth?: string, propertyId
     name: string | null;
     unit: string | null;
     receivedCents: number;
+    // Cash received this month, split by the billing month it paid for.
+    prevMonthCents: number;
+    thisMonthCents: number;
+    otherMonthsCents: number;
     bill: { due: number; settled: number; remaining: number } | null;
     receiptMonths: Map<string, number>;
   }>(rent.rows.map((row) => [row.id, {
@@ -54,9 +58,13 @@ export async function getMonthlyMarketReport(requestedMonth?: string, propertyId
     name: row.tenantName,
     unit: row.unitLabel,
     receivedCents: 0,
+    prevMonthCents: 0,
+    thisMonthCents: 0,
+    otherMonthsCents: 0,
     bill: { due: row.due, settled: row.settled, remaining: row.remaining },
     receiptMonths: new Map(),
   }]));
+  const prevMonth = previousPaymentMonth(month);
 
   const marketRows = new Map(selectedMarkets.map(({ id, name }) => [id, {
     id, name, receivedCents: 0, incomeCents: 0, expenseCents: 0, rentRemaining: 0,
@@ -92,21 +100,25 @@ export async function getMonthlyMarketReport(requestedMonth?: string, propertyId
     if (!row) {
       row = {
         id: key, name: lease?.tenant.name ?? null, unit: lease?.unit.label ?? entry.unit?.label ?? null,
-        receivedCents: 0, bill: null, receiptMonths: new Map(),
+        receivedCents: 0, prevMonthCents: 0, thisMonthCents: 0, otherMonthsCents: 0,
+        bill: null, receiptMonths: new Map(),
       };
       tenantRows.set(key, row);
     }
     row.receivedCents += cents;
     rentReceivedCents += cents;
     const billingMonth = entry.rentPayment?.month;
-    if (billingMonth && billingMonth !== month) {
-      row.receiptMonths.set(billingMonth, (row.receiptMonths.get(billingMonth) ?? 0) + cents);
+    if (billingMonth === month) row.thisMonthCents += cents;
+    else if (billingMonth === prevMonth) row.prevMonthCents += cents;
+    else {
+      row.otherMonthsCents += cents;
+      if (billingMonth) row.receiptMonths.set(billingMonth, (row.receiptMonths.get(billingMonth) ?? 0) + cents);
     }
     return [];
   });
 
   return {
-    month, currentMonth, markets, market,
+    month, prevMonth, currentMonth, markets, market,
     report: {
       totals: cash.totals, rentTotals: rent.totals, rentReceived: rentReceivedCents / 100,
       tenants: [...tenantRows.values()].sort((a, b) => (a.unit ?? "").localeCompare(b.unit ?? "", undefined, { numeric: true }) ||

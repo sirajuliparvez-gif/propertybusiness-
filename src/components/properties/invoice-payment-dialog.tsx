@@ -50,8 +50,7 @@ export function InvoicePaymentDialog({
   const total = lines.reduce((sum, line) => sum + line.remainingCents, 0);
   const rentTotal = rent.reduce((sum, line) => sum + line.remainingCents, 0);
   const amount = reconciliation && matches ? total : readCents(received);
-  const valid = Number.isSafeInteger(amount) && amount > 0 &&
-    (reconciliation ? amount <= 2_147_483_647 : amount <= total);
+  const valid = Number.isSafeInteger(amount) && amount > 0 && amount <= total;
   const planned = valid ? allocateInvoicePayment(onlyRent ? rent : lines, Math.min(amount, total)) : [];
   const showSplit = Boolean(reconciliation) && valid && amount < total && lines.length > 1;
   const suggested = new Map(planned.map(({ id, paidCents }) => [id, paidCents]));
@@ -150,9 +149,7 @@ export function InvoicePaymentDialog({
                   </dl>
                   <p className="text-xs text-muted-foreground">{t("receiptCheckBalanceStays", { month: monthLabel(month, locale) })}</p>
                 </>
-              ) : <p className="font-semibold">{amount > total
-                ? t("rentBillExtraAdvance", { amount: money(amount - total) })
-                : t("invoicePaymentPreview", { amount: money(amount), remaining: money(total - amount) })}</p>}
+              ) : <p className="font-semibold">{t("invoicePaymentPreview", { amount: money(amount), remaining: money(total - amount) })}</p>}
               {onlyRent || hasEarlierUtilities ? (
                 <p className="text-xs text-muted-foreground">
                   {t(onlyRent ? "invoicePaymentOnlyRent" : "invoiceOldestFirst")}
