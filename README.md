@@ -188,7 +188,8 @@ Open [http://localhost:3000](http://localhost:3000). The root route redirects to
 
 | Command | Description |
 | --- | --- |
-| `npm run dev` | Start the development server with webpack |
+| `npm run dev` | Start the development server (Turbopack) |
+| `npm run dev:webpack` | Start the development server with webpack (fallback) |
 | `npm run build` | Create a production build and run TypeScript checks |
 | `npm run start` | Serve the production build |
 | `npm run lint` | Run ESLint across the project |

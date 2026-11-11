@@ -280,9 +280,14 @@
   .rent-bill-paper-copy thead { height: 7mm; }
   .rent-bill-paper-copy > * + * { margin-top: 4px; }
   .rent-bill-paper-copy .cash-memo-reading { margin-top: 0; font-size: 8pt; line-height: 1.1; }
+  .rent-bill-paper-copy .cash-memo-arrears { margin-top: 0; font-size: 7.5pt; line-height: 1.15; }
   .rent-bill-paper-copy .cash-memo-signatures { margin-top: auto; padding-top: 11mm; }
   .rent-bill-paper-copy .cash-memo-signatures > span { min-inline-size: 44mm; }
   .rent-bill-paper-copy .cash-memo-signatures > :last-child { text-align: end; }
+  /* A bill carrying previous dues has one more row: tighten spacing so both copies still fit one A4. */
+  .rent-bill-paper-copy.rent-bill-paper-copy--dense { min-height: 0; }
+  .rent-bill-paper-copy.rent-bill-paper-copy--dense th, .rent-bill-paper-copy.rent-bill-paper-copy--dense td { padding-block: 1.5px; }
+  .rent-bill-paper-copy.rent-bill-paper-copy--dense .cash-memo-signatures { padding-top: 8mm; }
   .rent-bill-copy-label {
     font-size: 8pt;
     font-weight: 600;

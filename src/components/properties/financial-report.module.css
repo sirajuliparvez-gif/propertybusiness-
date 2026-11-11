@@ -100,7 +100,7 @@
   .sectionTitle { padding:16px 0 10px; font-size:12px; break-after:avoid; }
 }
 
-.utilityTable { min-width:980px; }
+.utilityTable { min-width:1160px; }
 .billDetail { display:block; margin-top:3px; color:var(--muted-foreground); font-size:11px; font-weight:400; }
 @media print {
   .utilityPrint { page:monthlyUtilityReport; }

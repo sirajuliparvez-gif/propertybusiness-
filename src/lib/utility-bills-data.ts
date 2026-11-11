@@ -4,6 +4,7 @@ import { attachElectricityConsumption } from "@/lib/electricity-consumption";
 import { splitUtilityBillTransactions } from "@/lib/utility-bill-split";
 import { serializeUtilityBillDefaults } from "@/lib/utility-bill-defaults";
 import { dhakaISO } from "@/lib/dhaka-time";
+import { latestReceivedAt, loadBillPrintDates } from "@/lib/utility-bill-dates";
 
 function getPropertiesWithBills() {
   return prisma.property.findMany({
@@ -52,7 +53,7 @@ function getPropertiesWithBills() {
           // write-off) — a partially/split-paid bill can have one of each.
           transactions: {
             orderBy: { date: "desc" },
-            select: { type: true, amount: true, method: true },
+            select: { type: true, amount: true, method: true, date: true },
           },
         },
       },
@@ -115,6 +116,7 @@ export async function getAllUtilityBillsData(requestedMonth?: string) {
           status: b.status,
           paidByCompany: b.paidByCompany,
           paymentMethod: split.method,
+          receivedAt: latestReceivedAt(b.transactions),
           collectedFromTenant: split.collectedFromTenant,
           companyAbsorbedAmount: split.companyAbsorbedAmount,
           profitAmount: split.profitAmount,
@@ -135,7 +137,9 @@ export async function getAllUtilityBillsData(requestedMonth?: string) {
     })
     .sort((a, b) => b.dueDate.getTime() - a.dueDate.getTime());
 
-  const bills = scope.selectedMonth ? allBills.filter((bill) => bill.month === scope.selectedMonth) : allBills;
+  const shownBills = scope.selectedMonth ? allBills.filter((bill) => bill.month === scope.selectedMonth) : allBills;
+  const printedAt = await loadBillPrintDates(shownBills);
+  const bills = shownBills.map((bill) => ({ ...bill, printedAt: printedAt.get(bill.id) ?? null }));
 
   const totalUnpaid = bills
     .filter((b) => b.status !== "PAID")

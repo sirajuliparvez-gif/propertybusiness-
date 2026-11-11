@@ -30,9 +30,10 @@ export default async function MoneyReceiptPage({ params, searchParams }: {
     },
     orderBy: { id: "asc" },
     select: {
-      id: true, amount: true, date: true, method: true, type: true,
-      rentPayment: { select: { month: true } },
-      utilityBill: { select: { month: true, type: true, meterLabel: true } },
+      id: true, amount: true, date: true, method: true, type: true, createdAt: true,
+      rentPaymentId: true, utilityBillId: true,
+      rentPayment: { select: { month: true, dueAmount: true } },
+      utilityBill: { select: { month: true, type: true, meterLabel: true, amount: true } },
       property: { select: { name: true } },
       tenantLease: { select: { tenant: { select: { name: true } }, unit: { select: { label: true } } } },
     },
@@ -49,12 +50,30 @@ export default async function MoneyReceiptPage({ params, searchParams }: {
     WATER: t("utilityTypeWater"), WASTE: t("utilityTypeWaste"),
     SECURITY: t("utilityTypeSecurity"), OTHER: t("cashMemoOtherCharges"),
   };
+  // Money already received for the same rent month / bill before this receipt, so a balance reads as one.
+  const placedAt = entries.reduce((min, entry) => entry.createdAt < min ? entry.createdAt : min, entries[0].createdAt);
+  const earlierRows = await prisma.transaction.findMany({
+    where: {
+      paymentReceiptId: { not: receiptId }, createdAt: { lt: placedAt }, direction: "INCOMING",
+      type: { in: ["RENT_RECEIVED_FROM_TENANT", "UTILITY_REIMBURSEMENT_FROM_TENANT"] },
+      OR: [
+        { rentPaymentId: { in: entries.flatMap((entry) => entry.rentPaymentId ? [entry.rentPaymentId] : []) } },
+        { utilityBillId: { in: entries.flatMap((entry) => entry.utilityBillId ? [entry.utilityBillId] : []) } },
+      ],
+    },
+    select: { rentPaymentId: true, utilityBillId: true, amount: true },
+  });
+  const earlierFor = (key: string | null) => key == null ? 0 : earlierRows
+    .filter((row) => row.rentPaymentId === key || row.utilityBillId === key)
+    .reduce((sum, row) => sum + Number(row.amount), 0);
   const dates = new Set(entries.map(({ date }) => dhakaISO(date)));
   const lines = entries.map((entry) => ({
     ...entry,
     label: entry.type === "DOWNPAYMENT_RECEIVED_FROM_TENANT" ? t("rentBillAdvanceLabel")
       : entry.utilityBill ? utilityLabels[entry.utilityBill.type] + (entry.utilityBill.meterLabel ? ` · ${entry.utilityBill.meterLabel}` : "") : t("invoiceRentLabel"),
     month: entry.rentPayment?.month ?? entry.utilityBill?.month ?? "",
+    earlier: earlierFor(entry.rentPaymentId ?? entry.utilityBillId),
+    chargeTotal: Number(entry.rentPayment?.dueAmount ?? entry.utilityBill?.amount ?? 0),
   })).sort((a, b) => a.month.localeCompare(b.month));
   const total = entries.slice(1).reduce((sum, entry) => sum.plus(entry.amount), first.amount);
   const selectedMonth = isPaymentMonth(month) ? `?month=${month}` : "";
@@ -125,6 +144,7 @@ export default async function MoneyReceiptPage({ params, searchParams }: {
               <tr key={line.id} className="break-inside-avoid border-b">
                 <td className="px-2 py-1.5">{line.label}{line.month ? ` · ${monthLabel(line.month, locale)}` : ""}
                   {dates.size > 1 ? <span className="block text-xs text-muted-foreground">{formatDate(line.date, locale)}</span> : null}
+                  {line.earlier > 0 ? <span className="block text-xs text-muted-foreground">{t("receiptBalanceNote", { total: formatTaka(line.chargeTotal, 2), earlier: formatTaka(line.earlier, 2) })}</span> : null}
                 </td>
                 <td className="whitespace-nowrap px-2 py-1.5 text-end tabular-nums">{formatTaka(Number(line.amount), 2)}</td>
               </tr>

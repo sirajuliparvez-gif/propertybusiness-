@@ -543,6 +543,7 @@ export default async function TenantProfilePage({
                       <p className="font-mono text-sm font-semibold tabular-nums">
                         {formatTaka(p.paidAmount)}
                       </p>
+                      {p.installments.length ? <p className="text-xs text-muted-foreground">{p.installments.map((part) => `${formatTaka(part.amount)} · ${formatDate(part.date, locale)}`).join(" + ")}</p> : null}
                       <div className="mt-1 flex items-center justify-end gap-2">
                         <StatusPill status={rentPillStatus(p.status, p.pastDue)} labels={rentStatusLabels} />
                         {p.editable && p.transactionAmount != null && p.transactionDate ? (
@@ -591,6 +592,7 @@ export default async function TenantProfilePage({
                     <TableCell>{monthLabel(p.month, locale)}</TableCell>
                     <TableCell className="text-right font-mono tabular-nums">
                       {formatTaka(p.paidAmount)}
+                      {p.installments.length ? <span className="block font-sans text-xs font-normal text-muted-foreground">{p.installments.map((part) => `${formatTaka(part.amount)} · ${formatDate(part.date, locale)}`).join(" + ")}</span> : null}
                     </TableCell>
                     <TableCell className="text-muted-foreground">
                       {p.isVirtual ? (

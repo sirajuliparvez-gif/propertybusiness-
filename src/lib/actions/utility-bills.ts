@@ -1,6 +1,7 @@
 "use server";
 
-import { dhakaISO, dhakaToday } from "@/lib/dhaka-time";
+import { dhakaISO, dhakaToday, dhakaTodayISO } from "@/lib/dhaka-time";
+import { isPaymentMonth } from "@/lib/payment-month";
 import { revalidatePath } from "next/cache";
 import { getLocale } from "next-intl/server";
 import type { Prisma } from "@/generated/prisma/client";
@@ -114,6 +115,46 @@ export async function addUtilityBill(formData: FormData) {
   const returnTo = str(formData, "returnTo") ?? `/properties/${propertyId}`;
   revalidatePath(returnTo);
   redirect({ href: returnTo, locale });
+}
+
+export type OlderUtilityDueResult =
+  | { ok: true; id: string }
+  | { ok: false; error: "invalid" | "notFound" | "beforeLeaseStart" | "exists" };
+
+// Records an unpaid utility bill of an earlier month for the tenant (e.g. one that was never entered), so it
+// can be added to the bill and collected like any other due. Water is the company's own cost and never billed.
+export async function addOlderUtilityDue(tenantLeaseId: string, type: string, month: string, amount: number): Promise<OlderUtilityDueResult> {
+  await requireCurrentUser();
+  const billable = ["ELECTRICITY", "GAS", "WASTE", "SECURITY", "OTHER"] as const;
+  const billType = billable.find((entry) => entry === type);
+  if (!billType || !isPaymentMonth(month) || month >= dhakaTodayISO().slice(0, 7) || !Number.isFinite(amount) || amount <= 0 ||
+      amount > 100_000_000 || Math.abs(amount * 100 - Math.round(amount * 100)) > 1e-6) return { ok: false, error: "invalid" };
+  const lease = await prisma.tenantLease.findUnique({
+    where: { id: tenantLeaseId },
+    select: { id: true, status: true, startDate: true, unitId: true, unit: { select: { unitType: { select: { propertyId: true } } } } },
+  });
+  if (!lease || lease.status !== "ACTIVE") return { ok: false, error: "notFound" };
+  const startDay = dhakaISO(lease.startDate);
+  if (month < startDay.slice(0, 7)) return { ok: false, error: "beforeLeaseStart" };
+  const dueDay = `${month}-10` < startDay ? startDay : `${month}-10`;
+  const propertyId = lease.unit.unitType.propertyId;
+  const id = await prisma.$transaction(async (tx) => {
+    if (await hasMonthlyTenantUtilityBill(tx, lease, month, [billType], undefined, null)) return null;
+    const bill = await tx.utilityBill.create({
+      data: {
+        propertyId, unitId: lease.unitId, tenantLeaseId: lease.id, type: billType, month,
+        dueDate: new Date(dueDay), amount, paidByCompany: false, status: "UNPAID",
+      },
+      select: { id: true },
+    });
+    return bill.id;
+  }, { isolationLevel: "Serializable" });
+  if (!id) return { ok: false, error: "exists" };
+  const locale = await getLocale();
+  for (const path of ["/utility-bills", "/utility-bills/arrears", "/rent", `/tenants/${tenantLeaseId}`, `/rent/${tenantLeaseId}/invoice`, `/tenants/${tenantLeaseId}/invoice`, `/properties/${propertyId}`]) {
+    revalidatePath(`/${locale}${path}`);
+  }
+  return { ok: true, id };
 }
 
 export async function getPreviousTenantMeterReading(tenantLeaseId: string, dueDate: string, meterLabel?: string) {

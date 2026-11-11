@@ -90,9 +90,9 @@ export function RentBillRowActions({ leaseId, month, revision, scoped }: {
         setPopup(null);
         router.refresh();
       }}>
-        <DialogContent className="gap-2 p-3 sm:max-w-2xl sm:p-4">
+        <DialogContent className={popup === "receive" ? "gap-2 p-3 sm:max-w-2xl sm:p-4" : "gap-2 p-3 sm:max-w-6xl sm:p-4"}>
           <DialogHeader><DialogTitle>{title}</DialogTitle></DialogHeader>
-          {popup ? <iframe ref={frame} src={`/${locale}${href}`} title={title} className={popup === "receive" ? "h-[min(80dvh,44rem)] w-full rounded-lg border" : "h-[min(84dvh,48rem)] w-full rounded-lg border"} /> : null}
+          {popup ? <iframe ref={frame} src={`/${locale}${href}`} title={title} className={popup === "receive" ? "h-[min(80dvh,44rem)] w-full rounded-lg border" : "h-[calc(100dvh-6rem)] w-full rounded-lg border"} /> : null}
         </DialogContent>
       </Dialog>
       <Dialog open={confirmClose} onOpenChange={setConfirmClose}>
