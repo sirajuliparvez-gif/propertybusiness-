@@ -190,7 +190,7 @@
     "searchTenant": "Tenant name or unit number",
     "moreFilters": "More filters",
     "clearFilters": "Clear filters",
-    "collectOutstanding": "Collect outstanding rent",
+    "collectOutstanding": "Money received",
     "marketDue": "Market outstanding",
     "marketAccounts": "{count} tenant accounts",
     "filters": "Change period or filters",
@@ -224,7 +224,7 @@
     "empty": "No tenants with unpaid rent in this selection.",
     "basis": "Amounts follow the selected rent billing months and include payments recorded later. Money received and advance adjustments are shown separately.",
     "cutover": "Missing rent entries are counted from October 2026 onward. Earlier months appear only when rent entries were recorded.",
-    "overdueNote": "Overdue rent: {amount}. Current-month rent becomes overdue after the 10th; total outstanding also includes rent still within its payment window.",
+    "overdueNote": "Only past months are shown here. This month’s rent is handled in Rent Collection.",
     "scope": "Totals cover the displayed tenants and selected months. Credits are shown separately and do not cancel another month’s or tenant’s unpaid rent."
   },
   "Properties": {
@@ -753,6 +753,7 @@
     "invoiceTakePayment": "Payment received",
     "invoiceAddMeterBill": "Add another meter's bill",
     "rentBillPreviousDues": "Previous dues",
+    "rentBillPrintArrears": "Print bill for dues",
     "rentBillPreviousDuesHint": "Choose the unpaid earlier months to add to this bill. They are included in the amount due.",
     "rentBillAddOlderDue": "Add an older due",
     "rentBillOlderDueMonth": "Month",
@@ -851,7 +852,7 @@
     "utilityBillPaidToast": "Bill marked as paid.",
 
     "propertyLabel": "Property",
-    "utilityArrearsSubtitle": "Unpaid utility bills from this month and previous months.",
+    "utilityArrearsSubtitle": "Unpaid utility bills from previous months. This month’s bills are in Utility Bills.",
     "noUtilityArrears": "No unpaid utility bills found.",
     "utilityBillsPageSubtitle": "View and pay utility bills across all properties in one place",
     "utilityPaidThisMonth": "Paid This Month",

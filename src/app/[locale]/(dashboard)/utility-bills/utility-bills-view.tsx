@@ -22,7 +22,7 @@ export async function UtilityBillsView({ month, openAddForm = false, unpaidOnly 
   const basePath = unpaidOnly ? "/utility-bills/arrears" : "/utility-bills";
   const viewPath = selectedMonth ? `${basePath}?month=${selectedMonth}` : basePath;
   const visibleBills = unpaidOnly
-    ? bills.filter((bill) => bill.month <= currentMonth && bill.status !== "PAID" && bill.amount > bill.paidAmount)
+    ? bills.filter((bill) => bill.month < currentMonth && bill.status !== "PAID" && bill.amount > bill.paidAmount)
     : bills;
   const visibleUnpaid = unpaidOnly ? visibleBills.reduce((total, bill) => total + bill.amount - bill.paidAmount, 0) : totalUnpaid;
 
@@ -34,7 +34,7 @@ export async function UtilityBillsView({ month, openAddForm = false, unpaidOnly 
           <p className="text-sm text-muted-foreground">{t(unpaidOnly ? "utilityArrearsSubtitle" : "utilityBillsPageSubtitle")}</p>
         </div>
         <div className="flex flex-wrap items-center gap-2 sm:justify-end">
-          <ReportMonthSelect month={selectedMonth ?? "ALL"} months={availableMonths} basePath={basePath} allowAll />
+          <ReportMonthSelect month={selectedMonth ?? "ALL"} months={unpaidOnly ? availableMonths.filter((m) => m < currentMonth) : availableMonths} basePath={basePath} allowAll />
           {!unpaidOnly && <Button variant="outline" render={<Link href={`/utility-bills/report${selectedMonth ? `?month=${selectedMonth}` : ""}`} />} nativeButton={false}><FileText className="size-4" />{t("utilityReportTitle")}</Button>}
           {!unpaidOnly && properties.length > 0 ? <AddUtilityBillDialogGlobal
             key={String(openAddForm)}

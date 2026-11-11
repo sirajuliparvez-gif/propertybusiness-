@@ -57,8 +57,8 @@ export default async function RentArrearsPage({ searchParams }: {
       <details className="border-t pt-2">
         <summary className="cursor-pointer text-sm text-muted-foreground">{t("moreFilters")} · {period}</summary>
         <div className="mt-3 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-          <label className="min-w-0 space-y-1 text-xs font-medium">{t("from")}<input aria-label={t("from")} type="month" name="from" required defaultValue={report.from} min={report.earliest} max={report.currentMonth} className={filterClass} /></label>
-          <label className="min-w-0 space-y-1 text-xs font-medium">{t("to")}<input aria-label={t("to")} type="month" name="to" required defaultValue={report.to} min={report.earliest} max={report.currentMonth} className={filterClass} /></label>
+          <label className="min-w-0 space-y-1 text-xs font-medium">{t("from")}<input aria-label={t("from")} type="month" name="from" required defaultValue={report.from} min={report.earliest} max={report.lastMonth} className={filterClass} /></label>
+          <label className="min-w-0 space-y-1 text-xs font-medium">{t("to")}<input aria-label={t("to")} type="month" name="to" required defaultValue={report.to} min={report.earliest} max={report.lastMonth} className={filterClass} /></label>
           <label className="min-w-0 space-y-1 text-xs font-medium">{p("tenantName")}<select aria-label={p("tenantName")} name="tenant" defaultValue={report.tenant} className={filterClass}>
             <option value="">{t("allTenants")}</option>{report.tenantOptions.map((tenant) => <option key={tenant.id} value={tenant.id}>{tenant.name} · {tenant.unit} · {tenant.propertyName}</option>)}
           </select></label>
@@ -77,7 +77,6 @@ export default async function RentArrearsPage({ searchParams }: {
       <dl className={clean.overview}>
         <div><dt>{t("totalOutstanding")}</dt><dd className={clean.mainBalance}>{formatTaka(report.totals.remaining)}</dd></div>
         <div><dt>{t("overdue")}</dt><dd>{formatTaka(report.totals.overdue)}</dd></div>
-        <div><dt>{t("inPaymentWindow")}</dt><dd>{formatTaka(report.totals.remaining - report.totals.overdue)}</dd></div>
         <div className={clean.count}><dt className="sr-only">{t("show")}</dt><dd>{t("tenantCount", { count: report.owingTenants })}{report.includeSettled ? ` · ${t("includeSettled")}` : ""}</dd></div>
       </dl>
       <div className={clean.printNotes}>
@@ -85,7 +84,7 @@ export default async function RentArrearsPage({ searchParams }: {
         {report.totals.credit > 0 && <p>{p("monthlyReportCredit", { amount: formatTaka(report.totals.credit) })}</p>}
         <div className={clean.printSignatures}><span>{p("monthlyReportPreparedBy")}: __________________</span><span>{p("monthlyReportApprovedBy")}: __________________</span></div>
       </div>
-      <RentArrearsLedger key={`${report.from}-${report.to}-${report.property}-${report.tenant}-${report.includeSettled}-${report.query}`} tenants={report.rows} monthLabels={Object.fromEntries(report.months.map((month) => [month, monthLabel(month, locale)]))} selectedTenant={report.tenant} arrearsPeriod={{ from: report.from, to: report.to }} returnTo={`/rent/arrears?${returnParams}`} />
+      <RentArrearsLedger key={`${report.from}-${report.to}-${report.property}-${report.tenant}-${report.includeSettled}-${report.query}`} tenants={report.rows} monthLabels={Object.fromEntries(report.months.map((month) => [month, monthLabel(month, locale)]))} billMonth={report.currentMonth} selectedTenant={report.tenant} arrearsPeriod={{ from: report.from, to: report.to }} returnTo={`/rent/arrears?${returnParams}`} />
       <details className={`${clean.notes} print:hidden`}><summary>{t("monthlySummary")}</summary>
       <div className={styles.tableWrap}><table className={styles.table}>
         <caption className="sr-only">{t("monthlySummary")}</caption>
@@ -94,7 +93,7 @@ export default async function RentArrearsPage({ searchParams }: {
         <tfoot><tr className={styles.total}><th scope="row" className="text-left">{p("total")}</th>{amounts(report.totals).map((amount, index) => <td key={index} className={styles.number}>{formatTaka(amount)}</td>)}</tr></tfoot>
       </table></div>
       </details>
-      <details className={`${clean.notes} print:hidden`}><summary>{t("calculationNotes")}</summary><p>{t("basis")}</p><p>{t("cutover")}</p><p>{t("overdueNote", { amount: formatTaka(report.totals.overdue) })}</p></details>
+      <details className={`${clean.notes} print:hidden`}><summary>{t("calculationNotes")}</summary><p>{t("basis")}</p><p>{t("cutover")}</p><p>{t("overdueNote")}</p></details>
       <footer className={`${styles.footer} ${clean.reportFooter}`}>
         {report.totals.credit > 0 && <p className={styles.scope}>{p("monthlyReportCredit", { amount: formatTaka(report.totals.credit) })}</p>}
         <p className={styles.scope}>{t("scope")}</p><p className="hidden print:block">{t("cutover")}</p>

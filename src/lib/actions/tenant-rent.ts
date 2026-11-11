@@ -906,7 +906,6 @@ export async function recordOverdueRentPayment(formData: FormData) {
     ...localizedMutationPaths(locale, returnPath),
     ...["/rent/arrears", "/rent/report", "/transactions", "/utility-bills", `/tenants/${tenantLeaseId}`, `/tenants/${tenantLeaseId}/invoice`].map((path) => `/${locale}${path}`),
   ])) revalidatePath(path);
-  const utilityTotal = [...utilityPayments.values()].reduce((sum, amount) => sum + amount, 0);
   if (invoiceMonth) {
     const fromRentInvoice = returnPath === `/rent/${tenantLeaseId}/invoice`;
     const scoped = fromRentInvoice && returnUrl.searchParams.get("tenant") === "1";
@@ -916,8 +915,11 @@ export async function recordOverdueRentPayment(formData: FormData) {
       locale,
     });
   }
-  const result = utilityPayments.size ? "overdueWithUtilities" : "overdue";
-  redirect({ href: withRentActionFeedback(returnTo, result, { amount: paymentAmount + utilityTotal }), locale });
+  // Collecting arrears (from the arrears page or a tenant's profile) also ends on the money receipt.
+  redirect({
+    href: `/tenants/${tenantLeaseId}/receipts/${paymentReceiptId}?from=overdue&back=${encodeURIComponent(returnTo)}`,
+    locale,
+  });
 }
 
 function addMonthsToMonthStr(monthStr: string, offset: number) {

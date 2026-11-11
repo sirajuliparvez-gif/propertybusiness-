@@ -47,11 +47,11 @@ export default async function TenantInvoicePage({
   fromRent = false,
 }: {
   params: Promise<{ id: string }>;
-  searchParams: Promise<{ month?: string; bill?: string; tenant?: string; print?: string; receive?: string; embed?: string }>;
+  searchParams: Promise<{ month?: string; bill?: string; tenant?: string; print?: string; receive?: string; embed?: string; arrears?: string }>;
   fromRent?: boolean;
 }) {
   const { id } = await params;
-  const { month: requestedMonth, bill: highlightedBillId, tenant: tenantScope, print, receive, embed } = await searchParams;
+  const { month: requestedMonth, bill: highlightedBillId, tenant: tenantScope, print, receive, embed, arrears } = await searchParams;
   const embedded = fromRent && embed === "1";
   const t = await getTranslations("Properties");
   const tNav = await getTranslations("Nav");
@@ -302,11 +302,13 @@ export default async function TenantInvoicePage({
     return paymentMonthRange(first, last, 36).filter((month) => !recorded.has(month));
   })();
   const printForm = fromRent ? (
-    <RentBillPrintForm key={`${selectedMonth}:${printIssue?.revision ?? 0}:${print ?? ""}`}
-      leaseId={id} month={selectedMonth} rows={rentBillPrintRows(tenant, selectedMonth)}
+    <RentBillPrintForm key={`${selectedMonth}:${printIssue?.revision ?? 0}:${print ?? ""}:${arrears ?? ""}`}
+      arrearsOnly={arrears === "1"} leaseId={id} month={selectedMonth} rows={rentBillPrintRows(tenant, selectedMonth)}
       printed={printed} revision={printIssue?.revision ?? 0} prepare={print === "1"} returnTo={rentListPath}
       utilityEditors={utilityEditors} arrearsCandidates={earlierDues}
-      olderDueMonths={olderDueMonths} olderDueAmount={tenant.monthlyRentAmount} canAddDue={canEditPrintedBills} leaseStartMonth={dhakaISO(tenant.startDate).slice(0, 7)}
+      olderDueMonths={olderDueMonths} olderRentByMonth={Object.fromEntries(olderDueMonths.map((month) => [month, rentTermsDueAmount(resolveRentTermsForMonth({
+        monthlyRentAmount: tenant.configuredMonthlyRentAmount, serviceChargeType: tenant.configuredServiceChargeType, serviceChargeValue: tenant.configuredServiceChargeValue,
+      }, tenant.rentRates, month))]))} canAddDue={canEditPrintedBills} leaseStartMonth={dhakaISO(tenant.startDate).slice(0, 7)}
       printedDate={printIssue ? formatDate(printIssue.printedAt, locale) : undefined}
       header={{ ...memoHeader, title: t("cashMemoRentTitle"), contact: tenant.contactInfo }} embedded={embedded} />
   ) : null;
@@ -331,13 +333,13 @@ export default async function TenantInvoicePage({
       <div data-rent-bill-embed className="space-y-3">
         <div className="flex flex-wrap items-center justify-between gap-2 border-b pb-3 print:hidden">
           <span className="flex min-w-0 flex-wrap items-baseline gap-x-3 text-sm font-medium">
-            {t("rentMonthFilter")}
-            {receive === "1" ? null : <span className="font-normal text-muted-foreground">{tenant.tenantName} · {monthLabel(selectedMonth, locale)}</span>}
+            {arrears === "1" ? tenant.tenantName : t("rentMonthFilter")}
+            {receive === "1" || arrears === "1" ? null : <span className="font-normal text-muted-foreground">{tenant.tenantName} · {monthLabel(selectedMonth, locale)}</span>}
           </span>
-          <InvoiceMonthSelect leaseId={id} months={availableMonths} selectedMonth={selectedMonth}
+          {arrears === "1" ? null : <InvoiceMonthSelect leaseId={id} months={availableMonths} selectedMonth={selectedMonth}
             basePath={invoiceBasePath} tenantScope={tenantScope === "1"} embedded
             minMonth={[leaseStartDay.slice(0, 7), ...availableMonths].sort()[0]} maxMonth={availableMonths[0]}
-            action={receive === "1" ? "receive" : print === "1" ? "print" : undefined} />
+            action={receive === "1" ? "receive" : print === "1" ? "print" : undefined} />}
         </div>
         <BillMonthContent>
         {!rentTracked ? <p className="rounded-md border px-3 py-2 text-sm print:hidden">{t("invoiceMonthNoRentRecord")}</p> : null}
