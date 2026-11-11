@@ -124,7 +124,7 @@ export async function generateMonthlyWorkbook(
         include: { transactions: { orderBy: { date: "desc" }, take: 1, select: { method: true } } },
       }),
       prisma.utilityBill.findMany({
-        where: { propertyId, month: monthKey },
+        where: { propertyId, month: monthKey, meterLabel: null },
         include: { transactions: { orderBy: { date: "desc" }, take: 1, select: { method: true, date: true } } },
       }),
       // Full electricity-reading history for this property — needed to chain
@@ -132,7 +132,7 @@ export async function generateMonthlyWorkbook(
       // already-recorded bill this month) and the blank new-bill row below,
       // not just what happens to exist within this one month.
       prisma.utilityBill.findMany({
-        where: { propertyId, type: "ELECTRICITY" },
+        where: { propertyId, type: "ELECTRICITY", meterLabel: null },
         select: { id: true, unitId: true, month: true, dueDate: true, createdAt: true, meterReading: true, previousMeterReadingOverride: true },
       }),
     ]);

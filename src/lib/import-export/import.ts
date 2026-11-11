@@ -662,7 +662,7 @@ async function importUtilityBills(
       // bill (property + unit + type + month) — an unchanged re-uploaded row
       // skips entirely instead of creating a second bill for the same charge.
       const existing = await prisma.utilityBill.findFirst({
-        where: { propertyId, unitId, type, month: monthKey },
+        where: { propertyId, unitId, type, month: monthKey, meterLabel: null },
       });
       const previousAmount = existing ? Number(existing.amount) : 0;
       const wasPaid = existing?.status === "PAID";

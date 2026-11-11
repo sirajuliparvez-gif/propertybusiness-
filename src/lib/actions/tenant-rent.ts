@@ -24,7 +24,7 @@ import { withRentActionFeedback } from "@/lib/rent-action-feedback";
 import { allocateInvoicePayment, invoicePaymentSnapshot, reconcileInvoiceAllocation, type InvoicePaymentLine, type ReceiptCheckLine } from "@/lib/invoice-payment";
 import { tenantUtilityArrearsWhere } from "@/lib/tenant-utility-arrears";
 import { limitToPrintedBill, type RentBillPrintRow } from "@/lib/rent-bill-print";
-import { hasMonthlyTenantUtilityBill, prepareTenantUtilityBillRows, validateTenantUtilityBills } from "@/lib/utility-bill-entry";
+import { hasMonthlyTenantUtilityBillAmong, prepareTenantUtilityBillRows, validateTenantUtilityBills } from "@/lib/utility-bill-entry";
 import { numericRentRates, rentTermsDueAmount, resolveRentTermsForMonth } from "@/lib/rent-terms";
 
 function leaseFallbackTerms(lease: {
@@ -601,7 +601,7 @@ export async function getTenantUtilityArrears(tenantLeaseId: string, includeCurr
   const bills = await prisma.utilityBill.findMany({
     where: tenantUtilityArrearsWhere(lease, cutoff),
     orderBy: [{ month: "asc" }, { dueDate: "asc" }, { id: "asc" }],
-    select: { id: true, type: true, month: true, dueDate: true, amount: true, paidAmount: true },
+    select: { id: true, type: true, month: true, dueDate: true, amount: true, paidAmount: true, meterLabel: true },
   });
   return bills.map(({ amount, paidAmount, ...bill }) => ({
     ...bill, remaining: Number(amount.minus(paidAmount)),
@@ -999,7 +999,7 @@ export async function recordMultiMonthRentPayment(formData: FormData, newBills: 
         const received = newUtilityPayments[index];
         return received > 0 && (bill.paidByCompany || received / 100 > Number(bill.amount));
       })) return false;
-      if (billRows.length && await hasMonthlyTenantUtilityBill(tx, lease, billingMonth!, billRows.map(({ type }) => type))) {
+      if (billRows.length && await hasMonthlyTenantUtilityBillAmong(tx, lease, billingMonth!, billRows)) {
         return duplicate;
       }
       const selected = multiMonthBalances(lease, today.slice(0, 7)).flatMap((balance) => {

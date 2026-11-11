@@ -438,6 +438,7 @@ export async function getTenantProfile(leaseId: string) {
       paidByCompany: true,
       meterReading: true,
       previousMeterReadingOverride: true,
+      meterLabel: true,
       transactions: { orderBy: { date: "desc" }, select: { type: true, amount: true, method: true, date: true } },
     },
   });
@@ -450,6 +451,7 @@ export async function getTenantProfile(leaseId: string) {
       createdAt: b.createdAt,
       meterReading: b.meterReading != null ? Number(b.meterReading) : null,
       previousMeterReadingOverride: b.previousMeterReadingOverride == null ? null : Number(b.previousMeterReadingOverride),
+      meterLabel: b.meterLabel,
     }))
   );
   // Ended leases stop owing rent the day they left — same reasoning as
@@ -649,6 +651,7 @@ export async function getTenantProfile(leaseId: string) {
         tenantLeaseId: lease.status === "ACTIVE" ? lease.id : null,
         propertyId: lease.unit.unitType.property.id,
         meterReading: b.meterReading != null ? Number(b.meterReading) : null,
+        meterLabel: b.meterLabel,
         previousMeterReadingOverride: b.previousMeterReadingOverride == null ? null : Number(b.previousMeterReadingOverride),
         previousMeterReading: unitConsumptionByBillId.get(b.id)?.previousReading ?? null,
         consumptionUnits: unitConsumptionByBillId.get(b.id)?.consumption ?? null,

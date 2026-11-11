@@ -359,6 +359,7 @@ export async function getPropertyDetail(id: string) {
           paidByCompany: true,
           meterReading: true,
           previousMeterReadingOverride: true,
+          meterLabel: true,
           transactions: {
             orderBy: { date: "desc" },
             select: { type: true, amount: true, method: true },
@@ -825,6 +826,7 @@ export async function getPropertyDetail(id: string) {
     createdAt: b.createdAt,
     meterReading: b.meterReading != null ? Number(b.meterReading) : null,
     previousMeterReadingOverride: b.previousMeterReadingOverride == null ? null : Number(b.previousMeterReadingOverride),
+    meterLabel: b.meterLabel,
   }));
   const consumptionByBillId = attachElectricityConsumption(electricityBillsForConsumption);
   const utilityBills = property.utilityBills.map((b) => {
@@ -851,6 +853,7 @@ export async function getPropertyDetail(id: string) {
       propertyId: property.id,
       propertyName: property.name,
       meterReading: b.meterReading != null ? Number(b.meterReading) : null,
+      meterLabel: b.meterLabel,
       previousMeterReadingOverride: b.previousMeterReadingOverride == null ? null : Number(b.previousMeterReadingOverride),
       previousMeterReading: consumptionByBillId.get(b.id)?.previousReading ?? null,
       consumptionUnits: consumptionByBillId.get(b.id)?.consumption ?? null,

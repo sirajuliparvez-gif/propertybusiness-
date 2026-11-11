@@ -1,21 +1,22 @@
 "use client";
 
-import { useId, useState, useTransition, type ReactNode } from "react";
+import { useEffect, useId, useState, useTransition, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
 import { toast } from "sonner";
 import type { UtilityType } from "@/generated/prisma/client";
 import { FormField } from "@/components/properties/form-field";
 import { PreviousMeterReadingField } from "@/components/properties/previous-meter-reading-field";
+import { MeterLabelField } from "@/components/properties/meter-label-field";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { addTenantUtilityBills, updateUtilityBill } from "@/lib/actions/utility-bills";
+import { addTenantUtilityBills, getPreviousTenantMeterReading, updateUtilityBill } from "@/lib/actions/utility-bills";
 import { electricityAmountAtRate } from "@/lib/electricity-consumption";
 import { useBillDraft, useBillSession } from "@/components/properties/bill-form-session";
 import { formatTaka } from "@/lib/format";
 
 export function InvoiceUtilityFields({
-  leaseId, month, dueDate, type, label, fixedAmount, previous = null, bill, dateLabel, editAction,
+  leaseId, month, dueDate, type, label, fixedAmount, previous = null, bill, dateLabel, editAction, extraMeter = false,
 }: {
   leaseId: string;
   month: string;
@@ -24,6 +25,8 @@ export function InvoiceUtilityFields({
   type: UtilityType;
   label: string;
   previous?: number | null;
+  // A new bill for an additional, named electricity meter (the unit's first meter stays unnamed).
+  extraMeter?: boolean;
   dateLabel?: string;
   editAction?: ReactNode;
   bill?: {
@@ -33,6 +36,7 @@ export function InvoiceUtilityFields({
     amount: number;
     paidAmount: number;
     meterReading: number | null;
+    meterLabel?: string | null;
     previousMeterReadingOverride: number | null;
   };
 }) {
@@ -40,24 +44,37 @@ export function InvoiceUtilityFields({
   const router = useRouter();
   const id = useId();
   const session = useBillSession();
-  const scope = `utility:${month}:${type}:${bill?.id ?? "new"}:`;
+  const scope = `utility:${month}:${type}:${bill?.id ?? (extraMeter ? "new-meter" : "new")}:`;
   const [previousInput, setPreviousInput] = useBillDraft<string | null>(scope + "previous", null);
   const [current, setCurrent] = useBillDraft(scope + "current", bill?.meterReading?.toString() ?? "");
   const [manualAmount, setManualAmount] = useBillDraft(scope + "amount", bill?.amount.toString() ?? "");
   const [rate, setRate] = useBillDraft(scope + "rate", "");
+  const [meterLabel, setMeterLabel] = useBillDraft(scope + "meter", "");
+  const [lookup, setLookup] = useState<{ key: string; reading: number | null } | null>(null);
+  const lookupKey = `${leaseId}|${dueDate}|${meterLabel.trim()}`;
+  useEffect(() => {
+    if (!extraMeter || !meterLabel.trim()) return;
+    let active = true;
+    getPreviousTenantMeterReading(leaseId, dueDate, meterLabel).then(
+      (found) => { if (active) setLookup({ key: lookupKey, reading: found?.reading ?? null }); },
+      () => { if (active) setLookup({ key: lookupKey, reading: null }); },
+    );
+    return () => { active = false; };
+  }, [extraMeter, leaseId, dueDate, meterLabel, lookupKey]);
+  const automaticPrevious = extraMeter ? (lookup?.key === lookupKey ? lookup.reading : null) : previous;
   const [savedNew, setSavedNew] = useState(false);
   const [feedback, setFeedback] = useState("");
   const [pending, startTransition] = useTransition();
   const isElectricity = type === "ELECTRICITY";
   const usingRate = isElectricity && fixedAmount == null && rate !== "";
-  const previousValue = previousInput ?? previous?.toString() ?? "";
+  const previousValue = previousInput ?? automaticPrevious?.toString() ?? "";
   const units = previousValue !== "" && current !== "" ? Number(current) - Number(previousValue) : null;
   const amount = fixedAmount != null ? String(bill?.amount ?? fixedAmount)
     : usingRate ? electricityAmountAtRate(units, rate) : manualAmount;
   const belowPaid = bill != null && !!amount && Number(amount) < bill.paidAmount;
   const changed = bill == null || Number(amount) !== bill.amount ||
     (isElectricity && (current !== (bill.meterReading?.toString() ?? "") || previousInput !== null));
-  const canSave = !savedNew && changed && !!amount && Number.isFinite(Number(amount)) && Number(amount) >= (bill ? 0 : 0.01) &&
+  const canSave = !savedNew && changed && (!extraMeter || !!meterLabel.trim()) && !!amount && Number.isFinite(Number(amount)) && Number(amount) >= (bill ? 0 : 0.01) &&
     (units == null || units >= 0) && !belowPaid;
 
   return (
@@ -104,8 +121,10 @@ export function InvoiceUtilityFields({
           <input type="hidden" name="unitId" value={bill.unitId} />
         </>
       ) : null}
+      {bill?.meterLabel ? <p className="text-xs font-medium">{bill.meterLabel}</p> : null}
+      {extraMeter ? <MeterLabelField id={`${id}-meter`} value={meterLabel} onChange={setMeterLabel} /> : null}
       {isElectricity ? <fieldset disabled={pending} className="grid grid-cols-1 gap-2 min-[360px]:grid-cols-3">
-        <PreviousMeterReadingField id={`${id}-previous`} automatic={previous} manual={previousInput}
+        <PreviousMeterReadingField id={`${id}-previous`} automatic={automaticPrevious} manual={previousInput}
           onChange={setPreviousInput} recordAutomatic={usingRate || bill?.previousMeterReadingOverride != null} />
         <FormField label={t("invoiceElectricityCurrent")} htmlFor={`${id}-current`}>
           <Input id={`${id}-current`} name="meterReading" type="number" step="any" min={0}
@@ -137,5 +156,23 @@ export function InvoiceUtilityFields({
         {feedback ? <p className="text-destructive" role="status">{feedback}</p> : null}
       </div>
     </form>
+  );
+}
+
+// "+ another meter" for a shop that has a second electricity meter; most shops never open it.
+export function AddMeterBill(props: Omit<Parameters<typeof InvoiceUtilityFields>[0], "type" | "extraMeter" | "bill">) {
+  const t = useTranslations("Properties");
+  const [open, setOpen] = useState(false);
+  if (!open) {
+    return (
+      <Button type="button" variant="ghost" size="sm" className="mt-1 justify-self-start" onClick={() => setOpen(true)}>
+        {t("invoiceAddMeterBill")}
+      </Button>
+    );
+  }
+  return (
+    <div className="mt-2 border-t pt-2">
+      <InvoiceUtilityFields {...props} type="ELECTRICITY" extraMeter />
+    </div>
   );
 }

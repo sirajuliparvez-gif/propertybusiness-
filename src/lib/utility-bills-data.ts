@@ -45,6 +45,9 @@ function getPropertiesWithBills() {
           paidByCompany: true,
           meterReading: true,
           previousMeterReadingOverride: true,
+          meterLabel: true,
+          // The tenant the bill was raised against; stays correct after they move out.
+          tenantLease: { select: { tenant: { select: { name: true } } } },
           // Both possible transactions (tenant reimbursement + company
           // write-off) — a partially/split-paid bill can have one of each.
           transactions: {
@@ -96,6 +99,7 @@ export async function getAllUtilityBillsData(requestedMonth?: string) {
           createdAt: b.createdAt,
           meterReading: b.meterReading != null ? Number(b.meterReading) : null,
           previousMeterReadingOverride: b.previousMeterReadingOverride == null ? null : Number(b.previousMeterReadingOverride),
+          meterLabel: b.meterLabel,
         }))
       );
       return p.utilityBills.map((b) => {
@@ -116,12 +120,13 @@ export async function getAllUtilityBillsData(requestedMonth?: string) {
           profitAmount: split.profitAmount,
           unitLabel: b.unitId ? (unitLabelById.get(b.unitId) ?? null) : null,
           unitId: b.unitId,
-          tenantName: b.unitId ? (tenantNameByUnitId.get(b.unitId) ?? null) : null,
+          tenantName: b.tenantLease?.tenant.name ?? (b.unitId ? (tenantNameByUnitId.get(b.unitId) ?? null) : null),
           tenantLeaseId: b.unitId ? (leaseIdByUnitId.get(b.unitId) ?? null) : null,
           month: b.month,
           propertyId: p.id,
           propertyName: p.name,
           meterReading: b.meterReading != null ? Number(b.meterReading) : null,
+          meterLabel: b.meterLabel,
           previousMeterReadingOverride: b.previousMeterReadingOverride == null ? null : Number(b.previousMeterReadingOverride),
           previousMeterReading: consumptionByBillId.get(b.id)?.previousReading ?? null,
           consumptionUnits: consumptionByBillId.get(b.id)?.consumption ?? null,
@@ -173,6 +178,7 @@ export async function getUtilityBillInvoice(billId: string) {
       paidByCompany: true,
       meterReading: true,
       previousMeterReadingOverride: true,
+      meterLabel: true,
       unitId: true,
       property: { select: { id: true, name: true } },
       // The lease this bill was raised against — the tenant who actually owes
@@ -202,7 +208,7 @@ export async function getUtilityBillInvoice(billId: string) {
   let consumptionUnits: number | null = null;
   if (bill.type === "ELECTRICITY") {
     const chain = await prisma.utilityBill.findMany({
-      where: { type: "ELECTRICITY", propertyId: bill.property.id, unitId: bill.unitId },
+      where: { type: "ELECTRICITY", propertyId: bill.property.id, unitId: bill.unitId, meterLabel: bill.meterLabel },
       select: { id: true, type: true, unitId: true, dueDate: true, createdAt: true, meterReading: true, previousMeterReadingOverride: true },
     });
     const consumption = attachElectricityConsumption(
@@ -244,6 +250,7 @@ export async function getUtilityBillInvoice(billId: string) {
     tenantName: lease?.tenant.name ?? null,
     tenantContact: lease?.tenant.contactInfo ?? null,
     meterReading: bill.meterReading != null ? Number(bill.meterReading) : null,
+    meterLabel: bill.meterLabel,
     previousMeterReading,
     consumptionUnits,
   };

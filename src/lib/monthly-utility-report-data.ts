@@ -12,7 +12,7 @@ export async function getMonthlyUtilityReport(requestedMonth?: string) {
     prisma.utilityBill.findMany({
       where: { month },
       select: {
-        id: true, type: true, amount: true, paidAmount: true, dueDate: true,
+        id: true, type: true, meterLabel: true, amount: true, paidAmount: true, dueDate: true,
         property: { select: { id: true, name: true } },
         unit: { select: {
           label: true,
@@ -25,7 +25,7 @@ export async function getMonthlyUtilityReport(requestedMonth?: string) {
     prisma.utilityBill.findMany({ where: { month: { lte: currentMonth } }, distinct: ["month"], select: { month: true } }),
   ]);
   const rows = bills.map((bill) => ({
-    id: bill.id, type: bill.type, propertyId: bill.property.id, propertyName: bill.property.name,
+    id: bill.id, type: bill.type, meterLabel: bill.meterLabel, propertyId: bill.property.id, propertyName: bill.property.name,
     unitLabel: bill.unit?.label ?? null,
     tenantName: utilityReportTenant({
       linkedTenantName: bill.tenantLease?.tenant.name ?? null,

@@ -21,10 +21,12 @@ type ReadingBill = {
   createdAt: Date;
   meterReading: number | null;
   previousMeterReadingOverride?: number | null;
+  // Optional second/third meter on the same unit; each meter chains separately.
+  meterLabel?: string | null;
 };
 
-function unitKey(unitId: string | null) {
-  return unitId ?? "__property__";
+function unitKey(unitId: string | null, meterLabel?: string | null) {
+  return `${unitId ?? "__property__"}|${meterLabel ?? ""}`;
 }
 
 function chronological(a: ReadingBill, b: ReadingBill) {
@@ -44,7 +46,7 @@ export function attachElectricityConsumption<T extends ReadingBill>(
   const result = new Map<string, { previousReading: number | null; consumption: number | null }>();
 
   for (const b of sorted) {
-    const key = unitKey(b.unitId);
+    const key = unitKey(b.unitId, b.meterLabel);
     const previousReading = b.previousMeterReadingOverride ?? lastReadingByUnit.get(key) ?? null;
     const consumption =
       b.meterReading != null && previousReading != null ? b.meterReading - previousReading : null;
@@ -65,13 +67,14 @@ export function latestElectricityReadingByUnit(
   beforeMonth?: string
 ): Map<string, number> {
   const sorted = [...bills]
-    .filter((b) => b.type === "ELECTRICITY" && b.meterReading != null)
+    // The monthly sheet has one reading column per unit: the unnamed meter.
+    .filter((b) => b.type === "ELECTRICITY" && b.meterReading != null && !b.meterLabel)
     .filter((b) => !beforeMonth || b.month < beforeMonth)
     .sort((a, b) => -chronological(a, b));
 
   const result = new Map<string, number>();
   for (const b of sorted) {
-    const key = unitKey(b.unitId);
+    const key = b.unitId ?? "__property__";
     if (!result.has(key) && b.meterReading != null) result.set(key, b.meterReading);
   }
   return result;

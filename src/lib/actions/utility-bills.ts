@@ -4,7 +4,7 @@ import { dhakaISO, dhakaToday } from "@/lib/dhaka-time";
 import { revalidatePath } from "next/cache";
 import { getLocale } from "next-intl/server";
 import type { Prisma } from "@/generated/prisma/client";
-import { hasMonthlyTenantUtilityBill, prepareTenantUtilityBillRows, readUtilityBillFields, validateTenantUtilityBills, validMeterReadings } from "@/lib/utility-bill-entry";
+import { hasMonthlyTenantUtilityBill, hasMonthlyTenantUtilityBillAmong, prepareTenantUtilityBillRows, readMeterLabel, readUtilityBillFields, validateTenantUtilityBills, validMeterReadings } from "@/lib/utility-bill-entry";
 import { prisma } from "@/lib/prisma";
 import { redirect } from "@/i18n/navigation";
 import { applyUtilityBillInstallment } from "@/lib/payment-progress";
@@ -92,12 +92,12 @@ export async function addUtilityBill(formData: FormData) {
         orderBy: [{ startDate: "desc" }, { id: "asc" }],
         select: { id: true, unitId: true, startDate: true, utilityBillDefaults: true },
       }) : null;
-      if (lease && await hasMonthlyTenantUtilityBill(tx, lease, month, [fields.type])) return false;
+      if (lease && await hasMonthlyTenantUtilityBill(tx, lease, month, [fields.type], undefined, fields.meterLabel)) return false;
       const locked = lease?.utilityBillDefaults.find((item) => item.type === fields.type);
       await tx.utilityBill.create({
         data: {
           ...fields, propertyId, unitId, dueDate, month,
-          amount: locked?.amount ?? fields.amount,
+          amount: (fields.meterLabel ? null : locked?.amount) ?? fields.amount,
           paidByCompany: locked?.paidByCompany ?? fields.paidByCompany,
         },
       });
@@ -116,16 +116,16 @@ export async function addUtilityBill(formData: FormData) {
   redirect({ href: returnTo, locale });
 }
 
-export async function getPreviousTenantMeterReading(tenantLeaseId: string, dueDate: string) {
+export async function getPreviousTenantMeterReading(tenantLeaseId: string, dueDate: string, meterLabel?: string) {
   await requireCurrentUser();
   if (!isValidTransactionDate(dueDate)) return null;
-  return findPreviousMeterReading(dueDate, { unit: { tenantLeases: { some: { id: tenantLeaseId } } } });
+  return findPreviousMeterReading(dueDate, { unit: { tenantLeases: { some: { id: tenantLeaseId } } }, meterLabel: readMeterLabel("ELECTRICITY", meterLabel) });
 }
 
-export async function getPreviousPropertyMeterReading(propertyId: string, unitId: string, dueDate: string) {
+export async function getPreviousPropertyMeterReading(propertyId: string, unitId: string, dueDate: string, meterLabel?: string) {
   await requireCurrentUser();
   if (!propertyId || !isValidTransactionDate(dueDate)) return null;
-  return findPreviousMeterReading(dueDate, { propertyId, unitId: unitId || null, property: { deletedAt: null } });
+  return findPreviousMeterReading(dueDate, { propertyId, unitId: unitId || null, property: { deletedAt: null }, meterLabel: readMeterLabel("ELECTRICITY", meterLabel) });
 }
 
 async function findPreviousMeterReading(dueDate: string, scope: Prisma.UtilityBillWhereInput) {
@@ -165,7 +165,7 @@ export async function addTenantUtilityBills(
       const propertyId = lease.unit.unitType.propertyId;
       const rows = prepareTenantUtilityBillRows(lease, propertyId, billingMonth, validated.bills);
       if (!rows) return { ok: false, error: "utilityBillOutsideLease" } as const;
-      if (await hasMonthlyTenantUtilityBill(tx, lease, billingMonth, rows.map(({ type }) => type))) {
+      if (await hasMonthlyTenantUtilityBillAmong(tx, lease, billingMonth, rows)) {
         return { ok: false, error: "utilityBillDuplicateMonth" } as const;
       }
       await tx.utilityBill.createMany({ data: rows });
@@ -365,6 +365,8 @@ export async function updateUtilityBill(
   const meterReading = meterReadingRaw ? Number(meterReadingRaw) : null;
   const previousRaw = str(formData, "previousMeterReadingOverride");
   const previousMeterReadingOverride = type !== "ELECTRICITY" || previousRaw == null ? null : Number(previousRaw);
+  // Forms without a meter field (invoice quick edit) leave the bill's meter as it was.
+  const submittedMeterLabel = formData.has("meterLabel") ? readMeterLabel(type, formData.get("meterLabel")) : undefined;
   const returnTo = str(formData, "returnTo") ?? `/properties/${propertyId}`;
 
   const month = dueDate.slice(0, 7);
@@ -373,7 +375,7 @@ export async function updateUtilityBill(
       where: { id: billId },
       select: {
         unitId: true, propertyId: true, tenantLeaseId: true, month: true, dueDate: true,
-        paidAmount: true, previousMeterReadingOverride: true, type: true, paidByCompany: true, amount: true, meterReading: true,
+        paidAmount: true, previousMeterReadingOverride: true, meterLabel: true, type: true, paidByCompany: true, amount: true, meterReading: true,
       },
     });
     if (!bill || bill.propertyId !== propertyId) return "notFound" as const;
@@ -412,7 +414,8 @@ export async function updateUtilityBill(
       });
       if (!unit || unit.unitType.propertyId !== propertyId) return "unitNotInProperty" as const;
     }
-    const changesBillKey = month !== bill.month || type !== bill.type || unitId !== bill.unitId;
+    const meterLabel = type !== "ELECTRICITY" ? null : submittedMeterLabel === undefined ? bill.meterLabel : submittedMeterLabel;
+    const changesBillKey = month !== bill.month || type !== bill.type || unitId !== bill.unitId || meterLabel !== bill.meterLabel;
     if (unitId && (changesBillKey || dueDate !== dhakaISO(bill.dueDate))) {
       const lease = await tx.tenantLease.findFirst({
         where: bill.tenantLeaseId && unitId === bill.unitId
@@ -423,7 +426,7 @@ export async function updateUtilityBill(
       });
       const entersLease = lease && dhakaISO(bill.dueDate) < dhakaISO(lease.startDate);
       if (lease && (changesBillKey || entersLease) &&
-          await hasMonthlyTenantUtilityBill(tx, lease, month, [type], billId)) {
+          await hasMonthlyTenantUtilityBill(tx, lease, month, [type], billId, meterLabel)) {
         return "utilityBillDuplicateMonth" as const;
       }
     }
@@ -438,7 +441,7 @@ export async function updateUtilityBill(
       where: {
         id: billId, paidAmount: bill.paidAmount, amount: bill.amount, type: bill.type, unitId: bill.unitId,
         dueDate: bill.dueDate, paidByCompany: bill.paidByCompany, meterReading: bill.meterReading,
-        previousMeterReadingOverride: bill.previousMeterReadingOverride,
+        previousMeterReadingOverride: bill.previousMeterReadingOverride, meterLabel: bill.meterLabel,
       },
       data: {
         type,
@@ -450,6 +453,7 @@ export async function updateUtilityBill(
         paidByCompany: updatedPayer,
         meterReading,
         previousMeterReadingOverride: previous,
+        meterLabel,
         // Rebuilt from what's settled against the NEW amount — a ৳2000 bill
         // already fully collected, edited down to ৳1000, is PAID rather than
         // an impossible overpaid PARTIAL.

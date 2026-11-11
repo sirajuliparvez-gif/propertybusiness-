@@ -68,7 +68,7 @@ function InvoiceCopy({
         <div className="cash-memo-fields grid grid-cols-2 gap-x-4 gap-y-2 border-y border-dashed py-2 sm:grid-cols-4">
           <div>
             <p className="text-xs text-muted-foreground">{t("utilityType")}</p>
-            <p className="font-medium">{typeLabels[bill.type] ?? bill.type}</p>
+            <p className="font-medium">{typeLabels[bill.type] ?? bill.type}{bill.meterLabel ? ` · ${bill.meterLabel}` : ""}</p>
           </div>
           <div>
             <p className="text-xs text-muted-foreground">{t("invoiceBillAmount")}</p>
@@ -87,6 +87,7 @@ function InvoiceCopy({
         </div>
         {bill.type === "ELECTRICITY" && bill.meterReading != null ? (
           <CashMemoReading
+            meter={bill.meterLabel}
             current={bill.meterReading}
             previous={bill.previousMeterReading}
             units={bill.consumptionUnits}
@@ -165,7 +166,7 @@ export default async function UtilityBillInvoicePage({ params }: { params: Promi
             <ArrowLeft className="size-4" />
           </Button>
           <span className="text-sm text-muted-foreground">
-            {typeLabels[bill.type] ?? bill.type} / {t("invoiceLabel")}
+            {typeLabels[bill.type] ?? bill.type}{bill.meterLabel ? ` · ${bill.meterLabel}` : ""} / {t("invoiceLabel")}
           </span>
         </div>
         <InvoicePrintButton />

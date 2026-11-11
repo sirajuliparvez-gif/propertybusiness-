@@ -39,7 +39,7 @@ export function rentBillPrintRows(tenant: TenantProfile, month: string): RentBil
       dueCents: bills.length ? billable.reduce((sum, bill) => sum + Math.round(bill.amount * 100), 0) : null,
       remainingCents: lines.reduce((sum, line) => sum + line.remainingCents, 0),
       readings: bills.flatMap((bill) => bill.meterReading == null ? [] : [{
-        current: bill.meterReading, previous: bill.previousMeterReading, units: bill.consumptionUnits,
+        meter: bill.meterLabel, current: bill.meterReading, previous: bill.previousMeterReading, units: bill.consumptionUnits,
       }]),
     };
   });

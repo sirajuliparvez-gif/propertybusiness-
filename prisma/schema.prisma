@@ -694,6 +694,10 @@ model UtilityBill {
   meterReading  Decimal?
   // A manually entered starting reading for this bill only.
   previousMeterReadingOverride Decimal?
+  // Optional name for a second (or third) electricity meter on the same unit,
+  // e.g. "Meter 2". Null is the unit's single, unnamed meter. Readings chain,
+  // and the one-bill-per-month rule applies, per (unit, meterLabel).
+  meterLabel    String?
   createdAt     DateTime     @default(now())
   importBatchId String?
   importBatch   ImportBatch? @relation(fields: [importBatchId], references: [id])
