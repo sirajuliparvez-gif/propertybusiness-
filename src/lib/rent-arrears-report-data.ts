@@ -1,6 +1,7 @@
 import { prisma } from "@/lib/prisma";
 import { dhakaNow } from "@/lib/dhaka-time";
 import { numericRentRates } from "@/lib/rent-terms";
+import { previousPaymentMonth } from "@/lib/payment-month";
 import { buildRentArrearsReport, resolveArrearsRange } from "@/lib/rent-arrears-report";
 
 function normalizeSearch(value: string) {
@@ -10,8 +11,10 @@ function normalizeSearch(value: string) {
 export async function getRentArrearsReport(requested: { from?: string; to?: string; property?: string; tenant?: string; show?: string; q?: string }) {
   const now = dhakaNow();
   const currentMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
-  const earliest = await prisma.rentPayment.aggregate({ _min: { month: true }, where: { month: { lte: currentMonth } } });
-  const range = resolveArrearsRange(requested.from, requested.to, earliest._min.month, currentMonth);
+  // Arrears are past months only; the current month belongs to Rent Collection.
+  const lastMonth = previousPaymentMonth(currentMonth);
+  const earliest = await prisma.rentPayment.aggregate({ _min: { month: true }, where: { month: { lte: lastMonth } } });
+  const range = resolveArrearsRange(requested.from, requested.to, earliest._min.month, lastMonth);
   const [year, number] = range.to.split("-").map(Number);
   const leases = await prisma.tenantLease.findMany({
     where: { OR: [
@@ -52,5 +55,5 @@ export async function getRentArrearsReport(requested: { from?: string; to?: stri
       adjustments: payment.downpaymentAdjustments.map((adjustment) => Number(adjustment.amountAdjusted)),
     })),
   })), range.from, range.to, includeSettled, now);
-  return { ...report, ...range, currentMonth, properties, tenantOptions, property, tenant, includeSettled, query };
+  return { ...report, ...range, currentMonth, lastMonth, properties, tenantOptions, property, tenant, includeSettled, query };
 }

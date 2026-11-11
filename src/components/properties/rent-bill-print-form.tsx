@@ -20,7 +20,7 @@ import { arrearsRow, isSmallLeftover, type ArrearsCandidate, type RentBillPrintK
 const money = (cents: number) => formatTaka(cents / 100, 2);
 
 export function RentBillPrintForm({
-  leaseId, month, rows, printed, printedDate, revision, header, prepare, returnTo, embedded = false, utilityEditors, arrearsCandidates = [], olderDueMonths = [], olderDueAmount = 0, canAddDue = false, leaseStartMonth = "",
+  leaseId, month, rows, printed, printedDate, revision, header, prepare, returnTo, embedded = false, utilityEditors, arrearsCandidates = [], olderDueMonths = [], olderRentByMonth = {}, canAddDue = false, leaseStartMonth = "", arrearsOnly = false,
 }: {
   leaseId: string;
   month: string;
@@ -37,10 +37,13 @@ export function RentBillPrintForm({
   arrearsCandidates?: ArrearsCandidate[];
   // Earlier months the app does not track on its own, which can be added by hand, and the usual rent.
   olderDueMonths?: string[];
-  olderDueAmount?: number;
+  // The rent due for each of those months, filled in when a month is chosen.
+  olderRentByMonth?: Record<string, number>;
   // Whether an earlier due may be added by hand, and the month the lease started (earliest month for a utility due).
   canAddDue?: boolean;
   leaseStartMonth?: string;
+  // Opened from the arrears page: a bill for the earlier dues only, without this month's charges.
+  arrearsOnly?: boolean;
 }) {
   const t = useTranslations("Properties");
   const locale = useLocale();
@@ -54,12 +57,15 @@ export function RentBillPrintForm({
   const [dueKind, setDueKind] = useState<"RENT" | "ELECTRICITY" | "GAS" | "WASTE" | "SECURITY" | "OTHER">(olderDueMonths.length ? "RENT" : "ELECTRICITY");
   const [dueMonth, setDueMonth] = useState("");
   const [dueAmount, setDueAmount] = useState("");
-  const [selected, setSelected] = useBillDraft<RentBillPrintKey[]>(`print:${month}:selected`, () =>
-    (printed ?? rows).flatMap(({ key }) => key === "ARREARS" ? [] : [key]));
+  // A bill that is already printed keeps its lines; only a new dues-only bill leaves out this month's charges.
+  const duesOnly = arrearsOnly && !printed;
+  const draftKey = duesOnly ? `print:${month}:dues` : `print:${month}`;
+  const [selected, setSelected] = useBillDraft<RentBillPrintKey[]>(`${draftKey}:selected`, () =>
+    duesOnly ? [] : (printed ?? rows).flatMap(({ key }) => key === "ARREARS" ? [] : [key]));
   // A bill already printed keeps what it carried; a new one starts with the small leftovers added.
-  const [chosenArrears, setChosenArrears] = useBillDraft<string[]>(`print:${month}:arrears`, () => printed
+  const [chosenArrears, setChosenArrears] = useBillDraft<string[]>(`${draftKey}:arrears`, () => printed
     ? printed.find(({ key }) => key === "ARREARS")?.lines.map(({ id }) => id) ?? []
-    : arrearsCandidates.filter(isSmallLeftover).map(({ id }) => id));
+    : (duesOnly ? arrearsCandidates : arrearsCandidates.filter(isSmallLeftover)).map(({ id }) => id));
   const labels = {
     ARREARS: t("rentBillPreviousDues"),
     RENT: t("invoiceRentLabel"), ELECTRICITY: t("utilityTypeElectricity"), GAS: t("utilityTypeGas"),
@@ -129,7 +135,7 @@ export function RentBillPrintForm({
     try { return leaseStartMonth && leaseStartMonth <= previousPaymentMonth(month) ? paymentMonthRange(leaseStartMonth, previousPaymentMonth(month), 36) : []; } catch { return []; }
   })();
   const dueMonthOptions = dueKind === "RENT" ? olderDueMonths : utilityDueMonths;
-  const dueAmountNumber = Number(dueAmount || (dueKind === "RENT" ? olderDueAmount : 0));
+  const dueAmountNumber = Number(dueAmount);
   const dueItem = (due: ArrearsCandidate) => (
     <li key={due.id}>
       <label className="flex cursor-pointer items-center gap-3 py-1 text-sm">
@@ -173,17 +179,21 @@ export function RentBillPrintForm({
         <div className="mt-3 space-y-1 border-t pt-2">
           <div className="grid gap-2 min-[560px]:grid-cols-[1fr_1fr_1fr_auto]">
             <select aria-label={t("rentBillOlderDueFor")} value={dueKind}
-              onChange={(event) => { setDueKind(event.target.value as typeof dueKind); setDueMonth(""); }}
+              onChange={(event) => { setDueKind(event.target.value as typeof dueKind); setDueMonth(""); setDueAmount(""); }}
               className="h-9 w-full rounded-lg border bg-card px-2 text-sm">
               {dueKinds.filter(([kind]) => kind !== "RENT" || olderDueMonths.length > 0).map(([kind, label]) => <option key={kind} value={kind}>{label}</option>)}
             </select>
-            <select aria-label={t("rentBillOlderDueMonth")} value={dueMonth} onChange={(event) => setDueMonth(event.target.value)}
+            <select aria-label={t("rentBillOlderDueMonth")} value={dueMonth} onChange={(event) => {
+                setDueMonth(event.target.value);
+                const rent = dueKind === "RENT" ? olderRentByMonth[event.target.value] : undefined;
+                if (rent) setDueAmount(String(rent));
+              }}
               className="h-9 w-full rounded-lg border bg-card px-2 text-sm">
               <option value="">{t("rentBillOlderDueMonth")}</option>
               {dueMonthOptions.map((option) => <option key={option} value={option}>{monthLabel(option, locale)}</option>)}
             </select>
             <Input aria-label={t("rentBillOlderDueAmount")} type="number" min={0.01} step="0.01" value={dueAmount}
-              placeholder={dueKind === "RENT" && olderDueAmount ? `${t("rentBillOlderDueAmount")} (${money(olderDueAmount * 100)})` : t("rentBillOlderDueAmount")}
+              placeholder={t("rentBillOlderDueAmount")}
               onChange={(event) => setDueAmount(event.target.value)} />
             <div className="flex gap-1">
               <Button type="button" size="sm" disabled={!dueMonth || !(dueAmountNumber > 0)} onClick={addDue}>{t("rentBillOlderDueSave")}</Button>
@@ -293,15 +303,15 @@ export function RentBillPrintForm({
         {open ? (
           <section className={`mx-auto flex w-full max-w-4xl flex-col gap-3 rounded-lg border bg-card p-4${embedded ? " min-h-[calc(100dvh-8.5rem)]" : ""}`}>
             <div className="flex flex-wrap items-baseline justify-between gap-x-4">
-              <h2 className="text-base font-semibold">{t(revision ? "rentBillCorrection" : "rentBillPrintOptions")}</h2>
+              <h2 className="text-base font-semibold">{t(duesOnly ? "rentBillPrintArrears" : revision ? "rentBillCorrection" : "rentBillPrintOptions")}</h2>
               <p className="text-xs text-muted-foreground">{t("rentBillChooseLines")}</p>
             </div>
             <fieldset disabled={pending} className="min-w-0 divide-y rounded-md border">
-              {baseRows.filter((row) => row.key === "RENT").map((row) => (
+              {duesOnly ? previousDues : baseRows.filter((row) => row.key === "RENT").map((row) => (
                 <Fragment key={row.key}>{rowLine(row)}{previousDues}</Fragment>
               ))}
-              {baseRows.filter((row) => row.key === "ELECTRICITY").map((row) => rowLine(row))}
-              {otherRows.length ? (
+              {duesOnly ? null : baseRows.filter((row) => row.key === "ELECTRICITY").map((row) => rowLine(row))}
+              {otherRows.length && !duesOnly ? (
                 <div className="space-y-2 px-3 py-3">
                   <div className="flex flex-wrap items-center gap-2">
                     <span className="me-1 text-sm font-medium">{t("rentBillAddCharge")}</span>

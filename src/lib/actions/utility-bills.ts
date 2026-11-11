@@ -1,5 +1,6 @@
 "use server";
 
+import { randomUUID } from "node:crypto";
 import { dhakaISO, dhakaToday, dhakaTodayISO } from "@/lib/dhaka-time";
 import { isPaymentMonth } from "@/lib/payment-month";
 import { revalidatePath } from "next/cache";
@@ -256,6 +257,9 @@ export async function payUtilityBill(formData: FormData) {
   const tenantAmountStr = str(formData, "tenantAmount");
   const companyCoversRest = formData.get("companyCoversRest") === "true";
 
+  // A payment the tenant makes toward this bill also gets a money receipt.
+  const paymentReceiptId = randomUUID();
+  let receiptLeaseId: string | null = null;
   await prisma.$transaction(async (tx) => {
     const bill = await tx.utilityBill.findUnique({
       where: { id: billId },
@@ -327,9 +331,12 @@ export async function payUtilityBill(formData: FormData) {
           unitId: bill.unitId,
           tenantLeaseId: bill.tenantLeaseId ?? bill.unit?.tenantLeases[0]?.id ?? null,
           utilityBillId: billId,
+          paymentReceiptId,
           date: paidDate,
         },
       });
+      // The receipt shows the bill portion only, so it is offered when nothing else was paid on top.
+      receiptLeaseId = profitAmount === 0 ? (bill.tenantLeaseId ?? bill.unit?.tenantLeases[0]?.id ?? null) : null;
     }
     if (profitAmount > 0) {
       // Tenant paid more than the actual bill — a real gain for the company,
@@ -369,6 +376,10 @@ export async function payUtilityBill(formData: FormData) {
 
   const returnTo = str(formData, "returnTo") ?? `/properties/${propertyId}`;
   revalidatePath(returnTo);
+  if (receiptLeaseId) {
+    revalidatePath(`/${locale}/tenants/${receiptLeaseId}`);
+    redirect({ href: `/tenants/${receiptLeaseId}/receipts/${paymentReceiptId}?from=overdue&back=${encodeURIComponent(returnTo)}`, locale });
+  }
   redirect({ href: returnTo, locale });
 }
 

@@ -4,6 +4,7 @@ import { Fragment, useState } from "react";
 import { useTranslations } from "next-intl";
 import { ChevronDown } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { RentBillRowActions } from "@/components/properties/rent-bill-row-actions";
 import { RecordTenantRentPaymentDialog } from "@/components/properties/record-tenant-rent-payment-dialog";
 import { formatTaka } from "@/lib/format";
 import { groupRentArrearsByProperty, type buildRentArrearsReport } from "@/lib/rent-arrears-report";
@@ -11,10 +12,12 @@ import styles from "@/components/properties/rent-arrears.module.css";
 
 type Tenant = ReturnType<typeof buildRentArrearsReport>["rows"][number];
 
-export function RentArrearsLedger({ tenants, monthLabels, selectedTenant, arrearsPeriod, returnTo }: {
+export function RentArrearsLedger({ tenants, monthLabels, selectedTenant, arrearsPeriod, returnTo, billMonth }: {
   tenants: Tenant[]; monthLabels: Record<string, string>; selectedTenant: string;
   arrearsPeriod: { from: string; to: string };
   returnTo: string;
+  // The current month: a dues-only bill is issued under it, since a bill belongs to a month.
+  billMonth: string;
 }) {
   const t = useTranslations("RentArrears");
   const p = useTranslations("Properties");
@@ -52,7 +55,8 @@ export function RentArrearsLedger({ tenants, monthLabels, selectedTenant, arrear
             <tfoot><tr><th scope="row">{p("total")}</th><td>{formatTaka(tenant.totals.due)}</td><td>{formatTaka(tenant.totals.collected)}</td><td>{formatTaka(tenant.totals.remaining)}</td></tr></tfoot>
           </table></div>
           {tenant.totals.remaining > 0 ? (
-            <div className="flex justify-end pt-3 print:hidden">
+            <div className="flex flex-wrap items-center justify-end gap-2 pt-3 print:hidden">
+              {tenant.status === "ACTIVE" ? <RentBillRowActions leaseId={tenant.id} month={billMonth} revision={0} scoped={false} arrearsOnly /> : null}
               <RecordTenantRentPaymentDialog
                 key={tenant.months.map(({ month, remaining }) => `${month}:${remaining}`).join(",")}
                 tenantLeaseId={tenant.id}

@@ -27,8 +27,10 @@ export function RentBillDates({ lastPrintedAt, lastReceivedAt }: {
   );
 }
 
-export function RentBillRowActions({ leaseId, month, revision, scoped }: {
+export function RentBillRowActions({ leaseId, month, revision, scoped, arrearsOnly = false }: {
   leaseId: string; month: string; revision: number; scoped: boolean;
+  // Only a "print bill for the earlier dues" button, used on the arrears page.
+  arrearsOnly?: boolean;
 }) {
   const t = useTranslations("Properties");
   const locale = useLocale();
@@ -39,8 +41,9 @@ export function RentBillRowActions({ leaseId, month, revision, scoped }: {
   const [confirmClose, setConfirmClose] = useState(false);
   const query = new URLSearchParams({ month, embed: "1", ...(scoped ? { tenant: "1" } : {}) });
   if (popup === "print" || popup === "receive") query.set(popup, "1");
+  if (arrearsOnly) query.set("arrears", "1");
   const href = `/rent/${leaseId}/invoice?${query}`;
-  const title = popup === "receive" ? t("rentBillReceive")
+  const title = arrearsOnly ? t("rentBillPrintArrears") : popup === "receive" ? t("rentBillReceive")
     : popup === "printed" ? t("rentBillPrinted") : t(revision ? "rentBillCorrection" : "invoicePrintBill");
 
   useEffect(() => {
@@ -66,7 +69,11 @@ export function RentBillRowActions({ leaseId, month, revision, scoped }: {
 
   return (
     <div className="flex flex-wrap items-center justify-end gap-1.5">
-      {revision ? (
+      {arrearsOnly ? (
+        <Button type="button" size="sm" variant="outline" onClick={() => setPopup("print")}>
+          <Printer className="size-4" />{t("rentBillPrintArrears")}
+        </Button>
+      ) : revision ? (
         <>
           <Button type="button" size="sm" variant="ghost" className="text-success" onClick={() => setPopup("printed")}>
             <Check className="size-4" />{t("rentBillPrinted")}
@@ -80,9 +87,11 @@ export function RentBillRowActions({ leaseId, month, revision, scoped }: {
           <Printer className="size-4" />{t("invoicePrintBill")}
         </Button>
       )}
-      <Button type="button" size="sm" onClick={() => setPopup("receive")}>
-        {t("rentBillReceive")}
-      </Button>
+      {arrearsOnly ? null : (
+        <Button type="button" size="sm" onClick={() => setPopup("receive")}>
+          {t("rentBillReceive")}
+        </Button>
+      )}
       <Dialog open={popup != null} onOpenChange={(open) => {
         if (open) return;
         if (dirty.current) { setConfirmClose(true); return; }
