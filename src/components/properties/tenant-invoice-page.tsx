@@ -15,7 +15,7 @@ import { CashMemoHandwritingRow, CashMemoHeader, CashMemoReading, CashMemoSignat
 import { BillFormSession, BillMonthContent } from "@/components/properties/bill-form-session";
 import { InvoiceMonthSelect } from "@/components/properties/invoice-month-select";
 import { InvoicePaymentDialog } from "@/components/properties/invoice-payment-dialog";
-import { InvoiceUtilityFields } from "@/components/properties/invoice-utility-fields";
+import { AddMeterBill, InvoiceUtilityFields } from "@/components/properties/invoice-utility-fields";
 import { getPreviousTenantMeterReading } from "@/lib/actions/utility-bills";
 import { EditUtilityBillDialog } from "@/components/properties/edit-utility-bill-dialog";
 import { InvoiceAddUtilityBillDialog } from "@/components/properties/add-utility-bill-dialog";
@@ -169,7 +169,7 @@ export default async function TenantInvoicePage({
   const paymentLines = [
     { id: selectedMonth, month: selectedMonth, kind: "rent" as const, remaining: rentRemaining, label: t("invoiceRentLabel") },
     ...statementBills.map((bill) => ({
-      id: bill.id, month: bill.month, kind: "utility" as const, remaining: billRemaining(bill), label: fromRent ? `${utilityTypeLabels[bill.type]} · ${formatDate(bill.dueDate, locale)}` : utilityTypeLabels[bill.type],
+      id: bill.id, month: bill.month, kind: "utility" as const, remaining: billRemaining(bill), label: (() => { const name = bill.meterLabel ? `${utilityTypeLabels[bill.type]} · ${bill.meterLabel}` : utilityTypeLabels[bill.type]; return fromRent ? `${name} · ${formatDate(bill.dueDate, locale)}` : name; })(),
     })),
   ].map(({ remaining, ...line }) => ({ ...line, remainingCents: Math.round(remaining * 100) }))
     .filter(({ remainingCents }) => remainingCents > 0);
@@ -254,9 +254,13 @@ export default async function TenantInvoicePage({
       const newBill = canAddBill && !bills.length ? <InvoiceUtilityFields key={`new-${type}`}
         leaseId={id} month={selectedMonth} dueDate={newBillDate} type={type} label={label}
         fixedAmount={fixedAmount} previous={type === "ELECTRICITY" ? previousForNewBill?.reading : null} /> : null;
-      if (!bills.length) return [type, newBill];
+      // A shop with a second electricity meter gets its own, named bill alongside the first.
+      const extraMeterBill = canAddBill && type === "ELECTRICITY" ? <AddMeterBill key={`extra-${bills.length}`}
+        leaseId={id} month={selectedMonth} dueDate={newBillDate} label={label} fixedAmount={null} /> : null;
+      if (!bills.length) return [type, <div key={type}>{newBill}{extraMeterBill}</div>];
       return [type, (
-        <ul key={type} className="divide-y">
+        <div key={type}>
+        <ul className="divide-y">
           {bills.map((bill) => {
             const billKey = JSON.stringify([bill.type, bill.amount, bill.paidAmount, bill.dueDate, bill.paidByCompany,
               bill.meterReading, bill.previousMeterReadingOverride]);
@@ -275,6 +279,8 @@ export default async function TenantInvoicePage({
             );
           })}
         </ul>
+        {extraMeterBill}
+        </div>
       )];
     }),
   ) : undefined;
@@ -450,7 +456,7 @@ export default async function TenantInvoicePage({
                         </span>
                       ) : null}
                       {type === "ELECTRICITY" ? [...bills, ...companyBills].map((b) => b.meterReading != null ? (
-                        <CashMemoReading key={b.id}
+                        <CashMemoReading key={b.id} meter={b.meterLabel}
                           current={b.meterReading} previous={b.previousMeterReading} units={b.consumptionUnits}
                           label={t("cashMemoReading")} unitLabel={t("cashMemoUnits")} missing={t("cashMemoReadingMissing")}
                           locale={locale}
@@ -517,13 +523,14 @@ export default async function TenantInvoicePage({
                     className={cn(b.id === highlightedBillId && "bg-primary/5 print:bg-transparent")}
                   >
                     <TableCell>
-                      {utilityTypeLabels[b.type] ?? b.type}
+                      {utilityTypeLabels[b.type] ?? b.type}{b.meterLabel ? ` · ${b.meterLabel}` : ""}
                       <p className="text-xs text-muted-foreground sm:hidden print:hidden">
                         {billStatusLabel(b.status)}
                         {b.paidAt ? ` · ${formatDate(b.paidAt, locale)}` : null}
                       </p>
                       {b.month < selectedMonth && b.type === "ELECTRICITY" && b.meterReading != null ? (
                         <CashMemoReading
+                          meter={b.meterLabel}
                           current={b.meterReading}
                           previous={b.previousMeterReading}
                           units={b.consumptionUnits}

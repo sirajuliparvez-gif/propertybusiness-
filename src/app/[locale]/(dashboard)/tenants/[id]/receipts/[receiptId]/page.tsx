@@ -32,7 +32,7 @@ export default async function MoneyReceiptPage({ params, searchParams }: {
     select: {
       id: true, amount: true, date: true, method: true, type: true,
       rentPayment: { select: { month: true } },
-      utilityBill: { select: { month: true, type: true } },
+      utilityBill: { select: { month: true, type: true, meterLabel: true } },
       property: { select: { name: true } },
       tenantLease: { select: { tenant: { select: { name: true } }, unit: { select: { label: true } } } },
     },
@@ -53,7 +53,7 @@ export default async function MoneyReceiptPage({ params, searchParams }: {
   const lines = entries.map((entry) => ({
     ...entry,
     label: entry.type === "DOWNPAYMENT_RECEIVED_FROM_TENANT" ? t("rentBillAdvanceLabel")
-      : entry.utilityBill ? utilityLabels[entry.utilityBill.type] : t("invoiceRentLabel"),
+      : entry.utilityBill ? utilityLabels[entry.utilityBill.type] + (entry.utilityBill.meterLabel ? ` · ${entry.utilityBill.meterLabel}` : "") : t("invoiceRentLabel"),
     month: entry.rentPayment?.month ?? entry.utilityBill?.month ?? "",
   })).sort((a, b) => a.month.localeCompare(b.month));
   const total = entries.slice(1).reduce((sum, entry) => sum.plus(entry.amount), first.amount);

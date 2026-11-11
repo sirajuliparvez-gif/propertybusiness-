@@ -31,6 +31,7 @@ import {
 import { Checkbox } from "@/components/ui/checkbox";
 import { FormField } from "@/components/properties/form-field";
 import { PreviousMeterReadingField } from "@/components/properties/previous-meter-reading-field";
+import { MeterLabelField } from "@/components/properties/meter-label-field";
 import { addUtilityBill, getPreviousPropertyMeterReading } from "@/lib/actions/utility-bills";
 import type { AllUtilityBillsData } from "@/lib/utility-bills-data";
 import { electricityAmountAtRate } from "@/lib/electricity-consumption";
@@ -55,6 +56,7 @@ export function AddUtilityBillDialogGlobal({
   const [unitId, setUnitId] = useState(NONE_VALUE);
   const [payerOverride, setPayerOverride] = useState<boolean | null>(null);
   const [meterReading, setMeterReading] = useState("");
+  const [meterLabel, setMeterLabel] = useState("");
   const [manualPreviousReading, setManualPreviousReading] = useState<string | null>(null);
   const [open, setOpen] = useState(dismissTo != null);
   const [unitRate, setUnitRate] = useState("");
@@ -63,16 +65,16 @@ export function AddUtilityBillDialogGlobal({
   const [readingLookup, setReadingLookup] = useState<{ key: string; reading: number | null; failed?: boolean } | null>(null);
 
   const effectiveUnitId = unitId === NONE_VALUE ? "" : unitId;
-  const readingKey = JSON.stringify([propertyId, effectiveUnitId, dueDate]);
+  const readingKey = JSON.stringify([propertyId, effectiveUnitId, dueDate, meterLabel.trim()]);
   useEffect(() => {
     if (!open || !propertyId || type !== "ELECTRICITY" || !dueDate) return;
     let active = true;
-    getPreviousPropertyMeterReading(propertyId, effectiveUnitId, dueDate).then(
+    getPreviousPropertyMeterReading(propertyId, effectiveUnitId, dueDate, meterLabel).then(
       (result) => { if (active) setReadingLookup({ key: readingKey, reading: result?.reading ?? null }); },
       () => { if (active) setReadingLookup({ key: readingKey, reading: null, failed: true }); },
     );
     return () => { active = false; };
-  }, [open, propertyId, effectiveUnitId, type, dueDate, readingKey]);
+  }, [open, propertyId, effectiveUnitId, type, dueDate, readingKey, meterLabel]);
   const lookup = readingLookup?.key === readingKey ? readingLookup : null;
   const previousReading = lookup?.reading ?? null;
   const effectivePreviousReading = manualPreviousReading == null ? previousReading
@@ -115,6 +117,7 @@ export function AddUtilityBillDialogGlobal({
     setPayerOverride(null);
     setAmountOverride(null);
     setMeterReading("");
+    setMeterLabel("");
     setManualPreviousReading(null);
     setUnitRate("");
   }
@@ -220,6 +223,7 @@ export function AddUtilityBillDialogGlobal({
 
           {type === "ELECTRICITY" ? (
             <div className="grid gap-3 sm:col-span-2 sm:grid-cols-2">
+              <MeterLabelField id="utilityBillGlobalMeterLabel" value={meterLabel} onChange={setMeterLabel} />
               <PreviousMeterReadingField id="utilityBillGlobalPreviousReading" automatic={previousReading}
                 manual={manualPreviousReading} onChange={setManualPreviousReading} recordAutomatic={usingUnitRate} />
               <FormField label={t("currentMeterReading")} htmlFor="utilityBillMeterReadingGlobal">

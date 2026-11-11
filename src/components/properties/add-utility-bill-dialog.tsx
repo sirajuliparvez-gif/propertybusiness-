@@ -25,6 +25,7 @@ import {
 import { Checkbox } from "@/components/ui/checkbox";
 import { FormField } from "@/components/properties/form-field";
 import { PreviousMeterReadingField } from "@/components/properties/previous-meter-reading-field";
+import { MeterLabelField } from "@/components/properties/meter-label-field";
 import { addTenantUtilityBills, addUtilityBill, getPreviousPropertyMeterReading, getPreviousTenantMeterReading, getTenantUtilityBillDefaults } from "@/lib/actions/utility-bills";
 import type { UtilityType } from "@/generated/prisma/client";
 import { utilityBillTypes, type UtilityBillDefault } from "@/lib/utility-bill-defaults";
@@ -54,7 +55,7 @@ type BillFormProps =
 
 function collectionBillData(formData: FormData) {
   const bill = new FormData();
-  for (const field of ["type", "paidByCompany", "meterReading", "previousMeterReadingOverride", "electricityUnitRate", "dueDate", "received"]) {
+  for (const field of ["type", "paidByCompany", "meterReading", "meterLabel", "previousMeterReadingOverride", "electricityUnitRate", "dueDate", "received"]) {
     const value = formData.get(field);
     if (typeof value === "string") bill.set(field, value);
   }
@@ -119,6 +120,7 @@ export function AddUtilityBillForm(props: BillFormProps) {
   const [unitId, setUnitId] = useState(NONE_VALUE);
   const [payerOverride, setPayerOverride] = useState<boolean | null>(null);
   const [meterReading, setMeterReading] = useState("");
+  const [meterLabel, setMeterLabel] = useState("");
   const [manualPreviousReading, setManualPreviousReading] = useState<string | null>(null);
   const [unitRate, setUnitRate] = useState("");
   const [draftAmount, setDraftAmount] = useState<string | null>(null);
@@ -166,7 +168,7 @@ export function AddUtilityBillForm(props: BillFormProps) {
   const payerLocked = typeDefault?.paidByCompany != null;
   const amountLocked = typeDefault?.amount != null;
   const effectiveUnitId = fixedUnitId ?? (unitId === NONE_VALUE ? "" : unitId);
-  const readingKey = JSON.stringify([leaseId, propertyId, effectiveUnitId, readingDate]);
+  const readingKey = JSON.stringify([leaseId, propertyId, effectiveUnitId, readingDate, meterLabel.trim()]);
   const [readingRefresh, setReadingRefresh] = useState(0);
   const [readingLookup, setReadingLookup] = useState<{
     key: string;
@@ -177,8 +179,8 @@ export function AddUtilityBillForm(props: BillFormProps) {
   useEffect(() => {
     if (type !== "ELECTRICITY" || !readingDate || (!leaseId && !propertyId)) return;
     let current = true;
-    const lookup = leaseId ? getPreviousTenantMeterReading(leaseId, readingDate)
-      : getPreviousPropertyMeterReading(propertyId!, effectiveUnitId, readingDate);
+    const lookup = leaseId ? getPreviousTenantMeterReading(leaseId, readingDate, meterLabel)
+      : getPreviousPropertyMeterReading(propertyId!, effectiveUnitId, readingDate, meterLabel);
     lookup.then(
       (previous) => {
         if (current) setReadingLookup({ key: readingKey, previous });
@@ -188,7 +190,7 @@ export function AddUtilityBillForm(props: BillFormProps) {
       },
     );
     return () => { current = false; };
-  }, [leaseId, propertyId, effectiveUnitId, readingDate, readingKey, readingRefresh, type]);
+  }, [leaseId, propertyId, effectiveUnitId, readingDate, readingKey, readingRefresh, type, meterLabel]);
 
   const lookupForDate = readingLookup?.key === readingKey ? readingLookup : null;
   let previousReading = lookupForDate?.previous?.reading ?? null;
@@ -198,6 +200,7 @@ export function AddUtilityBillForm(props: BillFormProps) {
       const reading = data.get("meterReading");
       const date = data.get("dueDate");
       if (data.get("type") === "ELECTRICITY" && typeof reading === "string" && reading !== "" &&
+        (data.get("meterLabel") ?? "") === meterLabel.trim() &&
         typeof date === "string" && date <= readingDate && (!previous || date >= previous.date)) {
         previous = { date, reading: Number(reading) };
       }
@@ -240,6 +243,7 @@ export function AddUtilityBillForm(props: BillFormProps) {
     setPayerOverride(null);
     if (defaults?.length) setDraftAmount(null);
     setMeterReading("");
+    setMeterLabel("");
     setManualPreviousReading(null);
     setUnitRate("");
     setReceived("");
@@ -266,6 +270,7 @@ export function AddUtilityBillForm(props: BillFormProps) {
                 <p className="font-medium">{label} · {amount}</p>
                 <p className="text-xs text-muted-foreground">
                   {dueDate}
+                  {data.get("meterLabel") ? ` · ${data.get("meterLabel")}` : null}
                   {data.get("meterReading") ? ` · ${t("meterReading")} ${data.get("meterReading")}` : null}
                   {data.get("paidByCompany") === "true" ? ` · ${t("paidByCompanyLabel")}` : null}
                   {Number(data.get("received")) > 0 ? ` · ${t("collectionNewBillReceived")} ${formatTaka(Number(data.get("received")), 2)}` : null}
@@ -344,6 +349,7 @@ export function AddUtilityBillForm(props: BillFormProps) {
 
       {type === "ELECTRICITY" ? (
         <div className="grid gap-3 sm:col-span-2 sm:grid-cols-2">
+          <MeterLabelField id="utilityBillMeterLabel" value={meterLabel} onChange={setMeterLabel} />
           <PreviousMeterReadingField id="utilityBillPreviousMeterReading" automatic={previousReading}
             manual={manualPreviousReading} onChange={setManualPreviousReading} recordAutomatic={usingUnitRate} />
           <FormField label={t("currentMeterReading")} htmlFor="utilityBillMeterReading">

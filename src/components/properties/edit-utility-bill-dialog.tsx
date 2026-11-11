@@ -28,6 +28,7 @@ import {
 import { Checkbox } from "@/components/ui/checkbox";
 import { FormField } from "@/components/properties/form-field";
 import { PreviousMeterReadingField } from "@/components/properties/previous-meter-reading-field";
+import { MeterLabelField } from "@/components/properties/meter-label-field";
 import { dhakaISO } from "@/lib/dhaka-time";
 import { formatTaka } from "@/lib/format";
 import { updateUtilityBill, type UtilityBillErrorCode } from "@/lib/actions/utility-bills";
@@ -50,6 +51,7 @@ export type EditableUtilityBill = {
   paidByCompany: boolean;
   dueDate: Date | string;
   meterReading?: number | null;
+  meterLabel?: string | null;
   // This bill's own predecessor in the meter chain, for the consumption hint.
   previousMeterReading?: number | null;
   previousMeterReadingOverride?: number | null;
@@ -84,6 +86,7 @@ export function EditUtilityBillDialog({
   const [meterReading, setMeterReading] = useState(
     bill.meterReading != null ? String(bill.meterReading) : ""
   );
+  const [meterLabel, setMeterLabel] = useState(bill.meterLabel ?? "");
   const [manualPreviousReading, setManualPreviousReading] = useState<string | null>(
     bill.previousMeterReadingOverride == null ? null : String(bill.previousMeterReadingOverride)
   );
@@ -120,7 +123,8 @@ export function EditUtilityBillDialog({
     };
   }, [open, fixedUnitId, units, bill.propertyId, bill.unitId, bill.unitLabel]);
 
-  const previousReading = unitId === (fixedUnitId ?? bill.unitId ?? NONE_VALUE)
+  // The saved chain only applies while the bill stays on its own unit and meter.
+  const previousReading = unitId === (fixedUnitId ?? bill.unitId ?? NONE_VALUE) && meterLabel.trim() === (bill.meterLabel ?? "")
     ? bill.previousMeterReading ?? null : null;
   const effectivePreviousReading = manualPreviousReading == null ? previousReading
     : manualPreviousReading === "" ? null : Number(manualPreviousReading);
@@ -258,6 +262,7 @@ export function EditUtilityBillDialog({
 
           {type === "ELECTRICITY" ? (
             <div className="grid gap-3 sm:col-span-2 sm:grid-cols-2">
+              <MeterLabelField id="editUtilityBillMeterLabel" value={meterLabel} onChange={setMeterLabel} />
               <PreviousMeterReadingField id="editUtilityBillPreviousReading" automatic={previousReading}
                 manual={manualPreviousReading} onChange={setManualPreviousReading} />
               <FormField label={t("currentMeterReading")} htmlFor="editUtilityBillMeterReading">

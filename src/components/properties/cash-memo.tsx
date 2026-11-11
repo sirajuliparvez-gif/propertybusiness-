@@ -55,7 +55,8 @@ export function CashMemoHeader({ brand, title, month, property, unit, name, cont
   );
 }
 
-export function CashMemoReading({ current, previous, units, label, unitLabel, missing, locale }: {
+export function CashMemoReading({ current, previous, units, label, unitLabel, missing, locale, meter }: {
+  meter?: string | null;
   current: number;
   previous: number | null;
   units: number | null;
@@ -69,6 +70,7 @@ export function CashMemoReading({ current, previous, units, label, unitLabel, mi
   return (
     <p className="cash-memo-reading mt-1 whitespace-normal text-xs" data-testid="cash-memo-reading">
       <span className="sr-only">{label}</span>
+      {meter ? <span className="mr-1.5 font-semibold">{meter}:</span> : null}
       <span className="inline-flex items-end gap-1.5 tabular-nums">
         <span className="grid text-center">
           <span className="font-normal">{t("invoiceElectricityCurrent")}</span>

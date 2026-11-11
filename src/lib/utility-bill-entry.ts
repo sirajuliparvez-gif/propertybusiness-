@@ -9,6 +9,12 @@ function str(formData: FormData, key: string) {
   return typeof value === "string" && value.trim() !== "" ? value.trim() : null;
 }
 
+// Name of an extra electricity meter on the unit ("Meter 2"); blank = the unit's single meter.
+export function readMeterLabel(type: UtilityType, raw: FormDataEntryValue | null | undefined) {
+  if (type !== "ELECTRICITY" || typeof raw !== "string") return null;
+  return raw.trim().slice(0, 40) || null;
+}
+
 export function readUtilityBillFields(formData: FormData) {
   const type = readUtilityType(formData.get("type"));
   let amount = str(formData, "amount");
@@ -31,7 +37,8 @@ export function readUtilityBillFields(formData: FormData) {
     amount = electricityAmountAtRate(units, unitRate);
     if (!amount) return null;
   }
-  return { type, amount, dueDate, paidByCompany, meterReading, previousMeterReadingOverride } as const;
+  const meterLabel = readMeterLabel(type, formData.get("meterLabel"));
+  return { type, amount, dueDate, paidByCompany, meterReading, previousMeterReadingOverride, meterLabel } as const;
 }
 
 export function validMeterReadings(current: number | null, previous: number | null) {
@@ -49,14 +56,15 @@ export function validateTenantUtilityBills(billingMonth: string, bills: FormData
   }
 
   const validatedBills = [];
-  const types = new Set<UtilityType>();
+  const keys = new Set<string>();
   for (const bill of fields) {
     if (!bill || !Number.isFinite(Number(bill.amount)) || Number(bill.amount) <= 0 ||
       !validMeterReadings(bill.meterReading, bill.previousMeterReadingOverride)) {
       return { ok: false, error: "utilityBillInvalidAmount" } as const;
     }
-    if (types.has(bill.type)) return { ok: false, error: "utilityBillDuplicateMonth" } as const;
-    types.add(bill.type);
+    const key = `${bill.type}|${bill.meterLabel ?? ""}`;
+    if (keys.has(key)) return { ok: false, error: "utilityBillDuplicateMonth" } as const;
+    keys.add(key);
     validatedBills.push(bill);
   }
 
@@ -84,7 +92,8 @@ export function prepareTenantUtilityBillRows(
       propertyId,
       unitId: lease.unitId,
       tenantLeaseId: lease.id,
-      amount: locked?.amount ?? bill.amount,
+      // A fixed tenant amount covers the unit's main meter; a named extra meter is billed as entered.
+      amount: (bill.meterLabel ? null : locked?.amount) ?? bill.amount,
       paidByCompany: locked?.paidByCompany ?? bill.paidByCompany,
       month: billingMonth,
       dueDate: new Date(bill.dueDate),
@@ -98,12 +107,14 @@ export async function hasMonthlyTenantUtilityBill(
   month: string,
   types: UtilityType[],
   exceptId?: string,
+  meterLabel: string | null = null,
 ) {
   const bill = await tx.utilityBill.findFirst({
     where: {
       unitId: lease.unitId,
       month,
       type: { in: types },
+      meterLabel,
       dueDate: { gte: new Date(`${dhakaISO(lease.startDate)}T00:00:00+06:00`) },
       OR: [{ tenantLeaseId: lease.id }, { tenantLeaseId: null }],
       ...(exceptId ? { id: { not: exceptId } } : {}),
@@ -111,4 +122,17 @@ export async function hasMonthlyTenantUtilityBill(
     select: { id: true },
   });
   return bill != null;
+}
+
+// True when any of the rows' (type, meter) already has a bill that month.
+export async function hasMonthlyTenantUtilityBillAmong(
+  tx: Pick<Prisma.TransactionClient, "utilityBill">,
+  lease: { id: string; unitId: string; startDate: Date },
+  month: string,
+  rows: { type: UtilityType; meterLabel: string | null }[],
+) {
+  for (const row of rows) {
+    if (await hasMonthlyTenantUtilityBill(tx, lease, month, [row.type], undefined, row.meterLabel)) return true;
+  }
+  return false;
 }
