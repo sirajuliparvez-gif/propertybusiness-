@@ -24,7 +24,8 @@ import { InvoicePrintButton } from "@/components/properties/invoice-print-button
 import { rentTermsDueAmount, resolveRentTermsForMonth } from "@/lib/rent-terms";
 import { RentBillPrintForm } from "@/components/properties/rent-bill-print-form";
 import { RecordTenantRentPaymentDialog } from "@/components/properties/record-tenant-rent-payment-dialog";
-import { limitToPrintedBill, rentBillPrintKeys, rentBillPrintRows, type RentBillPrintRow } from "@/lib/rent-bill-print";
+import { paymentMonthRange, previousPaymentMonth } from "@/lib/payment-month";
+import { arrearsCandidates, limitToPrintedBill, rentBillPrintKeys, rentBillPrintRows, type RentBillPrintRow } from "@/lib/rent-bill-print";
 import { formatRentBillNumber, legacyRentBillNumber } from "@/lib/rent-bill-number";
 import { resolveInvoiceMonth } from "@/lib/payment-month";
 import { prisma } from "@/lib/prisma";
@@ -194,9 +195,17 @@ export default async function TenantInvoicePage({
   ]);
   const printed = printIssue ? printIssue.rows as RentBillPrintRow[] : null;
   const monthlyLines = paymentLines.filter((line) => line.month === selectedMonth);
+  // Earlier months only count when the printed bill itself carried them as "previous dues".
+  const earlierDues = fromRent ? arrearsCandidates(tenant, selectedMonth) : [];
+  const earlierLines = earlierDues.map((due) => ({
+    id: due.id, month: due.month, kind: due.kind, remainingCents: due.remainingCents,
+    label: [due.kind === "rent" ? t("invoiceRentLabel") : utilityTypeLabels[due.type ?? "OTHER"], due.meterLabel, monthLabel(due.month, locale)]
+      .filter(Boolean).join(" · "),
+  }));
+  const printableLines = [...earlierLines, ...monthlyLines];
   const receiptLines = !fromRent ? paymentLines : printed
-    ? limitToPrintedBill(monthlyLines, printed).map((line) => ({
-        ...line, label: monthlyLines.find(({ id }) => id === line.id)!.label,
+    ? limitToPrintedBill(printableLines, printed).map((line) => ({
+        ...line, label: printableLines.find(({ id }) => id === line.id)!.label,
       }))
     : monthlyLines;
   const billNumber = assignedNumber ? formatRentBillNumber(assignedNumber.property.billMarketCode, selectedMonth, assignedNumber.serial)
@@ -284,11 +293,20 @@ export default async function TenantInvoicePage({
       )];
     }),
   ) : undefined;
+  // Months before the app started tracking dues can be added to the bill by hand.
+  const olderDueMonths = (() => {
+    const first = dhakaISO(tenant.startDate).slice(0, 7);
+    const last = previousPaymentMonth(LEDGER_START_MONTH);
+    if (!canEditPrintedBills || first > last) return [];
+    const recorded = new Set(tenant.payments.map((entry) => entry.month));
+    return paymentMonthRange(first, last, 36).filter((month) => !recorded.has(month));
+  })();
   const printForm = fromRent ? (
     <RentBillPrintForm key={`${selectedMonth}:${printIssue?.revision ?? 0}:${print ?? ""}`}
       leaseId={id} month={selectedMonth} rows={rentBillPrintRows(tenant, selectedMonth)}
       printed={printed} revision={printIssue?.revision ?? 0} prepare={print === "1"} returnTo={rentListPath}
-      utilityEditors={utilityEditors}
+      utilityEditors={utilityEditors} arrearsCandidates={earlierDues}
+      olderDueMonths={olderDueMonths} olderDueAmount={tenant.monthlyRentAmount} canAddDue={canEditPrintedBills} leaseStartMonth={dhakaISO(tenant.startDate).slice(0, 7)}
       printedDate={printIssue ? formatDate(printIssue.printedAt, locale) : undefined}
       header={{ ...memoHeader, title: t("cashMemoRentTitle"), contact: tenant.contactInfo }} embedded={embedded} />
   ) : null;
@@ -312,7 +330,10 @@ export default async function TenantInvoicePage({
       <BillFormSession key={id} month={selectedMonth}>
       <div data-rent-bill-embed className="space-y-3">
         <div className="flex flex-wrap items-center justify-between gap-2 border-b pb-3 print:hidden">
-          <span className="text-sm font-medium">{t("rentMonthFilter")}</span>
+          <span className="flex min-w-0 flex-wrap items-baseline gap-x-3 text-sm font-medium">
+            {t("rentMonthFilter")}
+            {receive === "1" ? null : <span className="font-normal text-muted-foreground">{tenant.tenantName} · {monthLabel(selectedMonth, locale)}</span>}
+          </span>
           <InvoiceMonthSelect leaseId={id} months={availableMonths} selectedMonth={selectedMonth}
             basePath={invoiceBasePath} tenantScope={tenantScope === "1"} embedded
             minMonth={[leaseStartDay.slice(0, 7), ...availableMonths].sort()[0]} maxMonth={availableMonths[0]}
@@ -327,7 +348,6 @@ export default async function TenantInvoicePage({
           </>
         ) : (
           <>
-            <p className="text-sm font-medium print:hidden">{tenant.tenantName} · {monthLabel(selectedMonth, locale)}</p>
             {printForm}
           </>
         )}

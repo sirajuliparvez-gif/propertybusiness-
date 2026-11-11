@@ -75,6 +75,9 @@ export type UtilityBillRow = {
   tenantName?: string | null;
   propertyId: string;
   propertyName?: string;
+  // Latest print of the bill, and the latest day tenant money came in for it.
+  printedAt?: Date | null;
+  receivedAt?: Date | null;
   meterReading?: number | null;
   meterLabel?: string | null;
   previousMeterReading?: number | null;
@@ -483,6 +486,8 @@ export function UtilityBillsTable({
               <TableHead>{t("paymentMethod")}</TableHead>
               <TableHead className="text-right">{t(unpaidOnly ? "remaining" : "amount")}</TableHead>
               <TableHead>{t("status")}</TableHead>
+              <TableHead>{t("utilityPrintedOn")}</TableHead>
+              <TableHead>{t("utilityReceivedOn")}</TableHead>
               <TableHead className="text-right">{t("actions")}</TableHead>
             </TableRow>
           </TableHeader>
@@ -551,6 +556,8 @@ export function UtilityBillsTable({
                     {b.status === "PAID" ? t("paid") : b.status === "PARTIAL" ? t("pending") : t("billStatusUnpaid")}
                   </Badge>
                 </TableCell>
+                <TableCell className="font-mono text-muted-foreground">{b.printedAt ? formatDate(b.printedAt) : "—"}</TableCell>
+                <TableCell className="font-mono text-muted-foreground">{b.receivedAt ? formatDate(b.receivedAt) : "—"}</TableCell>
                 <TableCell className="text-right">
                   <div className="flex items-center justify-end gap-1.5">
                     <Button
@@ -599,6 +606,8 @@ export function UtilityBillsTable({
               <TableCell className="text-right font-mono font-semibold tabular-nums">
                 {formatTaka(totalUnpaid, unpaidOnly ? 2 : 0)}
               </TableCell>
+              <TableCell />
+              <TableCell />
               <TableCell />
               <TableCell />
             </TableRow>

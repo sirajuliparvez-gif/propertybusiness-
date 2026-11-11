@@ -71,6 +71,9 @@ export function InvoiceUtilityFields({
   const units = previousValue !== "" && current !== "" ? Number(current) - Number(previousValue) : null;
   const amount = fixedAmount != null ? String(bill?.amount ?? fixedAmount)
     : usingRate ? electricityAmountAtRate(units, rate) : manualAmount;
+  // A saved electricity bill leads with its usage and amount, in large type.
+  const showSummary = bill != null && isElectricity;
+  const savedUnits = bill != null && bill.meterReading != null && previous != null ? bill.meterReading - previous : null;
   const belowPaid = bill != null && !!amount && Number(amount) < bill.paidAmount;
   const changed = bill == null || Number(amount) !== bill.amount ||
     (isElectricity && (current !== (bill.meterReading?.toString() ?? "") || previousInput !== null));
@@ -78,7 +81,7 @@ export function InvoiceUtilityFields({
     (units == null || units >= 0) && !belowPaid;
 
   return (
-    <form className="grid gap-1.5" action={(data) => {
+    <form className={isElectricity ? "grid gap-1.5 min-[900px]:grid-cols-[minmax(0,3fr)_minmax(0,2fr)] min-[900px]:items-end min-[900px]:gap-x-2" : "grid gap-1.5"} action={(data) => {
       if (!canSave || pending || session?.blocked) return;
       setFeedback("");
       startTransition(async () => {
@@ -121,7 +124,17 @@ export function InvoiceUtilityFields({
           <input type="hidden" name="unitId" value={bill.unitId} />
         </>
       ) : null}
-      {bill?.meterLabel ? <p className="text-xs font-medium">{bill.meterLabel}</p> : null}
+      {showSummary ? (
+        <p className="flex flex-wrap items-baseline gap-x-2 text-base font-semibold tabular-nums min-[900px]:col-span-2" data-testid="electricity-bill-summary">
+          {bill.meterLabel ? <span className="text-sm font-medium text-muted-foreground">{bill.meterLabel}</span> : null}
+          <span>
+            {savedUnits != null
+              ? t("invoiceUsageBill", { units: new Intl.NumberFormat("en-US", { maximumFractionDigits: 6 }).format(savedUnits), amount: formatTaka(bill.amount, Number.isInteger(bill.amount) ? 0 : 2) })
+              : t("invoiceBillOnly", { amount: formatTaka(bill.amount, Number.isInteger(bill.amount) ? 0 : 2) })}
+          </span>
+          {dateLabel ? <span className="text-xs font-normal text-muted-foreground">{dateLabel}</span> : null}
+        </p>
+      ) : null}
       {extraMeter ? <MeterLabelField id={`${id}-meter`} value={meterLabel} onChange={setMeterLabel} /> : null}
       {isElectricity ? <fieldset disabled={pending} className="grid grid-cols-1 gap-2 min-[360px]:grid-cols-3">
         <PreviousMeterReadingField id={`${id}-previous`} automatic={automaticPrevious} manual={previousInput}
@@ -136,7 +149,7 @@ export function InvoiceUtilityFields({
         </FormField>
       </fieldset> : null}
       <div className="flex items-center gap-1.5">
-        {dateLabel ? <span className="max-w-[34%] shrink-0 text-xs leading-tight text-muted-foreground">{dateLabel}</span> : null}
+        {dateLabel && !showSummary ? <span className="max-w-[34%] shrink-0 text-xs leading-tight text-muted-foreground">{dateLabel}</span> : null}
         <div className="min-w-0 flex-1">
           <label htmlFor={`${id}-amount`} className="sr-only">{t("invoiceInlineBillAmount", { bill: label })}</label>
           <Input id={`${id}-amount`} name="amount" type="number" step="0.01" min={bill ? 0 : 0.01}
@@ -147,12 +160,13 @@ export function InvoiceUtilityFields({
           aria-label={t("invoiceInlineBillSave", { bill: label })}>{t("invoiceInlineSaveShort")}</Button>
         {editAction}
       </div>
-      <div className="text-xs empty:hidden" aria-live="polite">
+      <div className="text-xs empty:hidden min-[900px]:col-span-2" aria-live="polite">
         {usingRate && amount && units != null ? t("electricityRateCalculation", { units, amount: formatTaka(Number(amount), 2) }) : null}
         {fixedAmount != null ? <p className="text-muted-foreground">{t("utilityDefaultsLocked")}</p> : null}
         {belowPaid ? <p className="text-destructive">{t("billErrAmountBelowPaid", { amount: formatTaka(bill.paidAmount, 2) })}</p> : null}
         {usingRate && !amount ? <p className="text-destructive">{t("electricityRateNeedsReadings")}</p> : null}
         {units != null && units < 0 && !usingRate ? <p className="text-destructive">{t("electricityRateNeedsReadings")}</p> : null}
+        {extraMeter && !meterLabel.trim() && (current !== "" || manualAmount !== "") ? <p className="text-muted-foreground">{t("meterNameRequired")}</p> : null}
         {feedback ? <p className="text-destructive" role="status">{feedback}</p> : null}
       </div>
     </form>

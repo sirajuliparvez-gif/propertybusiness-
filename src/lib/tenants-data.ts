@@ -489,6 +489,18 @@ export async function getTenantProfile(leaseId: string) {
     ledgerAsOf,
     RENT_DUE_DAY
   );
+  // Every amount received for a month (not just the latest), so a balance paid later is visible.
+  const rentReceipts = await prisma.transaction.findMany({
+    where: { tenantLeaseId: lease.id, type: "RENT_RECEIVED_FROM_TENANT", rentPaymentId: { not: null } },
+    orderBy: [{ date: "asc" }, { createdAt: "asc" }],
+    select: { rentPaymentId: true, amount: true, date: true },
+  });
+  const installmentsByPaymentId = new Map<string, { amount: number; date: Date }[]>();
+  for (const receipt of rentReceipts) {
+    const list = installmentsByPaymentId.get(receipt.rentPaymentId!) ?? [];
+    list.push({ amount: Number(receipt.amount), date: receipt.date });
+    installmentsByPaymentId.set(receipt.rentPaymentId!, list);
+  }
   const paymentCreatedAtById = new Map(lease.rentPayments.map((payment) => [payment.id, payment.createdAt]));
   const paymentEditDetailsById = new Map(
     lease.rentPayments.map((payment) => [
@@ -512,6 +524,7 @@ export async function getTenantProfile(leaseId: string) {
       status: e.status,
       paidAt: e.paidAt,
       createdAt: e.rentPaymentId ? (paymentCreatedAtById.get(e.rentPaymentId) ?? null) : null,
+      installments: e.rentPaymentId && (installmentsByPaymentId.get(e.rentPaymentId)?.length ?? 0) > 1 ? installmentsByPaymentId.get(e.rentPaymentId)! : [],
       method: e.method ?? null,
       pastDue: e.pastDue,
       editable: editDetails?.editable ?? false,

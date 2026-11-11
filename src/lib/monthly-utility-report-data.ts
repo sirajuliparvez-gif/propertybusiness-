@@ -1,6 +1,7 @@
 import { prisma } from "@/lib/prisma";
 import { dhakaNow } from "@/lib/dhaka-time";
 import { isPaymentMonth } from "@/lib/payment-month";
+import { latestReceivedAt, loadBillPrintDates } from "@/lib/utility-bill-dates";
 import { utilityReportAmounts, utilityReportTotals, utilityReportTenant } from "@/lib/monthly-utility-report";
 
 export async function getMonthlyUtilityReport(requestedMonth?: string) {
@@ -19,12 +20,14 @@ export async function getMonthlyUtilityReport(requestedMonth?: string) {
           tenantLeases: { select: { startDate: true, endDate: true, movedOutAt: true, status: true, tenant: { select: { name: true } } } },
         } },
         tenantLease: { select: { tenant: { select: { name: true } } } },
-        transactions: { select: { type: true, amount: true, method: true } },
+        transactions: { select: { type: true, amount: true, method: true, date: true } },
       },
     }),
     prisma.utilityBill.findMany({ where: { month: { lte: currentMonth } }, distinct: ["month"], select: { month: true } }),
   ]);
+  const printedAt = await loadBillPrintDates(bills.map(({ id }) => ({ id, month })));
   const rows = bills.map((bill) => ({
+    printedAt: printedAt.get(bill.id) ?? null, receivedAt: latestReceivedAt(bill.transactions),
     id: bill.id, type: bill.type, meterLabel: bill.meterLabel, propertyId: bill.property.id, propertyName: bill.property.name,
     unitLabel: bill.unit?.label ?? null,
     tenantName: utilityReportTenant({

@@ -315,6 +315,38 @@ export async function createHistoricalRentArrears(formData: FormData): Promise<R
   return { ok: true };
 }
 
+export type OlderRentDueResult =
+  | { ok: true }
+  | { ok: false; error: "invalid" | "notFound" | "tracked" | "exists" | "beforeLeaseStart" };
+
+// Records an unpaid rent month that predates the ledger cutover (the app does not invent those),
+// so it can be added to a bill and collected like any other due. Existing months are never touched.
+export async function addOlderRentDue(tenantLeaseId: string, month: string, amount: number): Promise<OlderRentDueResult> {
+  await requireCurrentUser();
+  if (!isPaymentMonth(month) || !Number.isFinite(amount) || amount <= 0 || amount > 100_000_000 ||
+      Math.abs(amount * 100 - Math.round(amount * 100)) > 1e-6) return { ok: false, error: "invalid" };
+  // From the cutover on, unpaid months already show up as dues by themselves.
+  if (month >= LEDGER_START_MONTH) return { ok: false, error: "tracked" };
+  const lease = await prisma.tenantLease.findUnique({
+    where: { id: tenantLeaseId }, select: { startDate: true, status: true, unit: { select: { unitType: { select: { propertyId: true } } } } },
+  });
+  if (!lease || lease.status !== "ACTIVE") return { ok: false, error: "notFound" };
+  if (month < dhakaISO(lease.startDate).slice(0, 7)) return { ok: false, error: "beforeLeaseStart" };
+  const created = await prisma.rentPayment.createMany({
+    data: [{
+      tenantLeaseId, month, dueDate: paymentMonthDueDate(month, RENT_DUE_DAY), dueAmount: amount, paidAmount: 0,
+      status: "UNPAID" as const, paidAt: null,
+    }],
+    skipDuplicates: true,
+  });
+  if (!created.count) return { ok: false, error: "exists" };
+  const locale = await getLocale();
+  for (const path of ["/rent", "/rent/arrears", "/rent/report", `/tenants/${tenantLeaseId}`, `/rent/${tenantLeaseId}/invoice`, `/tenants/${tenantLeaseId}/invoice`]) {
+    revalidatePath(`/${locale}${path}`);
+  }
+  return { ok: true };
+}
+
 // Corrects one directly-recorded rent payment while keeping its monthly due
 // row and cash-flow transaction in sync. Installments and downpayment
 // adjustments have multiple audit entries, so they are deliberately refused
@@ -712,7 +744,17 @@ export async function recordOverdueRentPayment(formData: FormData) {
         const dueAmount = rentTermsDueAmount(resolveRentTermsForMonth(terms, rates, invoiceMonth));
         invoiceEntries.push({ month: invoiceMonth, gap: dueAmount, dueAmount, paidAmount: 0 });
       }
-      const entries = invoiceMonth ? invoiceEntries : period
+      // A printed bill may also carry chosen unpaid dues of earlier months; they are only used when the
+      // printed bill lists them (see limitToPrintedBill below), so every other receipt stays one month.
+      const earlierEntries = invoiceMonth && reconciliation ? overdueEntries(buildRentLedger(
+        lease.startDate,
+        (month) => rentTermsDueAmount(resolveRentTermsForMonth(terms, rates, month)),
+        payments,
+        dhakaNow(),
+        RENT_DUE_DAY,
+      )).filter((entry) => entry.month < invoiceMonth)
+        .map(({ month, dueAmount, paidAmount, gap }) => ({ month, dueAmount, paidAmount, gap })) : [];
+      const entries = invoiceMonth ? [...earlierEntries, ...invoiceEntries] : period
         ? (buildRentArrearsReport([{
             ...lease, ...terms, propertyId, propertyName: property.name,
             propertyDeleted: property.deletedAt != null, tenantName: lease.tenant.name,
@@ -731,7 +773,7 @@ export async function recordOverdueRentPayment(formData: FormData) {
       const utilityWhere = tenantUtilityArrearsWhere(lease, today.slice(0, 7));
       const utilitySelect = { id: true, month: true, amount: true, paidAmount: true, type: true, dueDate: true } as const;
       const invoiceBills = invoiceMonth ? await tx.utilityBill.findMany({
-        where: { ...utilityWhere, propertyId, month: reconciliation ? invoiceMonth : { lte: invoiceMonth } },
+        where: { ...utilityWhere, propertyId, month: { lte: invoiceMonth } },
         select: utilitySelect,
       }) : [];
       let allocations: ReturnType<typeof allocateRentPayment>;
@@ -750,7 +792,7 @@ export async function recordOverdueRentPayment(formData: FormData) {
             where: { tenantLeaseId, month: invoiceMonth }, orderBy: { revision: "desc" },
           });
           if ((printed?.revision ?? 0) !== printRevision) return false;
-          if (printed) lines = limitToPrintedBill(lines, printed.rows as RentBillPrintRow[]);
+          lines = printed ? limitToPrintedBill(lines, printed.rows as RentBillPrintRow[]) : lines.filter((line) => line.month === invoiceMonth);
         }
         if (str(formData, "invoiceSnapshot") !== invoicePaymentSnapshot(lines)) return false;
         const eligible = invoiceChoice === "rent" ? lines.filter((line) => line.kind === "rent" && line.month === invoiceMonth) : lines;

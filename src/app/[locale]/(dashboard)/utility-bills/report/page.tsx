@@ -24,7 +24,7 @@ export default async function MonthlyUtilityReportPage({ searchParams }: { searc
     const group = groups.get(row.propertyId) ?? [];
     group.push(row); groups.set(row.propertyId, group); return groups;
   }, new Map<string, typeof rows>());
-  const columns = [t("utilityReportBill"), t("utilityType"), t("utilityReportBilled"), t("utilityReportCollected"), t("utilityReportCompany"), t("transactionTypeUtilityProfit"), t("monthlyReportRemaining"), t("utilityReportStatus")];
+  const columns = [t("utilityReportBill"), t("utilityType"), t("utilityReportBilled"), t("utilityReportCollected"), t("utilityReportCompany"), t("transactionTypeUtilityProfit"), t("monthlyReportRemaining"), t("utilityReportStatus"), t("utilityPrintedOn"), t("utilityReceivedOn")];
   const statusLabels = { PAID: t("paid"), PARTIAL: t("utilityReportPartial"), UNPAID: t("billStatusUnpaid") };
   return <div className="flex min-w-0 flex-col gap-5">
     <div className="flex flex-wrap items-center justify-between gap-3 print:hidden">
@@ -57,18 +57,20 @@ export default async function MonthlyUtilityReportPage({ searchParams }: { searc
           <caption className="sr-only">{t("utilityReportTitle")} — {monthLabel(month, locale)}</caption>
           <thead><tr>{columns.map((label, index) => <th key={label} scope="col" className={index > 1 && index < 7 ? "text-right" : "text-left"}>{label}</th>)}</tr></thead>
           <tbody>
-            {rows.length === 0 ? <tr><td colSpan={8} className="py-10 text-center text-muted-foreground">{t("utilityReportEmpty")}</td></tr> : [...groups].map(([id, bills]) => <Fragment key={id}>
-              <tr className={styles.property}><th scope="rowgroup" colSpan={8}><span className={styles.propertyName}><Building2 className="size-4 print:hidden" />{bills[0].propertyName}</span></th></tr>
+            {rows.length === 0 ? <tr><td colSpan={10} className="py-10 text-center text-muted-foreground">{t("utilityReportEmpty")}</td></tr> : [...groups].map(([id, bills]) => <Fragment key={id}>
+              <tr className={styles.property}><th scope="rowgroup" colSpan={10}><span className={styles.propertyName}><Building2 className="size-4 print:hidden" />{bills[0].propertyName}</span></th></tr>
               {bills.map((bill) => <tr key={bill.id} className={styles.tenant}>
                 <th scope="row" className={`${styles.name} text-left`}>{bill.unitLabel ?? t("utilityReportPropertyBill")}{bill.unitLabel && <span className={styles.billDetail}>{bill.tenantName ?? t("utilityReportTenantUnknown")}</span>}</th>
                 <td>{t(typeKeys[bill.type])}{bill.meterLabel ? ` · ${bill.meterLabel}` : ""}</td>
                 {[bill.billed, bill.collected, bill.company, bill.profit, bill.remaining].map((value, index) => <td key={index} className={`${styles.number} ${index === 4 && value > 0 ? styles.remaining : index === 1 && value > 0 ? styles.collected : ""}`}>{formatTaka(value)}</td>)}
                 <td className="whitespace-nowrap">{statusLabels[bill.status as keyof typeof statusLabels]}</td>
+                <td className="whitespace-nowrap">{bill.printedAt ? formatDate(bill.printedAt, locale) : "—"}</td>
+                <td className="whitespace-nowrap">{bill.receivedAt ? formatDate(bill.receivedAt, locale) : "—"}</td>
               </tr>)}
             </Fragment>)}
           </tbody>
           <tfoot><tr className={styles.total}><th colSpan={2} scope="row" className="text-left">{t("total")}</th>
-            {[totals.billed, totals.collected, totals.company, totals.profit, totals.remaining].map((value, index) => <td key={index} className={styles.number}>{formatTaka(value)}</td>)}<td />
+            {[totals.billed, totals.collected, totals.company, totals.profit, totals.remaining].map((value, index) => <td key={index} className={styles.number}>{formatTaka(value)}</td>)}<td /><td /><td />
           </tr></tfoot>
         </table>
       </div>

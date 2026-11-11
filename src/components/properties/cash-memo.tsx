@@ -55,8 +55,10 @@ export function CashMemoHeader({ brand, title, month, property, unit, name, cont
   );
 }
 
-export function CashMemoReading({ current, previous, units, label, unitLabel, missing, locale, meter }: {
+export function CashMemoReading({ current, previous, units, label, unitLabel, missing, locale, meter, compact = false }: {
   meter?: string | null;
+  // One line per meter, for bills that show more than one reading and must still fit the page.
+  compact?: boolean;
   current: number;
   previous: number | null;
   units: number | null;
@@ -67,6 +69,17 @@ export function CashMemoReading({ current, previous, units, label, unitLabel, mi
 }) {
   const t = useTranslations("Properties");
   const format = new Intl.NumberFormat(locale === "bn" ? "bn-BD" : "en-US", { maximumFractionDigits: 6 });
+  if (compact) {
+    return (
+      <p className="cash-memo-reading mt-0.5 whitespace-normal text-xs tabular-nums" data-testid="cash-memo-reading">
+        <span className="sr-only">{label}</span>
+        {meter ? <span className="font-semibold">{meter}: </span> : null}
+        {t("invoiceElectricityCurrent")} <strong>{format.format(current)}</strong>
+        {" − "}{t("previousMeterReading")} <strong>{previous == null ? "—" : format.format(previous)}</strong>
+        {" = "}<strong title={units == null ? missing : undefined}>{units == null ? "—" : format.format(units)} {unitLabel}</strong>
+      </p>
+    );
+  }
   return (
     <p className="cash-memo-reading mt-1 whitespace-normal text-xs" data-testid="cash-memo-reading">
       <span className="sr-only">{label}</span>

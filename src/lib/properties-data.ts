@@ -14,6 +14,7 @@ import {
   SALARY_DUE_DAY,
 } from "@/lib/rent-ledger";
 import { splitUtilityBillTransactions } from "@/lib/utility-bill-split";
+import { latestReceivedAt, loadBillPrintDates } from "@/lib/utility-bill-dates";
 import { fromLedgerStatus } from "@/lib/employees-data";
 import {
   numericRentRates,
@@ -362,7 +363,7 @@ export async function getPropertyDetail(id: string) {
           meterLabel: true,
           transactions: {
             orderBy: { date: "desc" },
-            select: { type: true, amount: true, method: true },
+            select: { type: true, amount: true, method: true, date: true },
           },
         },
       },
@@ -829,6 +830,7 @@ export async function getPropertyDetail(id: string) {
     meterLabel: b.meterLabel,
   }));
   const consumptionByBillId = attachElectricityConsumption(electricityBillsForConsumption);
+  const billPrintDates = await loadBillPrintDates(property.utilityBills);
   const utilityBills = property.utilityBills.map((b) => {
     const split = splitUtilityBillTransactions(
       b.transactions.map((t) => ({ type: t.type, amount: Number(t.amount), method: t.method }))
@@ -842,6 +844,8 @@ export async function getPropertyDetail(id: string) {
       status: b.status,
       paidByCompany: b.paidByCompany,
       paymentMethod: split.method,
+      printedAt: billPrintDates.get(b.id) ?? null,
+      receivedAt: latestReceivedAt(b.transactions),
       collectedFromTenant: split.collectedFromTenant,
       companyAbsorbedAmount: split.companyAbsorbedAmount,
       profitAmount: split.profitAmount,

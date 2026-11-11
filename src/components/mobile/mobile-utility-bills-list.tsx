@@ -107,6 +107,8 @@ export function MobileUtilityBillsList({
                       {b.unitLabel ?? "—"}
                       {b.tenantName ? ` · ${b.tenantName}` : ""} · {formatDate(b.dueDate)}
                       {b.status === "PAID" ? ` · ${paymentMethodLabel(t, b.paymentMethod)}` : ""}
+                      {b.printedAt ? ` · ${t("utilityPrintedOn")} ${formatDate(b.printedAt)}` : ""}
+                      {b.receivedAt ? ` · ${t("utilityReceivedOn")} ${formatDate(b.receivedAt)}` : ""}
                     </p>
                   </div>
                   <div className="shrink-0 text-right">

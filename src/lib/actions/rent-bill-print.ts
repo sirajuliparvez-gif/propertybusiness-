@@ -7,7 +7,7 @@ import { requireCurrentUser } from "@/lib/auth/session";
 import { dhakaISO, dhakaTodayISO } from "@/lib/dhaka-time";
 import { isPaymentMonth } from "@/lib/payment-month";
 import { prisma } from "@/lib/prisma";
-import { rentBillPrintRows, type RentBillPrintKey } from "@/lib/rent-bill-print";
+import { rentBillPrintRows, type RentBillPrintRowKey } from "@/lib/rent-bill-print";
 import { formatRentBillNumber, legacyRentBillNumber } from "@/lib/rent-bill-number";
 import { getTenantProfile } from "@/lib/tenants-data";
 
@@ -15,15 +15,17 @@ export async function confirmRentBillPrint(
   tenantLeaseId: string,
   month: string,
   previousRevision: number,
-  selected: RentBillPrintKey[],
+  selected: RentBillPrintRowKey[],
   preview: string,
+  arrearsIds: string[] = [],
 ) {
   await requireCurrentUser();
   if (!isPaymentMonth(month) || month > dhakaTodayISO().slice(0, 7) ||
       !Number.isSafeInteger(previousRevision) || previousRevision < 0) return false;
   const tenant = await getTenantProfile(tenantLeaseId);
   if (!tenant || tenant.leaseStatus !== "ACTIVE") return false;
-  const rows = rentBillPrintRows(tenant, month).filter(({ key }) => selected.includes(key));
+  if (!Array.isArray(arrearsIds) || arrearsIds.some((id) => typeof id !== "string")) return false;
+  const rows = rentBillPrintRows(tenant, month, arrearsIds).filter(({ key }) => selected.includes(key));
   const revision = previousRevision + 1;
   try {
     const previewRows: unknown = JSON.parse(preview);
