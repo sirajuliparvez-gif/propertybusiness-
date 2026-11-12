@@ -142,7 +142,7 @@ export default async function PropertyDetailPage({
           value={formatTaka(property.monthlyOwnerRent)}
           icon={Wallet}
           tone="violet"
-          hint={t("paidToOwner")}
+          hint={property.ownerRentUnpaid > 0 ? `${t("paidToOwner")} · ${t("ownerRentNotPaidYet", { amount: formatTaka(property.ownerRentUnpaid) })}` : t("paidToOwner")}
         />
         <StatTile
           label={t("totalExpense")}

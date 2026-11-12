@@ -1,3 +1,5 @@
+import { meterNames } from "@/lib/meter-names";
+import { getTranslations } from "next-intl/server";
 import { resolveListMonth, listMonthOptions } from "@/lib/list-month";
 import { prisma } from "@/lib/prisma";
 import { attachElectricityConsumption } from "@/lib/electricity-consumption";
@@ -80,6 +82,7 @@ export async function getAllUtilityBillsData(requestedMonth?: string) {
     ),
   }));
 
+  const meterNameByBillIdAll = await meterNames(properties.flatMap((p) => p.utilityBills));
   const allBills = properties
     .flatMap((p) => {
       const unitLabelById = new Map(
@@ -129,6 +132,7 @@ export async function getAllUtilityBillsData(requestedMonth?: string) {
           propertyName: p.name,
           meterReading: b.meterReading != null ? Number(b.meterReading) : null,
           meterLabel: b.meterLabel,
+          meterName: meterNameByBillIdAll.get(b.id) ?? null,
           previousMeterReadingOverride: b.previousMeterReadingOverride == null ? null : Number(b.previousMeterReadingOverride),
           previousMeterReading: consumptionByBillId.get(b.id)?.previousReading ?? null,
           consumptionUnits: consumptionByBillId.get(b.id)?.consumption ?? null,
@@ -255,6 +259,8 @@ export async function getUtilityBillInvoice(billId: string) {
     tenantContact: lease?.tenant.contactInfo ?? null,
     meterReading: bill.meterReading != null ? Number(bill.meterReading) : null,
     meterLabel: bill.meterLabel,
+    meterName: bill.meterLabel ?? (bill.type === "ELECTRICITY" && (await prisma.utilityBill.count({ where: { type: "ELECTRICITY", propertyId: bill.property.id, unitId: bill.unitId, meterLabel: { not: null } } })) > 0
+      ? (await getTranslations("Properties"))("meterFirstName") : null),
     previousMeterReading,
     consumptionUnits,
   };

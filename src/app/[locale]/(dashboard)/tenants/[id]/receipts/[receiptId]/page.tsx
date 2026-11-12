@@ -33,7 +33,7 @@ export default async function MoneyReceiptPage({ params, searchParams }: {
       id: true, amount: true, date: true, method: true, type: true, createdAt: true,
       rentPaymentId: true, utilityBillId: true,
       rentPayment: { select: { month: true, dueAmount: true } },
-      utilityBill: { select: { month: true, type: true, meterLabel: true, amount: true } },
+      utilityBill: { select: { month: true, type: true, unitId: true, meterLabel: true, amount: true } },
       property: { select: { name: true } },
       tenantLease: { select: { tenant: { select: { name: true } }, unit: { select: { label: true } } } },
     },
@@ -67,10 +67,16 @@ export default async function MoneyReceiptPage({ params, searchParams }: {
     .filter((row) => row.rentPaymentId === key || row.utilityBillId === key)
     .reduce((sum, row) => sum + Number(row.amount), 0);
   const dates = new Set(entries.map(({ date }) => dhakaISO(date)));
+  const unitIds = [...new Set(entries.flatMap((e) => (e.utilityBill?.unitId ? [e.utilityBill.unitId] : [])))];
+  const multiMeterUnits = new Set((await prisma.utilityBill.findMany({
+    where: { type: "ELECTRICITY", unitId: { in: unitIds }, meterLabel: { not: null } }, select: { unitId: true }, distinct: ["unitId"],
+  })).map((b) => b.unitId));
+  const meterName = (b: { type: string; unitId: string | null; meterLabel: string | null }) =>
+    b.meterLabel ?? (b.type === "ELECTRICITY" && multiMeterUnits.has(b.unitId) ? t("meterFirstName") : null);
   const lines = entries.map((entry) => ({
     ...entry,
     label: entry.type === "DOWNPAYMENT_RECEIVED_FROM_TENANT" ? t("rentBillAdvanceLabel")
-      : entry.utilityBill ? utilityLabels[entry.utilityBill.type] + (entry.utilityBill.meterLabel ? ` · ${entry.utilityBill.meterLabel}` : "") : t("invoiceRentLabel"),
+      : entry.utilityBill ? utilityLabels[entry.utilityBill.type] + (meterName(entry.utilityBill) ? ` · ${meterName(entry.utilityBill)}` : "") : t("invoiceRentLabel"),
     month: entry.rentPayment?.month ?? entry.utilityBill?.month ?? "",
     earlier: earlierFor(entry.rentPaymentId ?? entry.utilityBillId),
     chargeTotal: Number(entry.rentPayment?.dueAmount ?? entry.utilityBill?.amount ?? 0),

@@ -49,7 +49,7 @@ export function arrearsCandidates(tenant: TenantProfile, month: string): Arrears
   const utilities = tenant.utilityBills.filter((bill) =>
     bill.month < month && bill.status !== "PAID" && !bill.paidByCompany && bill.type !== "WATER" && dhakaISO(bill.dueDate) >= start,
   ).map((bill) => ({
-    id: bill.id, month: bill.month, kind: "utility" as const, type: bill.type, meterLabel: bill.meterLabel ?? null,
+    id: bill.id, month: bill.month, kind: "utility" as const, type: bill.type, meterLabel: bill.meterName ?? bill.meterLabel ?? null,
     remainingCents: Math.round((bill.amount - bill.paidAmount) * 100),
     dueCents: Math.round(bill.amount * 100), paidCents: Math.round(bill.paidAmount * 100),
   }));
@@ -92,8 +92,8 @@ export function rentBillPrintRows(tenant: TenantProfile, month: string, arrearsI
       key, lines,
       dueCents: bills.length ? billable.reduce((sum, bill) => sum + Math.round(bill.amount * 100), 0) : null,
       remainingCents: lines.reduce((sum, line) => sum + line.remainingCents, 0),
-      readings: bills.flatMap((bill) => bill.meterReading == null ? [] : [{
-        meter: bill.meterLabel, current: bill.meterReading, previous: bill.previousMeterReading, units: bill.consumptionUnits,
+      readings: [...bills].sort((a, b) => (a.meterLabel ?? "").localeCompare(b.meterLabel ?? "")).flatMap((bill) => bill.meterReading == null ? [] : [{
+        meter: bill.meterName ?? bill.meterLabel, current: bill.meterReading, previous: bill.previousMeterReading, units: bill.consumptionUnits,
       }]),
     };
   });

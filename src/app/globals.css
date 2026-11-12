@@ -225,6 +225,29 @@
   html:has(.print-two-up) { page: invoiceA4; }
 }
 
+/* A5 landscape bill: one copy per page instead of both copies stacked on one A4 sheet. */
+@page rentBillA5 {
+  size: A5 landscape;
+  margin: 6mm;
+  @top-left { content: ""; }
+  @top-right { content: ""; }
+  @bottom-left { content: ""; }
+  @bottom-right { content: ""; }
+}
+
+@media print {
+  .print-invoice-a4.rent-bill-a5 { page: rentBillA5; }
+  html:has(.rent-bill-a5) { page: rentBillA5; }
+  .print-invoice-a4.rent-bill-a5:has(> .rent-bill-paper-copy) { width: 100%; }
+  [data-tenant-invoice-page]:has(.rent-bill-a5) { max-width: none; }
+  /* Landscape A5 is only 132mm tall inside the margins: use the compact spacing. */
+  .rent-bill-a5 .rent-bill-paper-copy { min-height: 132mm; padding: 2mm; }
+  .rent-bill-a5 .rent-bill-paper-copy th, .rent-bill-a5 .rent-bill-paper-copy td { padding-block: 1px; }
+  .rent-bill-a5 .rent-bill-paper-copy .cash-memo-signatures { padding-top: 6mm; }
+  .rent-bill-a5 .rent-bill-paper-copy:first-of-type { break-after: page; }
+  .rent-bill-a5 .rent-bill-cut-line { display: none; }
+}
+
 /* Monthly collection statements repeat headings and keep tenant rows intact. */
 @page monthlyRentReport { size: A4 landscape; margin: 12mm; }
 @media print {

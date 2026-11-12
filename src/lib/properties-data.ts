@@ -1,6 +1,8 @@
+import { meterNames } from "@/lib/meter-names";
 import { dhakaISO, dhakaNow } from "@/lib/dhaka-time";
 import { prisma } from "@/lib/prisma";
-import { isIncomeType } from "@/lib/finance-types";
+import { isExpenseType, isIncomeType } from "@/lib/finance-types";
+import { reportingMonthKey } from "@/lib/reporting-period";
 import { computeServiceChargeAmount } from "@/lib/service-charge";
 import { attachElectricityConsumption } from "@/lib/electricity-consumption";
 import { serializeUtilityBillDefaults } from "@/lib/utility-bill-defaults";
@@ -36,6 +38,30 @@ function monthRange(now: Date) {
     monthStart: new Date(now.getFullYear(), now.getMonth(), 1),
     monthEnd: new Date(now.getFullYear(), now.getMonth() + 1, 1),
   };
+}
+
+// What each property actually earned and spent this month, on the same basis as the
+// dashboard and reports: rent counts in the month it was billed for, other money in the
+// month it moved, and only real income/expense types (never pass-through reimbursements).
+async function currentMonthResult(now: Date) {
+  const { monthStart, monthEnd } = monthRange(now);
+  const month = dhakaISO(now).slice(0, 7);
+  const rows = await prisma.transaction.findMany({
+    where: { propertyId: { not: null }, OR: [{ date: { gte: monthStart, lt: monthEnd } }, { rentPayment: { month } }] },
+    select: { type: true, amount: true, date: true, propertyId: true, rentPayment: { select: { month: true } } },
+  });
+  const result = new Map<string, { income: number; expense: number; ownerRentPaid: number }>();
+  for (const t of rows) {
+    if (reportingMonthKey({ transactionType: t.type, transactionDate: t.date, rentPaymentMonth: t.rentPayment?.month }) !== month) continue;
+    const entry = result.get(t.propertyId!) ?? { income: 0, expense: 0, ownerRentPaid: 0 };
+    if (isIncomeType(t.type)) entry.income += Number(t.amount);
+    else if (isExpenseType(t.type)) {
+      entry.expense += Number(t.amount);
+      if (t.type === "RENT_PAID_TO_OWNER") entry.ownerRentPaid += Number(t.amount);
+    }
+    result.set(t.propertyId!, entry);
+  }
+  return (propertyId: string) => result.get(propertyId) ?? { income: 0, expense: 0, ownerRentPaid: 0 };
 }
 
 export async function getPropertiesList() {
@@ -94,15 +120,12 @@ export async function getPropertiesList() {
         where: { status: "ACTIVE" },
         select: { salaryAmount: true },
       },
-      transactions: {
-        where: { date: { gte: monthStart, lt: monthEnd } },
-        select: { amount: true, direction: true, type: true },
-      },
     },
     }),
   ]);
   const displayIdByPropertyId = new Map(idOrder.map((p, i) => [p.id, `P-${String(i + 1).padStart(3, "0")}`]));
   const currentMonth = dhakaISO(now).slice(0, 7);
+  const resultOf = await currentMonthResult(now);
 
   return properties.map((p) => {
     // Real Unit rows, not UnitType.unitCount — that field is a manually-set
@@ -165,21 +188,9 @@ export async function getPropertiesList() {
       0
     );
     const expectedIncome = tenantIncome + guestStayIncome;
-    // Real income only — a tenant's utility reimbursement is a pass-through.
-    const collectedIncome = p.transactions
-      .filter((t) => isIncomeType(t.type))
-      .reduce((sum, t) => sum + Number(t.amount), 0);
-    const payrollCost = p.employees.reduce((sum, e) => sum + Number(e.salaryAmount), 0);
-    const otherExpense = p.transactions
-      .filter((t) => t.direction === "OUTGOING" && (NON_CORE_EXPENSE_TYPES as readonly string[]).includes(t.type))
-      .reduce((sum, t) => sum + Number(t.amount), 0);
-    // Real, unscheduled income — a tenant paid more than the actual utility
-    // bill (see payUtilityBill) — added on top of the rent-schedule-based
-    // expectedIncome the same way guestStayIncome already is.
-    const utilityProfit = p.transactions
-      .filter((t) => t.type === "UTILITY_PROFIT_FROM_TENANT")
-      .reduce((sum, t) => sum + Number(t.amount), 0);
-    const netProfit = expectedIncome + utilityProfit - monthlyOwnerRent - payrollCost - otherExpense;
+    // Actual result so far this month, the same figures the dashboard and reports show.
+    const { income: collectedIncome, expense: monthExpense } = resultOf(p.id);
+    const netProfit = collectedIncome - monthExpense;
 
     return {
       id: p.id,
@@ -830,6 +841,7 @@ export async function getPropertyDetail(id: string) {
     meterLabel: b.meterLabel,
   }));
   const consumptionByBillId = attachElectricityConsumption(electricityBillsForConsumption);
+  const meterNameByBillId = await meterNames(property.utilityBills);
   const billPrintDates = await loadBillPrintDates(property.utilityBills);
   const utilityBills = property.utilityBills.map((b) => {
     const split = splitUtilityBillTransactions(
@@ -858,24 +870,17 @@ export async function getPropertyDetail(id: string) {
       propertyName: property.name,
       meterReading: b.meterReading != null ? Number(b.meterReading) : null,
       meterLabel: b.meterLabel,
+      meterName: meterNameByBillId.get(b.id) ?? null,
       previousMeterReadingOverride: b.previousMeterReadingOverride == null ? null : Number(b.previousMeterReadingOverride),
       previousMeterReading: consumptionByBillId.get(b.id)?.previousReading ?? null,
       consumptionUnits: consumptionByBillId.get(b.id)?.consumption ?? null,
     };
   });
 
-  const collectedIncome = monthTransactions
-    .filter((t) => isIncomeType(t.type))
-    .reduce((sum, t) => sum + Number(t.amount), 0);
-
-  // Real, unscheduled income — a tenant paid more than the actual utility
-  // bill (see payUtilityBill) — added on top of the rent-schedule-based
-  // expectedIncome the same way guestStayIncome already is.
-  const utilityProfit = monthTransactions
-    .filter((t) => t.type === "UTILITY_PROFIT_FROM_TENANT")
-    .reduce((sum, t) => sum + Number(t.amount), 0);
-  const netProfit = expectedIncome + utilityProfit - monthlyOwnerRent - payrollCost - totalExpense;
-  const profitMargin = expectedIncome > 0 ? Math.round((netProfit / expectedIncome) * 100) : 0;
+  // Actual result so far this month, the same figures the dashboard and reports show.
+  const { income: collectedIncome, expense: monthExpense, ownerRentPaid } = (await currentMonthResult(now))(property.id);
+  const netProfit = collectedIncome - monthExpense;
+  const profitMargin = collectedIncome > 0 ? Math.round((netProfit / collectedIncome) * 100) : 0;
 
   return {
     id: property.id,
@@ -947,6 +952,8 @@ export async function getPropertyDetail(id: string) {
     totalOverduePayroll,
     totalPastDuePayroll,
     netProfit,
+    // What the owner agreement says is due this month but has not been paid yet.
+    ownerRentUnpaid: Math.max(0, monthlyOwnerRent - ownerRentPaid),
     profitMargin,
     thisMonthIncome: collectedIncome,
     thisMonthExpense: totalExpense,
