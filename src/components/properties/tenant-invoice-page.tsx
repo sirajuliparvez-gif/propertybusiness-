@@ -299,7 +299,7 @@ export default async function TenantInvoicePage({
     const last = previousPaymentMonth(LEDGER_START_MONTH);
     if (!canEditPrintedBills || first > last) return [];
     const recorded = new Set(tenant.payments.map((entry) => entry.month));
-    return paymentMonthRange(first, last, 36).filter((month) => !recorded.has(month));
+    return paymentMonthRange(first, last, 600).filter((month) => !recorded.has(month));
   })();
   const printForm = fromRent ? (
     <RentBillPrintForm key={`${selectedMonth}:${printIssue?.revision ?? 0}:${print ?? ""}:${arrears ?? ""}`}

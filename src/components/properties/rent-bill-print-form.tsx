@@ -1,7 +1,7 @@
 "use client";
 
 import { flushSync } from "react-dom";
-import { Fragment, useState, useTransition, type ComponentProps, type ReactNode } from "react";
+import { Fragment, useState, useSyncExternalStore, useTransition, type ComponentProps, type ReactNode } from "react";
 import { useLocale, useTranslations } from "next-intl";
 import { Plus, Printer, Scissors } from "lucide-react";
 import { toast } from "sonner";
@@ -18,6 +18,9 @@ import { formatTaka, monthLabel } from "@/lib/format";
 import { arrearsRow, isSmallLeftover, type ArrearsCandidate, type RentBillPrintKey, type RentBillPrintRow } from "@/lib/rent-bill-print";
 
 const money = (cents: number) => formatTaka(cents / 100, 2);
+
+const subscribePaper = (notify: () => void) => { window.addEventListener("rentBillPaper", notify); return () => window.removeEventListener("rentBillPaper", notify); };
+const readPaper = () => { try { return localStorage.getItem("rentBillPaper") === "A5" ? "A5" as const : "A4" as const; } catch { return "A4" as const; } };
 
 export function RentBillPrintForm({
   leaseId, month, rows, printed, printedDate, revision, header, prepare, returnTo, embedded = false, utilityEditors, arrearsCandidates = [], olderDueMonths = [], olderRentByMonth = {}, canAddDue = false, leaseStartMonth = "", arrearsOnly = false,
@@ -56,6 +59,13 @@ export function RentBillPrintForm({
   const [addingDue, setAddingDue] = useState(false);
   const [dueKind, setDueKind] = useState<"RENT" | "ELECTRICITY" | "GAS" | "WASTE" | "SECURITY" | "OTHER">(olderDueMonths.length ? "RENT" : "ELECTRICITY");
   const [dueMonth, setDueMonth] = useState("");
+  const [dueYear, setDueYear] = useState("");
+  // A4 puts both copies on one sheet; A5 prints one copy per page. Remembered on this device.
+  const paper = useSyncExternalStore(subscribePaper, readPaper, () => "A4" as const);
+  function choosePaper(next: "A4" | "A5") {
+    try { localStorage.setItem("rentBillPaper", next); } catch { /* not remembered */ }
+    window.dispatchEvent(new Event("rentBillPaper"));
+  }
   const [dueAmount, setDueAmount] = useState("");
   // A bill that is already printed keeps its lines; only a new dues-only bill leaves out this month's charges.
   const duesOnly = arrearsOnly && !printed;
@@ -132,9 +142,14 @@ export function RentBillPrintForm({
 
   // Months a utility due can be added for: from the lease start up to the month before this bill.
   const utilityDueMonths = (() => {
-    try { return leaseStartMonth && leaseStartMonth <= previousPaymentMonth(month) ? paymentMonthRange(leaseStartMonth, previousPaymentMonth(month), 36) : []; } catch { return []; }
+    try { return leaseStartMonth && leaseStartMonth <= previousPaymentMonth(month) ? paymentMonthRange(leaseStartMonth, previousPaymentMonth(month), 600) : []; } catch { return []; }
   })();
   const dueMonthOptions = dueKind === "RENT" ? olderDueMonths : utilityDueMonths;
+  // Year first, then only the months of that year that may really be added.
+  const dueYears = [...new Set(dueMonthOptions.map((option) => option.slice(0, 4)))].reverse();
+  const selectedYear = dueYear || (dueYears.length === 1 ? dueYears[0] : "");
+  const intlLocale = locale === "bn" ? "bn-BD" : "en-US";
+  const monthsOfYear = dueMonthOptions.filter((option) => option.startsWith(`${selectedYear}-`));
   const dueAmountNumber = Number(dueAmount);
   const dueItem = (due: ArrearsCandidate) => (
     <li key={due.id}>
@@ -177,20 +192,26 @@ export function RentBillPrintForm({
       {dueGroup(t("rentBillUtilityDues"), t("rentBillNoUtilityDues"), arrearsCandidates.filter((due) => due.kind === "utility"))}
       {canAddDue && addingDue ? (
         <div className="mt-3 space-y-1 border-t pt-2">
-          <div className="grid gap-2 min-[560px]:grid-cols-[1fr_1fr_1fr_auto]">
+          <div className="grid gap-2 min-[560px]:grid-cols-[1fr_auto_1fr_1fr_auto]">
             <select aria-label={t("rentBillOlderDueFor")} value={dueKind}
-              onChange={(event) => { setDueKind(event.target.value as typeof dueKind); setDueMonth(""); setDueAmount(""); }}
+              onChange={(event) => { setDueKind(event.target.value as typeof dueKind); setDueYear(""); setDueMonth(""); setDueAmount(""); }}
               className="h-9 w-full rounded-lg border bg-card px-2 text-sm">
               {dueKinds.filter(([kind]) => kind !== "RENT" || olderDueMonths.length > 0).map(([kind, label]) => <option key={kind} value={kind}>{label}</option>)}
             </select>
-            <select aria-label={t("rentBillOlderDueMonth")} value={dueMonth} onChange={(event) => {
+            <select aria-label={t("rentBillOlderDueYear")} value={selectedYear}
+              onChange={(event) => { setDueYear(event.target.value); setDueMonth(""); setDueAmount(""); }}
+              className="h-9 w-full rounded-lg border bg-card px-2 text-sm min-[560px]:w-24">
+              <option value="">{t("rentBillOlderDueYear")}</option>
+              {dueYears.map((year) => <option key={year} value={year}>{new Date(Number(year), 0, 1).toLocaleDateString(intlLocale, { year: "numeric" })}</option>)}
+            </select>
+            <select aria-label={t("rentBillOlderDueMonth")} value={dueMonth} disabled={!selectedYear} onChange={(event) => {
                 setDueMonth(event.target.value);
                 const rent = dueKind === "RENT" ? olderRentByMonth[event.target.value] : undefined;
                 if (rent) setDueAmount(String(rent));
               }}
-              className="h-9 w-full rounded-lg border bg-card px-2 text-sm">
+              className="h-9 w-full rounded-lg border bg-card px-2 text-sm disabled:opacity-60">
               <option value="">{t("rentBillOlderDueMonth")}</option>
-              {dueMonthOptions.map((option) => <option key={option} value={option}>{monthLabel(option, locale)}</option>)}
+              {monthsOfYear.map((option) => <option key={option} value={option}>{new Date(2000, Number(option.slice(5)) - 1, 1).toLocaleDateString(intlLocale, { month: "long" })}</option>)}
             </select>
             <Input aria-label={t("rentBillOlderDueAmount")} type="number" min={0.01} step="0.01" value={dueAmount}
               placeholder={t("rentBillOlderDueAmount")}
@@ -244,6 +265,7 @@ export function RentBillPrintForm({
         setPrintedDraft(null);
         setAddingDue(false);
         setDueMonth("");
+        setDueYear("");
         setDueAmount("");
         router.refresh();
       } catch {
@@ -343,6 +365,11 @@ export function RentBillPrintForm({
               }}>
                 {t("cancel")}
               </Button>
+              <select aria-label={t("rentBillPaperSize")} value={paper} onChange={(event) => choosePaper(event.target.value === "A5" ? "A5" : "A4")}
+                className="h-9 rounded-lg border bg-card px-2 text-sm">
+                <option value="A4">{t("rentBillPaperA4")}</option>
+                <option value="A5">{t("rentBillPaperA5")}</option>
+              </select>
               <Button type="button" onClick={print} disabled={!draft.length || pending}><Printer className="size-4" />{t("invoicePrintBill")}</Button>
               {printedDraft === draftSnapshot ? (
                 <Button type="button" variant="outline" disabled={pending} onClick={confirm}>{t("rentBillConfirmPrinted")}</Button>
@@ -358,7 +385,7 @@ export function RentBillPrintForm({
           </div>
         )}
       </div>
-      <div data-testid="issued-rent-bill-copy" className="print-invoice-a4 hidden print:block">
+      <div data-testid="issued-rent-bill-copy" className={`print-invoice-a4 hidden print:block${paper === "A5" ? " rent-bill-a5" : ""}`}>
         <section className={`${cashMemoClassName} rent-bill-paper-copy${denseCopy ? " rent-bill-paper-copy--dense" : ""}`}>
           <p className="rent-bill-copy-label">{t("rentBillTenantCopy")}{correction > 0 ? ` · ${t("rentBillRevisionLabel", { count: correction })}` : ""}</p>
           {copyContents}
