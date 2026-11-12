@@ -101,7 +101,7 @@ export function MobileUtilityBillsList({
                     <p className="truncate text-sm font-medium">
                       {b.propertyName ? `${b.propertyName} · ` : ""}
                       {t(UTILITY_TYPE_LABEL_KEYS[b.type] ?? "utilityTypeOther")}
-                      {b.meterLabel ? ` · ${b.meterLabel}` : ""}
+                      {b.meterName ?? b.meterLabel ? ` · ${b.meterName ?? b.meterLabel}` : ""}
                     </p>
                     <p className="truncate text-xs text-muted-foreground">
                       {b.unitLabel ?? "—"}

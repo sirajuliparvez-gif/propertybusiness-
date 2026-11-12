@@ -170,7 +170,7 @@ export default async function TenantInvoicePage({
   const paymentLines = [
     { id: selectedMonth, month: selectedMonth, kind: "rent" as const, remaining: rentRemaining, label: t("invoiceRentLabel") },
     ...statementBills.map((bill) => ({
-      id: bill.id, month: bill.month, kind: "utility" as const, remaining: billRemaining(bill), label: (() => { const name = bill.meterLabel ? `${utilityTypeLabels[bill.type]} · ${bill.meterLabel}` : utilityTypeLabels[bill.type]; return fromRent ? `${name} · ${formatDate(bill.dueDate, locale)}` : name; })(),
+      id: bill.id, month: bill.month, kind: "utility" as const, remaining: billRemaining(bill), label: (() => { const name = bill.meterName ?? bill.meterLabel ? `${utilityTypeLabels[bill.type]} · ${bill.meterName ?? bill.meterLabel}` : utilityTypeLabels[bill.type]; return fromRent ? `${name} · ${formatDate(bill.dueDate, locale)}` : name; })(),
     })),
   ].map(({ remaining, ...line }) => ({ ...line, remainingCents: Math.round(remaining * 100) }))
     .filter(({ remainingCents }) => remainingCents > 0);
@@ -477,8 +477,8 @@ export default async function TenantInvoicePage({
                           {t("cashMemoCompanyShare", { amount: formatInvoiceAmount(companyBills.reduce((sum, b) => sum + b.amount, 0)) })}
                         </span>
                       ) : null}
-                      {type === "ELECTRICITY" ? [...bills, ...companyBills].map((b) => b.meterReading != null ? (
-                        <CashMemoReading key={b.id} meter={b.meterLabel}
+                      {type === "ELECTRICITY" ? [...bills, ...companyBills].sort((a, b) => (a.meterLabel ?? "").localeCompare(b.meterLabel ?? "")).map((b) => b.meterReading != null ? (
+                        <CashMemoReading key={b.id} meter={b.meterName ?? b.meterLabel}
                           current={b.meterReading} previous={b.previousMeterReading} units={b.consumptionUnits}
                           label={t("cashMemoReading")} unitLabel={t("cashMemoUnits")} missing={t("cashMemoReadingMissing")}
                           locale={locale}
@@ -545,14 +545,14 @@ export default async function TenantInvoicePage({
                     className={cn(b.id === highlightedBillId && "bg-primary/5 print:bg-transparent")}
                   >
                     <TableCell>
-                      {utilityTypeLabels[b.type] ?? b.type}{b.meterLabel ? ` · ${b.meterLabel}` : ""}
+                      {utilityTypeLabels[b.type] ?? b.type}{b.meterName ?? b.meterLabel ? ` · ${b.meterName ?? b.meterLabel}` : ""}
                       <p className="text-xs text-muted-foreground sm:hidden print:hidden">
                         {billStatusLabel(b.status)}
                         {b.paidAt ? ` · ${formatDate(b.paidAt, locale)}` : null}
                       </p>
                       {b.month < selectedMonth && b.type === "ELECTRICITY" && b.meterReading != null ? (
                         <CashMemoReading
-                          meter={b.meterLabel}
+                          meter={b.meterName ?? b.meterLabel}
                           current={b.meterReading}
                           previous={b.previousMeterReading}
                           units={b.consumptionUnits}

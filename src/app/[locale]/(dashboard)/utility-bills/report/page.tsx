@@ -61,7 +61,7 @@ export default async function MonthlyUtilityReportPage({ searchParams }: { searc
               <tr className={styles.property}><th scope="rowgroup" colSpan={10}><span className={styles.propertyName}><Building2 className="size-4 print:hidden" />{bills[0].propertyName}</span></th></tr>
               {bills.map((bill) => <tr key={bill.id} className={styles.tenant}>
                 <th scope="row" className={`${styles.name} text-left`}>{bill.unitLabel ?? t("utilityReportPropertyBill")}{bill.unitLabel && <span className={styles.billDetail}>{bill.tenantName ?? t("utilityReportTenantUnknown")}</span>}</th>
-                <td>{t(typeKeys[bill.type])}{bill.meterLabel ? ` · ${bill.meterLabel}` : ""}</td>
+                <td>{t(typeKeys[bill.type])}{bill.meterName ? ` · ${bill.meterName}` : ""}</td>
                 {[bill.billed, bill.collected, bill.company, bill.profit, bill.remaining].map((value, index) => <td key={index} className={`${styles.number} ${index === 4 && value > 0 ? styles.remaining : index === 1 && value > 0 ? styles.collected : ""}`}>{formatTaka(value)}</td>)}
                 <td className="whitespace-nowrap">{statusLabels[bill.status as keyof typeof statusLabels]}</td>
                 <td className="whitespace-nowrap">{bill.printedAt ? formatDate(bill.printedAt, locale) : "—"}</td>

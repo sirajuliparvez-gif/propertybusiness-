@@ -4,7 +4,7 @@ import { validReceiptRequestId } from "@/lib/receipt-request";
 import { randomUUID } from "node:crypto";
 import { dhakaISO, dhakaNow, dhakaTodayISO } from "@/lib/dhaka-time";
 import { revalidatePath } from "next/cache";
-import { getLocale } from "next-intl/server";
+import { getLocale, getTranslations } from "next-intl/server";
 import { prisma } from "@/lib/prisma";
 import { redirect } from "@/i18n/navigation";
 import { allocateRentPayment, buildRentLedger, overdueEntries, LEDGER_START_MONTH, RENT_DUE_DAY } from "@/lib/rent-ledger";
@@ -635,8 +635,11 @@ export async function getTenantUtilityArrears(tenantLeaseId: string, includeCurr
     orderBy: [{ month: "asc" }, { dueDate: "asc" }, { id: "asc" }],
     select: { id: true, type: true, month: true, dueDate: true, amount: true, paidAmount: true, meterLabel: true },
   });
+  const multiMeter = bills.some((b) => b.type === "ELECTRICITY" && !b.meterLabel)
+    && (await prisma.utilityBill.count({ where: { type: "ELECTRICITY", unitId: lease.unitId, meterLabel: { not: null } } })) > 0;
+  const firstMeter = multiMeter ? (await getTranslations("Properties"))("meterFirstName") : null;
   return bills.map(({ amount, paidAmount, ...bill }) => ({
-    ...bill, remaining: Number(amount.minus(paidAmount)),
+    ...bill, meterName: bill.meterLabel ?? (bill.type === "ELECTRICITY" ? firstMeter : null), remaining: Number(amount.minus(paidAmount)),
   })).filter((bill) => bill.remaining > 0);
 }
 

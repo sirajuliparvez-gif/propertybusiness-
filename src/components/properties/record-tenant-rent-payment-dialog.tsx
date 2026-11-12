@@ -789,7 +789,7 @@ export function RecordTenantRentPaymentDialog({
                     {utilityArrears.map((bill) => (
                       <div key={bill.id} className="grid items-center gap-2 border-t pt-2 sm:grid-cols-[1fr_9rem]">
                         <label htmlFor={`utility-arrears-${bill.id}`} className="text-sm">
-                          {utilityTypeLabels[bill.type]}{bill.meterLabel ? ` · ${bill.meterLabel}` : ""} · {monthLabel(bill.month, locale)}
+                          {utilityTypeLabels[bill.type]}{bill.meterName ?? bill.meterLabel ? ` · ${bill.meterName ?? bill.meterLabel}` : ""} · {monthLabel(bill.month, locale)}
                           <span className="block text-xs text-muted-foreground">
                             {simpleCollection ? `${formatDate(bill.dueDate, locale)} · ` : null}
                             {t("utilityRemainingDue", { amount: formatTaka(bill.remaining, 2) })}

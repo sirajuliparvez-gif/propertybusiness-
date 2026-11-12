@@ -643,6 +643,7 @@
     "utilityReceivedOn": "Received",
     "meterName": "Meter name (optional)",
     "meterNamePlaceholder": "Meter 2",
+    "meterFirstName": "Meter 1",
     "meterReading": "Meter Reading (optional)",
     "previousMeterReading": "Previous reading",
     "invoiceElectricityCurrent": "Current reading",

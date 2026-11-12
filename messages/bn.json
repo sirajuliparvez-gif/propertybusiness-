@@ -645,6 +645,7 @@
     "utilityReceivedOn": "টাকা পাওয়া",
     "meterName": "মিটারের নাম (ঐচ্ছিক)",
     "meterNamePlaceholder": "মিটার ২",
+    "meterFirstName": "মিটার ১",
     "meterReading": "মিটার রিডিং (ঐচ্ছিক)",
     "previousMeterReading": "পূর্ববর্তী ইউনিট",
     "invoiceElectricityCurrent": "বর্তমান ইউনিট",

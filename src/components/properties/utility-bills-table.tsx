@@ -80,6 +80,7 @@ export type UtilityBillRow = {
   receivedAt?: Date | null;
   meterReading?: number | null;
   meterLabel?: string | null;
+  meterName?: string | null;
   previousMeterReading?: number | null;
   previousMeterReadingOverride?: number | null;
   consumptionUnits?: number | null;
@@ -510,9 +511,9 @@ export function UtilityBillsTable({
                       </Badge>
                     ) : null}
                   </div>
-                  {b.type === "ELECTRICITY" && (b.meterReading != null || b.meterLabel) ? (
+                  {b.type === "ELECTRICITY" && (b.meterReading != null || b.meterName || b.meterLabel) ? (
                     <p className="mt-0.5 text-xs text-muted-foreground">
-                      {b.meterLabel}{b.meterLabel && b.meterReading != null ? " · " : ""}{b.meterReading != null ? t("meterReadingCell", { reading: b.meterReading }) : ""}
+                      {b.meterName ?? b.meterLabel}{(b.meterName ?? b.meterLabel) && b.meterReading != null ? " · " : ""}{b.meterReading != null ? t("meterReadingCell", { reading: b.meterReading }) : ""}
                       {b.consumptionUnits != null ? " · " + t("consumptionCell", { units: b.consumptionUnits }) : ""}
                     </p>
                   ) : null}

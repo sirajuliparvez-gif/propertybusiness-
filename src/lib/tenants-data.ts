@@ -1,3 +1,4 @@
+import { meterNames } from "@/lib/meter-names";
 import { cache } from "react";
 import { dhakaISO, dhakaNow } from "@/lib/dhaka-time";
 import { prisma } from "@/lib/prisma";
@@ -442,6 +443,7 @@ export async function getTenantProfile(leaseId: string) {
       transactions: { orderBy: { date: "desc" }, select: { type: true, amount: true, method: true, date: true } },
     },
   });
+  const meterNameByBillId = await meterNames(unitUtilityBills.map((b) => ({ id: b.id, type: b.type, unitId: lease.unitId, meterLabel: b.meterLabel })));
   const unitConsumptionByBillId = attachElectricityConsumption(
     unitUtilityBills.map((b) => ({
       id: b.id,
@@ -665,6 +667,7 @@ export async function getTenantProfile(leaseId: string) {
         propertyId: lease.unit.unitType.property.id,
         meterReading: b.meterReading != null ? Number(b.meterReading) : null,
         meterLabel: b.meterLabel,
+        meterName: meterNameByBillId.get(b.id) ?? null,
         previousMeterReadingOverride: b.previousMeterReadingOverride == null ? null : Number(b.previousMeterReadingOverride),
         previousMeterReading: unitConsumptionByBillId.get(b.id)?.previousReading ?? null,
         consumptionUnits: unitConsumptionByBillId.get(b.id)?.consumption ?? null,
