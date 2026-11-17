@@ -285,18 +285,18 @@ test("tenant billing accepts different charges but rejects the same charge twice
 });
 
 
-test("November collection defaults to October rent and allows November explicitly", () => {
-  assert.equal(resolveRentCollectionMonth(undefined, "2026-11"), "2026-10");
-  assert.equal(resolveRentCollectionMonth("2026-11", "2026-11"), "2026-11");
+test("rent collection opens on the current month and allows earlier months explicitly", () => {
+  assert.equal(resolveRentCollectionMonth(undefined, "2026-11"), "2026-11");
+  assert.equal(resolveRentCollectionMonth("2026-10", "2026-11"), "2026-10");
   assert.equal(resolveRentCollectionMonth("2026-08", "2026-11"), "2026-08");
-  assert.equal(resolveRentCollectionMonth(undefined, "2027-01"), "2026-12");
-  assert.equal(resolveRentCollectionMonth("2026-13", "2026-11"), "2026-10");
-  assert.equal(resolveRentCollectionMonth("2026-12", "2026-11"), "2026-10");
+  assert.equal(resolveRentCollectionMonth(undefined, "2027-01"), "2027-01");
+  assert.equal(resolveRentCollectionMonth("2026-13", "2026-11"), "2026-11");
+  assert.equal(resolveRentCollectionMonth("2026-12", "2026-11"), "2026-11");
 });
 
 test("October rent received in November settles October while reporting November income", () => {
   const receivedDate = "2026-11-08";
-  const rentMonth = resolveRentCollectionMonth(undefined, "2026-11");
+  const rentMonth = resolveRentCollectionMonth("2026-10", "2026-11");
   assert.equal(resolvePaymentMonth(rentMonth, receivedDate), "2026-10");
   const transactionDate = new Date(`${receivedDate}T00:00:00+06:00`);
   const november = transactionReportRange("2026-11");

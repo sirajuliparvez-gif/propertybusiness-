@@ -55,12 +55,10 @@ export function resolvePaymentMonth(billingMonth: string | null | undefined, pay
   return month;
 }
 
-// Rent is normally collected one month later; cash reports still use the
-// actual payment date, independently of this worklist's billing month.
+// The worklist opens on the current month; an earlier month (e.g. last month's rent) can be picked.
+// Cash reports still use the actual payment date, independently of this worklist's billing month.
 export function resolveRentCollectionMonth(requestedMonth: string | undefined, currentMonth: string) {
-  return isPaymentMonth(requestedMonth) && requestedMonth <= currentMonth
-    ? requestedMonth
-    : previousPaymentMonth(currentMonth);
+  return isPaymentMonth(requestedMonth) && requestedMonth <= currentMonth ? requestedMonth : currentMonth;
 }
 
 // A missing record must not hide an otherwise valid month in the bill picker.

@@ -1153,7 +1153,7 @@
     "companyExpenseRowLabel": "Company Staff / Admin Expense",
 
     "rentCollectionTitle": "Rent Collection",
-    "rentPageSubtitle": "Last month’s rent is selected first. Change the rent month if needed. Income is counted when the money is received.",
+    "rentPageSubtitle": "The current month is selected first. Change the rent month to collect an earlier month. Income is counted when the money is received.",
     "invoiceMonthApplyFirst": "The selected month has changed. Press Show to load its bill before saving.",
     "invoiceMonthLoading": "Loading the new month’s bill. Please wait…",
     "invoiceDiscardDraft": "Your changes have not been saved. Closing will discard them. Close anyway?",
