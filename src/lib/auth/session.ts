@@ -40,3 +40,15 @@ export async function requireCurrentUser(): Promise<CurrentUser> {
   }
   return user;
 }
+
+// Money-moving and destructive actions (deleting records, owner withdrawals,
+// bulk import) are limited to admins. A manager who reaches one is sent to a
+// plain "admin only" page instead of seeing a generic error.
+export async function requireAdmin(): Promise<CurrentUser> {
+  const user = await requireCurrentUser();
+  if (user.role !== "ADMIN") {
+    const locale = await getLocale();
+    return redirect({ href: "/forbidden", locale });
+  }
+  return user;
+}

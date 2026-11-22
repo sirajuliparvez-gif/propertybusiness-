@@ -18,7 +18,7 @@ import {
 } from "@/lib/payment-month";
 import { localizedMutationPaths } from "@/lib/localized-revalidation";
 import { buildRentArrearsReport } from "@/lib/rent-arrears-report";
-import { requireCurrentUser } from "@/lib/auth/session";
+import { requireCurrentUser, requireAdmin } from "@/lib/auth/session";
 import { isValidTransactionDate } from "@/lib/transaction-edit";
 import { withRentActionFeedback } from "@/lib/rent-action-feedback";
 import { allocateInvoicePayment, invoicePaymentSnapshot, reconcileInvoiceAllocation, type InvoicePaymentLine, type ReceiptCheckLine } from "@/lib/invoice-payment";
@@ -99,6 +99,7 @@ export type HistoricalRentCorrectionResult =
 // money or an adjustment recorded is protected and makes the whole operation
 // fail atomically so payment history can never be silently rewritten.
 export async function correctHistoricalRent(formData: FormData): Promise<HistoricalRentCorrectionResult> {
+  await requireCurrentUser();
   const locale = await getLocale();
   const tenantLeaseId = str(formData, "tenantLeaseId");
   const effectiveMonth = str(formData, "effectiveMonth");
@@ -249,6 +250,7 @@ export async function correctHistoricalRent(formData: FormData): Promise<Histori
 // accidentally reset. Once created, the normal overdue-payment flow can take
 // one lump sum and apply it oldest-first across the selected months.
 export async function createHistoricalRentArrears(formData: FormData): Promise<RentArrearsCreateResult> {
+  await requireCurrentUser();
   const locale = await getLocale();
   const tenantLeaseId = str(formData, "tenantLeaseId");
   const startMonth = str(formData, "startMonth");
@@ -454,6 +456,7 @@ export async function updateTenantRentPayment(formData: FormData): Promise<RentP
 // cash-flow entry. Installments and downpayment adjustments retain their audit
 // history and cannot be deleted from the tenant payment-history row.
 export async function deleteTenantRentPayment(formData: FormData): Promise<RentPaymentDeleteResult> {
+  await requireAdmin();
   const locale = await getLocale();
   const rentPaymentId = str(formData, "rentPaymentId");
   const tenantLeaseId = str(formData, "tenantLeaseId");
@@ -494,6 +497,7 @@ export async function deleteTenantRentPayment(formData: FormData): Promise<RentP
 // (tenantLeaseId, month), no nullable column involved, so upsert is safe here
 // (unlike OwnerRentPayment's unitId-nullable case elsewhere in this codebase).
 export async function recordTenantRentPayment(formData: FormData) {
+  await requireCurrentUser();
   const locale = await getLocale();
   const propertyId = formData.get("propertyId") as string;
   const tenantLeaseId = formData.get("tenantLeaseId") as string;
@@ -1172,6 +1176,7 @@ export async function recordMultiMonthRentPayment(formData: FormData, newBills: 
 // already decoupled from this — lump-sum-in, monthly-out (or vice versa)
 // just falls out naturally with no extra code.
 export async function recordAdvanceRentPayment(formData: FormData) {
+  await requireCurrentUser();
   const locale = await getLocale();
   const propertyId = formData.get("propertyId") as string;
   const tenantLeaseId = formData.get("tenantLeaseId") as string;

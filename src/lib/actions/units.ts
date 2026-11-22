@@ -6,12 +6,14 @@ import { getLocale } from "next-intl/server";
 import { prisma } from "@/lib/prisma";
 import { redirect } from "@/i18n/navigation";
 
+import { requireCurrentUser } from "@/lib/auth/session";
 function str(formData: FormData, key: string) {
   const v = formData.get(key);
   return typeof v === "string" && v.trim() !== "" ? v.trim() : null;
 }
 
 export async function updateUnitStatus(formData: FormData) {
+  await requireCurrentUser();
   const locale = await getLocale();
   const unitId = formData.get("unitId") as string;
   const propertyId = formData.get("propertyId") as string;
@@ -34,6 +36,7 @@ export async function updateUnitStatus(formData: FormData) {
 // (e.g. after deducting damages) is legitimate, so the amount is editable in
 // the UI rather than always assumed to be the full balance.
 export async function vacateTenantLease(formData: FormData) {
+  await requireCurrentUser();
   const locale = await getLocale();
   const leaseId = formData.get("leaseId") as string;
   const propertyId = formData.get("propertyId") as string;
@@ -91,6 +94,7 @@ export async function vacateTenantLease(formData: FormData) {
 }
 
 export async function addTenantToUnit(formData: FormData) {
+  await requireCurrentUser();
   const locale = await getLocale();
   const unitId = formData.get("unitId") as string;
   const propertyId = formData.get("propertyId") as string;
@@ -142,6 +146,13 @@ export async function addTenantToUnit(formData: FormData) {
   const agreementDocumentFileType = str(formData, "agreementDocumentFileType");
 
   await prisma.$transaction(async (tx) => {
+    // The unit must belong to the property in the form, and must not already have an active tenant —
+    // a double click or a stale page would otherwise create a second lease and a second deposit entry.
+    const unit = await tx.unit.findFirst({ where: { id: unitId, unitType: { propertyId } }, select: { id: true } });
+    if (!unit) throw new Error("Unit not found in this property");
+    const occupied = await tx.tenantLease.findFirst({ where: { unitId, status: "ACTIVE" }, select: { id: true } });
+    if (occupied) throw new Error("This unit already has an active tenant");
+
     let tenantId = existingTenantId;
     if (tenantMode === "new") {
       const tenantType = formData.get("newTenantType") === "BUSINESS" ? "BUSINESS" : "INDIVIDUAL";
@@ -241,6 +252,7 @@ export async function addTenantToUnit(formData: FormData) {
 // picker — a read-only action, fetched when that dialog opens (the cross-
 // property Utility Bills page has no unit list of its own to pass in).
 export async function listPropertyUnits(propertyId: string) {
+  await requireCurrentUser();
   if (!propertyId) return [];
   const unitTypes = await prisma.unitType.findMany({
     where: { propertyId },

@@ -5,6 +5,8 @@ import { getLocale } from "next-intl/server";
 import { prisma } from "@/lib/prisma";
 import { redirect } from "@/i18n/navigation";
 
+import { requireCurrentUser, requireAdmin } from "@/lib/auth/session";
+import { isValidUnitCount, MAX_UNITS_PER_FORM } from "@/lib/unit-limits";
 function str(formData: FormData, key: string) {
   const v = formData.get(key);
   return typeof v === "string" && v.trim() !== "" ? v.trim() : null;
@@ -75,6 +77,7 @@ function parseUnitOverrides(
 }
 
 export async function createProperty(formData: FormData) {
+  await requireCurrentUser();
   const locale = await getLocale();
 
   const ownerMode = formData.get("ownerMode") as string;
@@ -116,7 +119,7 @@ export async function createProperty(formData: FormData) {
   const documentUrl = str(formData, "documentUrl");
   const documentFileType = str(formData, "documentFileType");
 
-  if (!name || !unitTypeLabel || !unitCount || unitCount < 1 || !startDate) {
+  if (!name || !unitTypeLabel || !isValidUnitCount(unitCount) || !startDate) {
     throw new Error("Missing required fields");
   }
   // Owner rent/advance are both optional for the "fixed" mode — a property
@@ -168,6 +171,7 @@ export async function createProperty(formData: FormData) {
     });
 
     const unitRows = parseUnitOverrides(formData, "unitOverridesJson", unitCount, 0);
+    if (unitRows.length > MAX_UNITS_PER_FORM) throw new Error("Too many units in one form");
     await tx.unit.createMany({
       data: unitRows.map((row) => ({
         unitTypeId: unitType.id,
@@ -229,6 +233,7 @@ export async function createProperty(formData: FormData) {
 }
 
 export async function updateProperty(formData: FormData) {
+  await requireCurrentUser();
   const locale = await getLocale();
   const propertyId = formData.get("propertyId") as string;
   if (!propertyId) throw new Error("Missing property id");
@@ -307,6 +312,7 @@ export async function updateProperty(formData: FormData) {
 }
 
 export async function deleteProperty(formData: FormData) {
+  await requireAdmin();
   const locale = await getLocale();
   const propertyId = formData.get("propertyId") as string;
   if (!propertyId) throw new Error("Missing property id");
@@ -321,6 +327,7 @@ export async function deleteProperty(formData: FormData) {
 }
 
 export async function addUnitType(formData: FormData) {
+  await requireCurrentUser();
   const locale = await getLocale();
   const propertyId = formData.get("propertyId") as string;
   if (!propertyId) throw new Error("Missing property id");
@@ -335,7 +342,7 @@ export async function addUnitType(formData: FormData) {
   const tenantDefaultDownpaymentAmount = str(formData, "tenantDefaultDownpaymentAmount");
   const tenantDefaultNightlyRateAmount = str(formData, "tenantDefaultNightlyRateAmount");
 
-  if (!label || !unitCount || unitCount < 1) {
+  if (!label || !isValidUnitCount(unitCount)) {
     throw new Error("Missing required fields");
   }
 
@@ -357,6 +364,7 @@ export async function addUnitType(formData: FormData) {
 
     const existingUnitCount = await tx.unit.count({ where: { unitType: { propertyId } } });
     const unitRows = parseUnitOverrides(formData, "unitOverridesJson", unitCount, existingUnitCount);
+    if (unitRows.length > MAX_UNITS_PER_FORM) throw new Error("Too many units in one form");
 
     await tx.unit.createMany({
       data: unitRows.map((row) => ({
@@ -385,6 +393,7 @@ export async function addUnitType(formData: FormData) {
 // Unit could orphan real TenantLease/UtilityBill/Transaction history; use the
 // unit's own Active/Inactive toggle to retire it instead.
 export async function updateUnitType(formData: FormData) {
+  await requireCurrentUser();
   const locale = await getLocale();
   const propertyId = formData.get("propertyId") as string;
   const unitTypeId = formData.get("unitTypeId") as string;

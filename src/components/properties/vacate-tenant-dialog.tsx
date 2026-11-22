@@ -76,6 +76,7 @@ export function VacateTenantDialog({
             {t("vacateTenantConfirm", { name: tenantName })}
           </p>
           <p className="text-xs text-muted-foreground">{t("vacateTenantConfirmHint")}</p>
+          <p className="rounded-md bg-amber-500/10 px-3 py-2 text-xs text-amber-700 dark:text-amber-400">{t("vacateTenantDuesWarning")}</p>
 
           {currentDownpaymentBalance > 0 ? (
             <div className="grid gap-3 sm:grid-cols-2">

@@ -9,6 +9,7 @@ import {
   isValidTransactionDate,
 } from "@/lib/transaction-edit";
 
+import { requireCurrentUser, requireAdmin } from "@/lib/auth/session";
 const PAYMENT_METHODS = ["CASH", "BKASH", "NAGAD", "BANK", "BANK_CHECK", "OTHER"] as const;
 
 export type TransactionEditErrorCode =
@@ -36,6 +37,7 @@ function str(formData: FormData, key: string) {
 export async function updateManualTransaction(
   formData: FormData
 ): Promise<TransactionEditResult> {
+  await requireCurrentUser();
   const locale = await getLocale();
   const transactionId = str(formData, "transactionId");
   const amountRaw = str(formData, "amount");
@@ -102,6 +104,7 @@ export async function updateManualTransaction(
 export async function deleteManualTransaction(
   formData: FormData
 ): Promise<TransactionDeleteResult> {
+  await requireAdmin();
   const locale = await getLocale();
   const transactionId = str(formData, "transactionId");
   if (!transactionId) return { ok: false, error: "missingFields" };

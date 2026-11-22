@@ -40,7 +40,13 @@
     "logout": "Log out",
     "loggedInAs": "Logged in as",
     "roleAdmin": "Admin",
-    "roleManager": "Manager"
+    "roleManager": "Manager",
+    "adminOnlyTitle": "Admin only",
+    "adminOnlyBody": "This action can only be done by an admin. Ask an admin to do it, or contact the owner.",
+    "backToDashboard": "Back to dashboard",
+    "errorTitle": "Something went wrong",
+    "errorBody": "The action did not go through and nothing was saved. Check what you entered and try again.",
+    "errorRetry": "Try again"
   },
   "Settings": {
     "title": "Settings",
@@ -406,6 +412,7 @@
     "sizeValue": "Size",
     "sizeUnit": "Unit",
     "unitCount": "Number of Units",
+    "confirmManyUnits": "You are about to create {count} units at once. Is that the right number?",
     "ownerRentAmount": "Monthly Rent to Owner (per unit)",
     "ownerRentAmountOptionalHint": "Optional if using a fixed rent for the whole property",
     "customizePerUnit": "Customize each unit individually",
@@ -519,6 +526,7 @@
     "vacateTenant": "Remove Tenant & Vacate Unit",
     "vacateTenantConfirm": "Confirm — {name} will be removed and this unit vacated",
     "vacateTenantConfirmHint": "This tenant's lease history stays on record — only the unit becomes vacant for a new tenant.",
+    "vacateTenantDuesWarning": "Check first: unpaid rent or bills this tenant still owes may stop showing in the dashboard totals once the unit is vacated. Collect or note any dues before you continue.",
     "confirmVacate": "Yes, vacate unit",
     "tenantVacatedToast": "Tenant removed, unit is now vacant.",
 
