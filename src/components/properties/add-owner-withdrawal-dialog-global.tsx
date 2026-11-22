@@ -3,6 +3,7 @@
 import { dhakaTodayISO } from "@/lib/dhaka-time";
 import { useState, useTransition } from "react";
 import { useTranslations } from "next-intl";
+import { useRouter } from "@/i18n/navigation";
 import { Loader2, HandCoins } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -28,14 +29,20 @@ import { recordOwnerWithdrawal } from "@/lib/actions/owner-withdrawal";
 
 const NONE_VALUE = "NONE";
 
-export function AddOwnerWithdrawalDialogGlobal() {
+export function AddOwnerWithdrawalDialogGlobal({ dismissTo }: { dismissTo?: string } = {}) {
   const t = useTranslations("Properties");
+  const router = useRouter();
   const [isPending, startTransition] = useTransition();
   const [method, setMethod] = useState(NONE_VALUE);
   const todayValue = dhakaTodayISO();
 
   return (
-    <Dialog>
+    <Dialog
+      defaultOpen={dismissTo != null}
+      onOpenChange={(open) => {
+        if (!open && dismissTo) router.replace(dismissTo, { scroll: false });
+      }}
+    >
       <DialogTrigger render={<Button size="sm" variant="outline" />}>
         <HandCoins className="size-3.5" />
         {t("addOwnerWithdrawal")}

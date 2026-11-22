@@ -7,6 +7,9 @@ import { prisma } from "@/lib/prisma";
 import { redirect } from "@/i18n/navigation";
 
 import { requireCurrentUser } from "@/lib/auth/session";
+import { parseMoneyAmount } from "@/lib/money-input";
+import { localizedMutationPaths } from "@/lib/localized-revalidation";
+import { MAX_UNIT_LABEL_LENGTH, normalizeUnitLabel, unitLabelKey } from "@/lib/unit-label-key";
 function str(formData: FormData, key: string) {
   const v = formData.get(key);
   return typeof v === "string" && v.trim() !== "" ? v.trim() : null;
@@ -285,4 +288,54 @@ export async function listPropertyUnits(propertyId: string) {
       tenantName: u.tenantLeases[0]?.tenant.name ?? null,
     }))
   );
+}
+
+
+export type AddUnitErrorCode = "missingLabel" | "labelTooLong" | "invalidRent" | "notFound" | "duplicateLabel";
+export type AddUnitResult = { ok: true; label: string } | { ok: false; error: AddUnitErrorCode };
+
+// Adds ONE unit to an existing unit type: only its number/name is needed, and it takes the
+// type's size and rent unless a rent is given. A number that already exists in the property
+// (in Bengali or English digits) is refused instead of creating a second one.
+export async function addUnitToType(formData: FormData): Promise<AddUnitResult> {
+  await requireCurrentUser();
+  const locale = await getLocale();
+  const propertyId = str(formData, "propertyId");
+  const unitTypeId = str(formData, "unitTypeId");
+  const label = normalizeUnitLabel(String(formData.get("label") ?? ""));
+  const rentRaw = str(formData, "tenantDefaultRentAmount");
+
+  if (!propertyId || !unitTypeId) return { ok: false, error: "notFound" };
+  if (!label) return { ok: false, error: "missingLabel" };
+  if (label.length > MAX_UNIT_LABEL_LENGTH) return { ok: false, error: "labelTooLong" };
+  const rent = rentRaw == null ? null : parseMoneyAmount(rentRaw);
+  if (rentRaw != null && !rent) return { ok: false, error: "invalidRent" };
+
+  const result = await prisma.$transaction(async (tx): Promise<AddUnitResult> => {
+    const unitType = await tx.unitType.findFirst({
+      where: { id: unitTypeId, propertyId, property: { deletedAt: null } },
+      select: { id: true },
+    });
+    if (!unitType) return { ok: false, error: "notFound" };
+
+    const existing = await tx.unit.findMany({ where: { unitType: { propertyId } }, select: { label: true } });
+    const key = unitLabelKey(label);
+    if (existing.some((unit) => unitLabelKey(unit.label) === key)) return { ok: false, error: "duplicateLabel" };
+
+    await tx.unit.create({
+      data: { unitTypeId, label, tenantDefaultRentAmount: rent ?? undefined },
+    });
+    await tx.unitType.update({
+      where: { id: unitTypeId },
+      data: { unitCount: await tx.unit.count({ where: { unitTypeId } }) },
+    });
+    return { ok: true, label };
+  });
+
+  if (result.ok) {
+    for (const path of [...localizedMutationPaths(locale, `/properties/${propertyId}`), `/${locale}/vacant-units`]) {
+      revalidatePath(path);
+    }
+  }
+  return result;
 }
