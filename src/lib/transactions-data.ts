@@ -38,6 +38,14 @@ export async function getAllTransactionsData(requestedMonth?: string) {
     select: { date: true, propertyId: true, property: { select: { name: true } } },
   }) : Promise.resolve(null)]);
 
+  // A utility payment that came in through a printed rent bill receipt is recorded by that
+  // receipt too, so it is not offered for reversal here.
+  const receiptIds = [...new Set(transactions.map((t) => t.paymentReceiptId).filter((id): id is string => Boolean(id)))];
+  const receiptChecks = receiptIds.length
+    ? await prisma.rentBillReceiptCheck.findMany({ where: { receiptId: { in: receiptIds } }, select: { receiptId: true } })
+    : [];
+  const checkedReceipts = new Set(receiptChecks.map((r) => r.receiptId));
+
   const rows = transactions.map((t) => {
     const isProfitAffecting =
       (INCOME_TYPES as readonly string[]).includes(t.type) ||
@@ -68,6 +76,7 @@ export async function getAllTransactionsData(requestedMonth?: string) {
           t.tenantLeaseId ||
           t.guestStayId
         ),
+      reversal: reversalKind(t, checkedReceipts),
       receiptHref: t.paymentReceiptId && t.tenantLeaseId
         ? `/tenants/${t.tenantLeaseId}/receipts/${t.paymentReceiptId}`
         : null,
@@ -141,3 +150,16 @@ export async function getPropertyUnitOptions() {
 }
 
 export type PropertyUnitOptions = Awaited<ReturnType<typeof getPropertyUnitOptions>>;
+
+const UTILITY_PAYMENT_TYPES = ["UTILITY_REIMBURSEMENT_FROM_TENANT", "UTILITY_PROFIT_FROM_TENANT", "UTILITY_EXPENSE"];
+
+// Which payments an admin may take back from the Transactions page: salary payments, and utility
+// payments that were recorded directly on the bill.
+function reversalKind(
+  t: { type: string; payrollRecordId: string | null; utilityBillId: string | null; paymentReceiptId: string | null },
+  checkedReceipts: Set<string>
+): "salary" | "utility" | null {
+  if (t.type === "PAYROLL_EXPENSE" && t.payrollRecordId) return "salary";
+  if (UTILITY_PAYMENT_TYPES.includes(t.type) && t.utilityBillId && !(t.paymentReceiptId && checkedReceipts.has(t.paymentReceiptId))) return "utility";
+  return null;
+}

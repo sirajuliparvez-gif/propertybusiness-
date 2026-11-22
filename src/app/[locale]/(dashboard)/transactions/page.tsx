@@ -5,6 +5,7 @@ import { getTranslations } from "next-intl/server";
 import { TrendingUp, TrendingDown, Wallet, ListChecks, FileText } from "lucide-react";
 import { getAllTransactionsData, getPropertyUnitOptions } from "@/lib/transactions-data";
 import { TransactionsTable } from "@/components/properties/transactions-table";
+import { getCurrentUser } from "@/lib/auth/session";
 import { MobileTransactionsList } from "@/components/mobile/mobile-transactions-list";
 import { AddExpenseDialogGlobal } from "@/components/properties/add-expense-dialog-global";
 import { AddOwnerWithdrawalDialogGlobal } from "@/components/properties/add-owner-withdrawal-dialog-global";
@@ -16,6 +17,7 @@ export default async function TransactionsPage({ searchParams }: { searchParams:
   const openAddForm = add === "expense";
   const openWithdrawalForm = add === "withdrawal";
   const t = await getTranslations("Properties");
+  const currentUser = await getCurrentUser();
   const [{ transactions, totalIncome, totalExpense, net, entryCount, selectedMonth, availableMonths }, propertyUnitOptions] =
     await Promise.all([getAllTransactionsData(month), getPropertyUnitOptions()]);
 
@@ -72,7 +74,7 @@ export default async function TransactionsPage({ searchParams }: { searchParams:
 
       <MobileTransactionsList key={selectedMonth ?? "ALL"} transactions={transactions} />
       <div className="hidden md:block">
-        <TransactionsTable key={selectedMonth ?? "ALL"} transactions={transactions} />
+        <TransactionsTable key={selectedMonth ?? "ALL"} transactions={transactions} canReverse={currentUser?.role === "ADMIN"} />
       </div>
     </div>
   );

@@ -21,6 +21,7 @@ import { InitialAvatar } from "@/components/properties/initial-avatar";
 import { StatusPill, isRentSettled, rentPillStatus } from "@/components/properties/status-pill";
 import { StatTile } from "@/components/stat-tile";
 import { VacateTenantDialog } from "@/components/properties/vacate-tenant-dialog";
+import { ReactivateLeaseButton } from "@/components/properties/reactivate-lease-button";
 import { ChangeTenantRentDialog } from "@/components/properties/change-tenant-rent-dialog";
 import { EditTenantDialog } from "@/components/properties/edit-tenant-dialog";
 import { EditRentPaymentDialog } from "@/components/properties/edit-rent-payment-dialog";
@@ -312,6 +313,11 @@ export default async function TenantProfilePage({
               <div className="flex items-center justify-between">
                 <span className="text-muted-foreground">{t("vacatedOn")}</span>
                 <span className="font-mono font-medium tabular-nums">{formatDate(tenant.movedOutAt, locale)}</span>
+              </div>
+            ) : null}
+            {isFormer && tenant.leaseStatus === "VACATED" ? (
+              <div className="mt-3 border-t pt-3">
+                <ReactivateLeaseButton leaseId={tenant.id} propertyId={tenant.propertyId} tenantName={tenant.tenantName} />
               </div>
             ) : null}
             {!isFormer ? (
