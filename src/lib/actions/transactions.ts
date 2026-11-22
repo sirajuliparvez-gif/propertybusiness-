@@ -10,6 +10,7 @@ import {
 } from "@/lib/transaction-edit";
 
 import { requireCurrentUser, requireAdmin } from "@/lib/auth/session";
+import { recordAudit } from "@/lib/audit";
 const PAYMENT_METHODS = ["CASH", "BKASH", "NAGAD", "BANK", "BANK_CHECK", "OTHER"] as const;
 
 export type TransactionEditErrorCode =
@@ -37,7 +38,7 @@ function str(formData: FormData, key: string) {
 export async function updateManualTransaction(
   formData: FormData
 ): Promise<TransactionEditResult> {
-  await requireCurrentUser();
+  const user = await requireCurrentUser();
   const locale = await getLocale();
   const transactionId = str(formData, "transactionId");
   const amountRaw = str(formData, "amount");
@@ -60,6 +61,11 @@ export async function updateManualTransaction(
     where: { id: transactionId },
     select: {
       type: true,
+      direction: true,
+      amount: true,
+      date: true,
+      notes: true,
+      method: true,
       propertyId: true,
       rentPaymentId: true,
       payrollRecordId: true,
@@ -90,6 +96,14 @@ export async function updateManualTransaction(
     where: { id: transactionId },
     data: { amount: amountRaw, date: new Date(dateRaw), method, notes },
   });
+  await recordAudit(user, {
+    action: "transaction.update",
+    entity: "Transaction",
+    entityId: transactionId,
+    propertyId: existing.propertyId,
+    summary: `${existing.type}: ৳${existing.amount} -> ৳${amountRaw}`,
+    details: { before: existing, after: { amount: amountRaw, date: dateRaw, method, notes } },
+  });
 
   for (const path of localizedMutationPaths(locale, "/transactions")) {
     revalidatePath(path);
@@ -104,7 +118,7 @@ export async function updateManualTransaction(
 export async function deleteManualTransaction(
   formData: FormData
 ): Promise<TransactionDeleteResult> {
-  await requireAdmin();
+  const user = await requireAdmin();
   const locale = await getLocale();
   const transactionId = str(formData, "transactionId");
   if (!transactionId) return { ok: false, error: "missingFields" };
@@ -113,6 +127,11 @@ export async function deleteManualTransaction(
     where: { id: transactionId },
     select: {
       type: true,
+      direction: true,
+      amount: true,
+      date: true,
+      notes: true,
+      method: true,
       propertyId: true,
       rentPaymentId: true,
       payrollRecordId: true,
@@ -137,6 +156,14 @@ export async function deleteManualTransaction(
   }
 
   await prisma.transaction.delete({ where: { id: transactionId } });
+  await recordAudit(user, {
+    action: "transaction.delete",
+    entity: "Transaction",
+    entityId: transactionId,
+    propertyId: existing.propertyId,
+    summary: `${existing.type}: ৳${existing.amount} (${existing.date.toISOString().slice(0, 10)})`,
+    details: existing,
+  });
 
   for (const path of localizedMutationPaths(locale, "/transactions")) {
     revalidatePath(path);

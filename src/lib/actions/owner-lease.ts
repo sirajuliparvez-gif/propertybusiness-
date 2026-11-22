@@ -22,7 +22,7 @@ function str(formData: FormData, key: string) {
 // upsert would never match an existing whole-property (null-unit) row and
 // would just keep inserting duplicates instead of correcting the entry.
 export async function recordOwnerRentPayment(formData: FormData) {
-  await requireCurrentUser();
+  const user = await requireCurrentUser();
   const locale = await getLocale();
   const propertyId = formData.get("propertyId") as string;
   const ownerLeaseAgreementId = formData.get("ownerLeaseAgreementId") as string;
@@ -85,6 +85,7 @@ export async function recordOwnerRentPayment(formData: FormData) {
     if (delta > 0) {
       await tx.transaction.create({
         data: {
+          recordedByUserId: user.id,
           propertyId,
           type: "RENT_PAID_TO_OWNER",
           direction: "OUTGOING",

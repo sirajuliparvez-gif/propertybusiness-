@@ -7,6 +7,7 @@ import { prisma } from "@/lib/prisma";
 import { redirect } from "@/i18n/navigation";
 
 import { requireCurrentUser } from "@/lib/auth/session";
+import { recordAudit } from "@/lib/audit";
 import { parseMoneyAmount } from "@/lib/money-input";
 import { localizedMutationPaths } from "@/lib/localized-revalidation";
 import { MAX_UNIT_LABEL_LENGTH, normalizeUnitLabel, unitLabelKey } from "@/lib/unit-label-key";
@@ -16,14 +17,23 @@ function str(formData: FormData, key: string) {
 }
 
 export async function updateUnitStatus(formData: FormData) {
-  await requireCurrentUser();
+  const user = await requireCurrentUser();
   const locale = await getLocale();
   const unitId = formData.get("unitId") as string;
   const propertyId = formData.get("propertyId") as string;
   const status = formData.get("status") === "INACTIVE" ? "INACTIVE" : "ACTIVE";
   if (!unitId || !propertyId) throw new Error("Missing unit or property id");
 
+  const before = await prisma.unit.findUnique({ where: { id: unitId }, select: { label: true, status: true } });
   await prisma.unit.update({ where: { id: unitId }, data: { status } });
+  await recordAudit(user, {
+    action: "unit.status",
+    entity: "Unit",
+    entityId: unitId,
+    propertyId,
+    summary: `Unit ${before?.label ?? unitId}: ${before?.status ?? "?"} -> ${status}`,
+    details: { before: before?.status ?? null, after: status },
+  });
 
   revalidatePath(`/properties/${propertyId}`);
   redirect({ href: `/properties/${propertyId}`, locale });
@@ -39,7 +49,7 @@ export async function updateUnitStatus(formData: FormData) {
 // (e.g. after deducting damages) is legitimate, so the amount is editable in
 // the UI rather than always assumed to be the full balance.
 export async function vacateTenantLease(formData: FormData) {
-  await requireCurrentUser();
+  const user = await requireCurrentUser();
   const locale = await getLocale();
   const leaseId = formData.get("leaseId") as string;
   const propertyId = formData.get("propertyId") as string;
@@ -56,6 +66,8 @@ export async function vacateTenantLease(formData: FormData) {
       ? methodRaw
       : null;
 
+  // Set inside the transaction below; the cast stops TypeScript from narrowing it to null.
+  let vacated = null as { refunded: number; depositBefore: number } | null;
   await prisma.$transaction(async (tx) => {
     const lease = await tx.tenantLease.findFirst({
       where: { id: leaseId, status: "ACTIVE" },
@@ -89,7 +101,18 @@ export async function vacateTenantLease(formData: FormData) {
         data: { currentDownpaymentBalance: { decrement: refundAmount } },
       });
     }
+    vacated = { refunded: refundAmount, depositBefore: Number(lease.currentDownpaymentBalance) };
   });
+  if (vacated) {
+    await recordAudit(user, {
+      action: "lease.vacate",
+      entity: "TenantLease",
+      entityId: leaseId,
+      propertyId,
+      summary: `Move-out, deposit refunded ৳${vacated.refunded} of ৳${vacated.depositBefore}`,
+      details: vacated,
+    });
+  }
 
   const returnTo = str(formData, "returnTo") ?? `/properties/${propertyId}`;
   revalidatePath(returnTo);
@@ -348,7 +371,7 @@ export type ReactivateLeaseResult = { ok: true } | { ok: false; error: Reactivat
 // The deposit refund that was recorded at move-out stays in the books and the deposit balance
 // stays as it was after the refund — if money really went back to the tenant, that is true.
 export async function reactivateTenantLease(formData: FormData): Promise<ReactivateLeaseResult> {
-  await requireCurrentUser();
+  const user = await requireCurrentUser();
   const locale = await getLocale();
   const leaseId = str(formData, "leaseId");
   const propertyId = str(formData, "propertyId");
@@ -370,6 +393,14 @@ export async function reactivateTenantLease(formData: FormData): Promise<Reactiv
   });
 
   if (!result.ok) return result;
+  await recordAudit(user, {
+    action: "lease.reactivate",
+    entity: "TenantLease",
+    entityId: leaseId,
+    propertyId,
+    summary: "Move-out undone, lease active again",
+    details: { tenantId: result.tenantId },
+  });
   for (const path of [...localizedMutationPaths(locale, `/properties/${propertyId}`), `/${locale}/vacant-units`, `/${locale}/tenants`, `/${locale}/tenants/${result.tenantId}`]) {
     revalidatePath(path);
   }

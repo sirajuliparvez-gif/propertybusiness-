@@ -201,7 +201,7 @@ export async function checkOutGuestStay(formData: FormData) {
 // (booking → collect now or later, same "add then pay" shape as utility
 // bills), rather than bundled into createGuestStay.
 export async function recordGuestStayPayment(formData: FormData) {
-  await requireCurrentUser();
+  const user = await requireCurrentUser();
   const locale = await getLocale();
   const guestStayId = formData.get("guestStayId") as string;
   const propertyId = formData.get("propertyId") as string;
@@ -217,6 +217,7 @@ export async function recordGuestStayPayment(formData: FormData) {
 
   await prisma.transaction.create({
     data: {
+      recordedByUserId: user.id,
       propertyId,
       type: "GUEST_STAY_PAYMENT_RECEIVED",
       direction: "INCOMING",
