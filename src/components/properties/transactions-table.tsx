@@ -19,6 +19,7 @@ import { cn } from "@/lib/utils";
 import type { AllTransactionsData } from "@/lib/transactions-data";
 import { EditTransactionDialog } from "@/components/properties/edit-transaction-dialog";
 import { DeleteTransactionButton } from "@/components/properties/delete-transaction-button";
+import { ReversePaymentButton } from "@/components/properties/reverse-payment-button";
 
 type Direction = "ALL" | "INCOMING" | "OUTGOING";
 const ALL_PROPERTIES = "ALL";
@@ -46,7 +47,7 @@ const TYPE_LABEL_KEYS: Record<string, string> = {
   OWNER_WITHDRAWAL: "transactionTypeOwnerWithdrawal",
 };
 
-export function TransactionsTable({ transactions }: { transactions: AllTransactionsData["transactions"] }) {
+export function TransactionsTable({ transactions, canReverse = false }: { transactions: AllTransactionsData["transactions"]; canReverse?: boolean }) {
   const t = useTranslations("Properties");
   const [direction, setDirection] = useState<Direction>("ALL");
   const [typeFilter, setTypeFilter] = useState(ALL_TYPES);
@@ -260,6 +261,7 @@ export function TransactionsTable({ transactions }: { transactions: AllTransacti
                       {t("moneyReceipt")}
                     </Button>
                   ) : null}
+                  {canReverse && tx.reversal ? <ReversePaymentButton transactionId={tx.id} kind={tx.reversal} /> : null}
                   {tx.canEditDirectly ? (
                     <div className="flex items-center justify-end gap-1">
                       <EditTransactionDialog transaction={tx} compact />

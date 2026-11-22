@@ -339,3 +339,39 @@ export async function addUnitToType(formData: FormData): Promise<AddUnitResult> 
   }
   return result;
 }
+
+
+export type ReactivateLeaseErrorCode = "missingFields" | "notFound" | "unitOccupied";
+export type ReactivateLeaseResult = { ok: true } | { ok: false; error: ReactivateLeaseErrorCode };
+
+// Undoes a move-out done by mistake: the lease is active again and the unit is occupied again.
+// The deposit refund that was recorded at move-out stays in the books and the deposit balance
+// stays as it was after the refund — if money really went back to the tenant, that is true.
+export async function reactivateTenantLease(formData: FormData): Promise<ReactivateLeaseResult> {
+  await requireCurrentUser();
+  const locale = await getLocale();
+  const leaseId = str(formData, "leaseId");
+  const propertyId = str(formData, "propertyId");
+  if (!leaseId || !propertyId) return { ok: false, error: "missingFields" };
+
+  const result = await prisma.$transaction(async (tx): Promise<ReactivateLeaseResult & { tenantId?: string }> => {
+    const lease = await tx.tenantLease.findFirst({
+      where: { id: leaseId, status: "VACATED", unit: { unitType: { propertyId } } },
+      select: { unitId: true, tenantId: true },
+    });
+    if (!lease) return { ok: false, error: "notFound" };
+    const occupied = await tx.tenantLease.findFirst({ where: { unitId: lease.unitId, status: "ACTIVE" }, select: { id: true } });
+    if (occupied) return { ok: false, error: "unitOccupied" };
+
+    await tx.tenantLease.update({ where: { id: leaseId }, data: { status: "ACTIVE", movedOutAt: null } });
+    // A unit that was switched to inactive after the move-out cannot hold an active tenant.
+    await tx.unit.update({ where: { id: lease.unitId }, data: { status: "ACTIVE" } });
+    return { ok: true, tenantId: lease.tenantId };
+  });
+
+  if (!result.ok) return result;
+  for (const path of [...localizedMutationPaths(locale, `/properties/${propertyId}`), `/${locale}/vacant-units`, `/${locale}/tenants`, `/${locale}/tenants/${result.tenantId}`]) {
+    revalidatePath(path);
+  }
+  return { ok: true };
+}
