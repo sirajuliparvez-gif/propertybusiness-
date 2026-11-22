@@ -72,7 +72,7 @@ export default async function TransactionsPage({ searchParams }: { searchParams:
         />
       </div>
 
-      <MobileTransactionsList key={selectedMonth ?? "ALL"} transactions={transactions} />
+      <MobileTransactionsList key={selectedMonth ?? "ALL"} transactions={transactions} canReverse={currentUser?.role === "ADMIN"} />
       <div className="hidden md:block">
         <TransactionsTable key={selectedMonth ?? "ALL"} transactions={transactions} canReverse={currentUser?.role === "ADMIN"} />
       </div>
