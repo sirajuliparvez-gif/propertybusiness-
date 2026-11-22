@@ -10,7 +10,7 @@ import { hasMonthlyTenantUtilityBill, hasMonthlyTenantUtilityBillAmong, prepareT
 import { prisma } from "@/lib/prisma";
 import { redirect } from "@/i18n/navigation";
 import { applyUtilityBillInstallment } from "@/lib/payment-progress";
-import { requireCurrentUser } from "@/lib/auth/session";
+import { requireCurrentUser, requireAdmin } from "@/lib/auth/session";
 import { isValidTransactionDate } from "@/lib/transaction-edit";
 import { readUtilityType, serializeUtilityBillDefaults, utilityBillTypes } from "@/lib/utility-bill-defaults";
 
@@ -76,6 +76,7 @@ function isUtilityBillWriteConflict(error: unknown) {
 }
 
 export async function addUtilityBill(formData: FormData) {
+  await requireCurrentUser();
   const locale = await getLocale();
   const propertyId = str(formData, "propertyId");
   const fields = readUtilityBillFields(formData);
@@ -240,6 +241,7 @@ export async function addTenantUtilityBills(
 // default from the bill's own paidByCompany flag when omitted, so the old
 // one-click "pay the whole thing" flow still works unchanged.
 export async function payUtilityBill(formData: FormData) {
+  await requireCurrentUser();
   const locale = await getLocale();
   const billId = formData.get("billId") as string;
   const propertyId = formData.get("propertyId") as string;
@@ -557,6 +559,7 @@ export async function updateUtilityBill(
 // that money — refused with a code (the dialog shows how much has already
 // been collected) rather than deleted or thrown.
 export async function deleteUtilityBill(formData: FormData): Promise<UtilityBillActionResult> {
+  await requireAdmin();
   const locale = await getLocale();
   const billId = str(formData, "billId");
   const propertyId = str(formData, "propertyId");

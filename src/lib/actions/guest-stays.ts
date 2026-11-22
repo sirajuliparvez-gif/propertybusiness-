@@ -6,6 +6,8 @@ import { getLocale } from "next-intl/server";
 import { prisma } from "@/lib/prisma";
 import { redirect } from "@/i18n/navigation";
 
+import { requireCurrentUser } from "@/lib/auth/session";
+import { parseMoneyAmount, isPastOrTodayDate } from "@/lib/money-input";
 function str(formData: FormData, key: string) {
   const v = formData.get(key);
   return typeof v === "string" && v.trim() !== "" ? v.trim() : null;
@@ -20,6 +22,7 @@ function parseMethod(formData: FormData, key: string) {
 // (front desk marks it when the guest actually walks in), never inferred
 // just because the check-in date has arrived.
 export async function createGuestStay(formData: FormData) {
+  await requireCurrentUser();
   const locale = await getLocale();
   const propertyId = formData.get("propertyId") as string;
   const unitId = formData.get("unitId") as string;
@@ -79,6 +82,7 @@ export async function createGuestStay(formData: FormData) {
 }
 
 export async function updateGuestStay(formData: FormData) {
+  await requireCurrentUser();
   const locale = await getLocale();
   const guestStayId = formData.get("guestStayId") as string;
   const propertyId = formData.get("propertyId") as string;
@@ -124,6 +128,7 @@ export async function updateGuestStay(formData: FormData) {
 // Plain status flips — check-in, cancel, no-show all just move the state
 // machine forward with no side effects on money.
 export async function updateGuestStayStatus(formData: FormData) {
+  await requireCurrentUser();
   const locale = await getLocale();
   const guestStayId = formData.get("guestStayId") as string;
   const status = formData.get("status") as string;
@@ -148,6 +153,7 @@ export async function updateGuestStayStatus(formData: FormData) {
 // returning the guest's own deposit isn't a company cost. Partial refund is
 // legitimate (damage deduction), so the amount is editable.
 export async function checkOutGuestStay(formData: FormData) {
+  await requireCurrentUser();
   const locale = await getLocale();
   const guestStayId = formData.get("guestStayId") as string;
   const propertyId = formData.get("propertyId") as string;
@@ -195,15 +201,19 @@ export async function checkOutGuestStay(formData: FormData) {
 // (booking → collect now or later, same "add then pay" shape as utility
 // bills), rather than bundled into createGuestStay.
 export async function recordGuestStayPayment(formData: FormData) {
+  await requireCurrentUser();
   const locale = await getLocale();
   const guestStayId = formData.get("guestStayId") as string;
   const propertyId = formData.get("propertyId") as string;
   if (!guestStayId || !propertyId) throw new Error("Missing booking or property id");
 
-  const amount = str(formData, "amount");
-  if (!amount) throw new Error("Missing amount");
+  const amountRaw = str(formData, "amount");
+  if (!amountRaw) throw new Error("Missing amount");
+  const amount = parseMoneyAmount(amountRaw);
+  if (!amount) throw new Error("Invalid guest payment amount");
   const method = parseMethod(formData, "method");
   const dateStr = str(formData, "date");
+  if (dateStr && !isPastOrTodayDate(dateStr)) throw new Error("Invalid guest payment date");
 
   await prisma.transaction.create({
     data: {

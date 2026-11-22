@@ -23,6 +23,7 @@ import { PropertyTypePicker } from "@/components/properties/property-type-picker
 import { isHotelType } from "@/lib/property-types";
 import { UnitOverridesTable } from "@/components/properties/unit-overrides-table";
 import { createProperty } from "@/lib/actions/properties";
+import { MAX_UNITS_PER_FORM, unitCountNeedsConfirmation } from "@/lib/unit-limits";
 import { formatTaka } from "@/lib/format";
 
 function SectionHeader({
@@ -71,7 +72,11 @@ export function PropertyCreateForm({ owners }: { owners: { id: string; name: str
 
   return (
     <form
-      action={(formData: FormData) => startTransition(() => createProperty(formData))}
+      action={(formData: FormData) => {
+        const count = Number(formData.get("unitCount"));
+        if (unitCountNeedsConfirmation(count) && !window.confirm(t("confirmManyUnits", { count }))) return;
+        startTransition(() => createProperty(formData));
+      }}
       className="flex flex-col gap-4"
     >
       <input type="hidden" name="rentMode" value={rentMode} />
@@ -159,6 +164,7 @@ export function PropertyCreateForm({ owners }: { owners: { id: string; name: str
                 name="unitCount"
                 type="number"
                 min={1}
+                max={MAX_UNITS_PER_FORM}
                 step={1}
                 required
                 value={unitCount}

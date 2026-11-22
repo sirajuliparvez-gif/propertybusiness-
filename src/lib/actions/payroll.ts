@@ -9,6 +9,8 @@ import { buildRentLedger, overdueEntries, totalOverdue, LEDGER_START_MONTH, SALA
 import { resolvePaymentMonth } from "@/lib/payment-month";
 import { isValidTransactionDate } from "@/lib/transaction-edit";
 
+import { requireCurrentUser } from "@/lib/auth/session";
+import { parseMoneyAmount } from "@/lib/money-input";
 function str(formData: FormData, key: string) {
   const v = formData.get(key);
   return typeof v === "string" && v.trim() !== "" ? v.trim() : null;
@@ -22,6 +24,7 @@ function str(formData: FormData, key: string) {
 // paid less than their full salary correctly shows PARTIAL rather than a
 // false "settled".
 export async function recordPayrollPayment(formData: FormData) {
+  await requireCurrentUser();
   const locale = await getLocale();
   const propertyId = str(formData, "propertyId"); // null for company staff
   const employeeId = formData.get("employeeId") as string;
@@ -30,10 +33,11 @@ export async function recordPayrollPayment(formData: FormData) {
   const dateStr = str(formData, "date");
   const amountStr = str(formData, "amount");
   if (!dateStr || !amountStr) throw new Error("Missing required payment fields");
-  const amount = Number(amountStr);
-  if (!isValidTransactionDate(dateStr) || !Number.isFinite(amount) || amount <= 0) {
+  const validAmount = parseMoneyAmount(amountStr);
+  if (!isValidTransactionDate(dateStr) || !validAmount) {
     throw new Error("Invalid salary payment");
   }
+  const amount = Number(validAmount);
   const billingMonth = str(formData, "billingMonth");
   const month = resolvePaymentMonth(billingMonth, dateStr);
   const paidDate = new Date(dateStr);
@@ -66,10 +70,14 @@ export async function recordPayrollPayment(formData: FormData) {
     if (billingMonth && (
       employee.status !== "ACTIVE" ||
       month > dhakaISO(dhakaNow()).slice(0, 7) ||
-      (!existing && (month < LEDGER_START_MONTH || month < dhakaISO(employee.joinedAt).slice(0, 7))) ||
-      amount > dueAmount - alreadyPaid
+      (!existing && (month < LEDGER_START_MONTH || month < dhakaISO(employee.joinedAt).slice(0, 7)))
     )) {
-      throw new Error("Salary payment exceeds the outstanding amount for an eligible month");
+      throw new Error("Salary payment is not allowed for this employee or month");
+    }
+    // The cap applies with or without a billing month: a payment can never exceed what is still owed
+    // for the month, otherwise the expense is booked higher than the salary.
+    if (amount > dueAmount - alreadyPaid) {
+      throw new Error("Salary payment exceeds the outstanding amount for this month");
     }
     if (existing && alreadyPaid >= dueAmount) {
       throw new Error("Salary for this month is already fully paid");
@@ -116,6 +124,7 @@ export async function recordPayrollPayment(formData: FormData) {
 // its "monthly recurring due" logic is identical for salary and rent).
 // Mirrors recordOverdueRentPayment exactly.
 export async function recordOverduePayrollPayment(formData: FormData) {
+  await requireCurrentUser();
   const locale = await getLocale();
   const propertyId = str(formData, "propertyId"); // null for company staff
   const employeeId = formData.get("employeeId") as string;
@@ -124,8 +133,9 @@ export async function recordOverduePayrollPayment(formData: FormData) {
   const dateStr = str(formData, "date");
   const amountStr = str(formData, "amount");
   if (!dateStr || !amountStr) throw new Error("Missing required payment fields");
-  let remaining = Number(amountStr);
-  if (!(remaining > 0)) throw new Error("Amount must be greater than zero");
+  const validAmount = parseMoneyAmount(amountStr);
+  if (!validAmount) throw new Error("Invalid salary payment amount");
+  let remaining = Number(validAmount);
   const paidDate = new Date(dateStr);
 
   const methodRaw = formData.get("method");

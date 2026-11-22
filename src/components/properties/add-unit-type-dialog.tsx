@@ -18,6 +18,7 @@ import { FormField } from "@/components/properties/form-field";
 import { UnitOverridesTable } from "@/components/properties/unit-overrides-table";
 import { isHotelType } from "@/lib/property-types";
 import { addUnitType } from "@/lib/actions/properties";
+import { MAX_UNITS_PER_FORM, unitCountNeedsConfirmation } from "@/lib/unit-limits";
 
 export function AddUnitTypeDialog({
   propertyId,
@@ -51,7 +52,11 @@ export function AddUnitTypeDialog({
           <DialogTitle>{t("addUnitType")}</DialogTitle>
         </DialogHeader>
         <form
-          action={(formData: FormData) => startTransition(() => addUnitType(formData))}
+          action={(formData: FormData) => {
+            const count = Number(formData.get("unitCount"));
+            if (unitCountNeedsConfirmation(count) && !window.confirm(t("confirmManyUnits", { count }))) return;
+            startTransition(() => addUnitType(formData));
+          }}
           className="grid gap-3 sm:grid-cols-2"
         >
           <input type="hidden" name="propertyId" value={propertyId} />
@@ -78,6 +83,7 @@ export function AddUnitTypeDialog({
               name="unitCount"
               type="number"
               min={1}
+              max={MAX_UNITS_PER_FORM}
               step={1}
               required
               value={unitCount}

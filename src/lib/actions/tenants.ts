@@ -92,6 +92,7 @@ export async function changeTenantRent(formData: FormData) {
 // Document row, never replace an existing one, so a tenant can accumulate
 // multiple NID/agreement copies over time rather than losing history.
 export async function updateTenantLease(formData: FormData) {
+  await requireCurrentUser();
   const locale = await getLocale();
   const leaseId = formData.get("leaseId") as string;
   const tenantId = formData.get("tenantId") as string;

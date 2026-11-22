@@ -6,6 +6,8 @@ import { getLocale } from "next-intl/server";
 import { prisma } from "@/lib/prisma";
 import { redirect } from "@/i18n/navigation";
 
+import { requireCurrentUser } from "@/lib/auth/session";
+import { parseMoneyAmount, isPastOrTodayDate } from "@/lib/money-input";
 function str(formData: FormData, key: string) {
   const v = formData.get(key);
   return typeof v === "string" && v.trim() !== "" ? v.trim() : null;
@@ -20,15 +22,19 @@ function str(formData: FormData, key: string) {
 // upsert would never match an existing whole-property (null-unit) row and
 // would just keep inserting duplicates instead of correcting the entry.
 export async function recordOwnerRentPayment(formData: FormData) {
+  await requireCurrentUser();
   const locale = await getLocale();
   const propertyId = formData.get("propertyId") as string;
   const ownerLeaseAgreementId = formData.get("ownerLeaseAgreementId") as string;
   if (!propertyId || !ownerLeaseAgreementId) throw new Error("Missing property or agreement id");
 
   const dateStr = str(formData, "date");
-  const amount = str(formData, "amount");
+  const amountRaw = str(formData, "amount");
   const unitId = str(formData, "unitId");
-  if (!dateStr || !amount) throw new Error("Missing required payment fields");
+  if (!dateStr || !amountRaw) throw new Error("Missing required payment fields");
+  const amount = parseMoneyAmount(amountRaw);
+  if (!amount) throw new Error("Invalid owner rent amount");
+  if (!isPastOrTodayDate(dateStr)) throw new Error("Invalid owner rent date");
   const month = dateStr.slice(0, 7);
   const paidDate = new Date(dateStr);
 
@@ -102,6 +108,7 @@ export async function recordOwnerRentPayment(formData: FormData) {
 // money. A partial refund is legitimate (owner may deduct damages/dues), so
 // the amount is editable rather than always assumed to be the full deposit.
 export async function endLeaseAgreement(formData: FormData) {
+  await requireCurrentUser();
   const locale = await getLocale();
   const agreementId = formData.get("agreementId") as string;
   const propertyId = formData.get("propertyId") as string;
@@ -157,6 +164,7 @@ export async function endLeaseAgreement(formData: FormData) {
 // atomically — the "renew with new terms" flow. oldAgreementId is optional
 // since a property could in principle have no active agreement to end.
 export async function renewLeaseAgreement(formData: FormData) {
+  await requireCurrentUser();
   const locale = await getLocale();
   const propertyId = formData.get("propertyId") as string;
   if (!propertyId) throw new Error("Missing property id");

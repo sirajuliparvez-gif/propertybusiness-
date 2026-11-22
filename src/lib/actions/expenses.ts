@@ -5,6 +5,8 @@ import { getLocale } from "next-intl/server";
 import { prisma } from "@/lib/prisma";
 import { redirect } from "@/i18n/navigation";
 
+import { requireCurrentUser } from "@/lib/auth/session";
+import { parseMoneyAmount, isPastOrTodayDate } from "@/lib/money-input";
 function str(formData: FormData, key: string) {
   const v = formData.get(key);
   return typeof v === "string" && v.trim() !== "" ? v.trim() : null;
@@ -16,6 +18,7 @@ function str(formData: FormData, key: string) {
 // MAINTENANCE_EXPENSE/OTHER transaction into the synthetic company row
 // (reports-data.ts's COMPANY_KEY), so no reporting changes were needed.
 export async function addExpense(formData: FormData) {
+  await requireCurrentUser();
   const locale = await getLocale();
   const propertyId = str(formData, "propertyId");
 
@@ -39,13 +42,17 @@ export async function addExpense(formData: FormData) {
   // expense actually gets recorded, so an expense with no reason at all
   // isn't useful to anyone reviewing the ledger later.
   if (!amount || !date || !notes) throw new Error("Missing required expense fields");
+  // Zero, negative, non-numeric or absurdly large amounts and future dates are refused here, not only in the form.
+  const validAmount = parseMoneyAmount(amount);
+  if (!validAmount) throw new Error("Invalid expense amount");
+  if (!isPastOrTodayDate(date)) throw new Error("Invalid expense date");
 
   await prisma.transaction.create({
     data: {
       propertyId,
       type,
       direction: "OUTGOING",
-      amount,
+      amount: validAmount,
       date: new Date(date),
       notes,
       unitId,
