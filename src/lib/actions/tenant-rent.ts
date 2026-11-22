@@ -19,6 +19,7 @@ import {
 import { localizedMutationPaths } from "@/lib/localized-revalidation";
 import { buildRentArrearsReport } from "@/lib/rent-arrears-report";
 import { requireCurrentUser, requireAdmin } from "@/lib/auth/session";
+import { recordAudit } from "@/lib/audit";
 import { isValidTransactionDate } from "@/lib/transaction-edit";
 import { withRentActionFeedback } from "@/lib/rent-action-feedback";
 import { allocateInvoicePayment, invoicePaymentSnapshot, reconcileInvoiceAllocation, type InvoicePaymentLine, type ReceiptCheckLine } from "@/lib/invoice-payment";
@@ -354,7 +355,7 @@ export async function addOlderRentDue(tenantLeaseId: string, month: string, amou
 // adjustments have multiple audit entries, so they are deliberately refused
 // here instead of silently rewriting only part of their history.
 export async function updateTenantRentPayment(formData: FormData): Promise<RentPaymentEditResult> {
-  await requireCurrentUser();
+  const user = await requireCurrentUser();
   const locale = await getLocale();
   const rentPaymentId = str(formData, "rentPaymentId");
   const tenantLeaseId = str(formData, "tenantLeaseId");
@@ -385,6 +386,8 @@ export async function updateTenantRentPayment(formData: FormData): Promise<RentP
   const paidDate = new Date(dateRaw);
 
   let changedReceiptId: string | null = null;
+  // Set inside the transaction below; the cast stops TypeScript from narrowing it to null.
+  let auditBefore = null as { month: string; dueAmount: number; paidAmount: number } | null;
   const problem = await prisma.$transaction(async (tx) => {
     const payment = await tx.rentPayment.findFirst({
       where: { id: rentPaymentId, tenantLeaseId },
@@ -401,6 +404,7 @@ export async function updateTenantRentPayment(formData: FormData): Promise<RentP
       return "notEditable" as const;
     }
     if (amount > Number(payment.dueAmount)) return "amountExceedsDue" as const;
+    auditBefore = { month: payment.month, dueAmount: Number(payment.dueAmount), paidAmount: Number(payment.paidAmount) };
     if (billingMonth !== payment.month) {
       const targetMonthPayment = await tx.rentPayment.findUnique({
         where: { tenantLeaseId_month: { tenantLeaseId, month: billingMonth } },
@@ -445,6 +449,13 @@ export async function updateTenantRentPayment(formData: FormData): Promise<RentP
     return null;
   }, { isolationLevel: "Serializable" });
   if (problem) return { ok: false, error: problem };
+  await recordAudit(user, {
+    action: "rentPayment.update",
+    entity: "RentPayment",
+    entityId: rentPaymentId,
+    summary: `Rent ${auditBefore?.month ?? ""}: ৳${auditBefore?.paidAmount ?? "?"} -> ৳${amount} (${billingMonth})`,
+    details: { before: auditBefore, after: { month: billingMonth, amount, date: dateRaw, method }, tenantLeaseId },
+  });
   if (changedReceiptId) revalidateLocalizedPath(locale, `/tenants/${tenantLeaseId}/receipts/${changedReceiptId}`);
 
   for (const path of new Set([returnTo, "/rent", "/rent/arrears", "/rent/report", "/reports/market", "/transactions", "/dashboard", "/tenants", `/tenants/${tenantLeaseId}`, `/tenants/${tenantLeaseId}/history`, `/tenants/${tenantLeaseId}/invoice`])) revalidateLocalizedPath(locale, path);
@@ -456,7 +467,7 @@ export async function updateTenantRentPayment(formData: FormData): Promise<RentP
 // cash-flow entry. Installments and downpayment adjustments retain their audit
 // history and cannot be deleted from the tenant payment-history row.
 export async function deleteTenantRentPayment(formData: FormData): Promise<RentPaymentDeleteResult> {
-  await requireAdmin();
+  const user = await requireAdmin();
   const locale = await getLocale();
   const rentPaymentId = str(formData, "rentPaymentId");
   const tenantLeaseId = str(formData, "tenantLeaseId");
@@ -468,7 +479,9 @@ export async function deleteTenantRentPayment(formData: FormData): Promise<RentP
       where: { id: rentPaymentId, tenantLeaseId },
       select: {
         month: true,
-        transactions: { select: { id: true } },
+        dueAmount: true,
+        paidAmount: true,
+        transactions: { select: { id: true, amount: true, date: true, method: true } },
         downpaymentAdjustments: { select: { id: true }, take: 1 },
       },
     });
@@ -479,9 +492,16 @@ export async function deleteTenantRentPayment(formData: FormData): Promise<RentP
 
     await tx.transaction.delete({ where: { id: payment.transactions[0].id } });
     await tx.rentPayment.delete({ where: { id: rentPaymentId } });
-    return { month: payment.month };
+    return { month: payment.month, dueAmount: payment.dueAmount, paidAmount: payment.paidAmount, transaction: payment.transactions[0] };
   });
   if (typeof result === "string") return { ok: false, error: result };
+  await recordAudit(user, {
+    action: "rentPayment.delete",
+    entity: "RentPayment",
+    entityId: rentPaymentId,
+    summary: `Rent ${result.month}: ৳${result.paidAmount} deleted`,
+    details: { ...result, tenantLeaseId },
+  });
 
   revalidateLocalizedPath(locale, returnTo);
   redirect({ href: withRentActionFeedback(returnTo, "deleted", { month: result.month }), locale });

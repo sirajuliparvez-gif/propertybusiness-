@@ -832,6 +832,29 @@ model NotificationLog {
   @@unique([type, referenceId])
 }
 
+// Who did what, for the actions that delete or change money, records or access: deletes,
+// edits, reversals, owner withdrawals, move-outs, property deletion and bulk import.
+// userId has no foreign key on purpose — the entry must survive even if the user is removed —
+// and the user's name and role are copied in so the log reads correctly later.
+// `details` holds what the record looked like before it was deleted or changed.
+model AuditLog {
+  id         String   @id @default(cuid())
+  createdAt  DateTime @default(now())
+  userId     String?
+  userName   String?
+  userRole   String?
+  action     String
+  entity     String
+  entityId   String?
+  propertyId String?
+  summary    String?
+  details    Json?
+
+  @@index([createdAt])
+  @@index([entity, entityId])
+  @@index([userId, createdAt])
+}
+
 // One CSV upload event — covers both bulk-migrating old historical records and
 // ongoing bulk entry of new data (e.g. a month's worth of rent payments at once).
 // Rows created by an import are tagged with this batch's id (see importBatchId

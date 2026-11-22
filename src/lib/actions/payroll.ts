@@ -24,7 +24,7 @@ function str(formData: FormData, key: string) {
 // paid less than their full salary correctly shows PARTIAL rather than a
 // false "settled".
 export async function recordPayrollPayment(formData: FormData) {
-  await requireCurrentUser();
+  const user = await requireCurrentUser();
   const locale = await getLocale();
   const propertyId = str(formData, "propertyId"); // null for company staff
   const employeeId = formData.get("employeeId") as string;
@@ -102,6 +102,7 @@ export async function recordPayrollPayment(formData: FormData) {
 
     await tx.transaction.create({
       data: {
+        recordedByUserId: user.id,
         propertyId: billingMonth ? employee.propertyId : propertyId,
         type: "PAYROLL_EXPENSE",
         direction: "OUTGOING",
@@ -124,7 +125,7 @@ export async function recordPayrollPayment(formData: FormData) {
 // its "monthly recurring due" logic is identical for salary and rent).
 // Mirrors recordOverdueRentPayment exactly.
 export async function recordOverduePayrollPayment(formData: FormData) {
-  await requireCurrentUser();
+  const user = await requireCurrentUser();
   const locale = await getLocale();
   const propertyId = str(formData, "propertyId"); // null for company staff
   const employeeId = formData.get("employeeId") as string;
@@ -203,6 +204,7 @@ export async function recordOverduePayrollPayment(formData: FormData) {
 
       await tx.transaction.create({
         data: {
+          recordedByUserId: user.id,
           propertyId,
           type: "PAYROLL_EXPENSE",
           direction: "OUTGOING",

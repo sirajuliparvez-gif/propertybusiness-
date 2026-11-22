@@ -18,7 +18,7 @@ function str(formData: FormData, key: string) {
 // MAINTENANCE_EXPENSE/OTHER transaction into the synthetic company row
 // (reports-data.ts's COMPANY_KEY), so no reporting changes were needed.
 export async function addExpense(formData: FormData) {
-  await requireCurrentUser();
+  const user = await requireCurrentUser();
   const locale = await getLocale();
   const propertyId = str(formData, "propertyId");
 
@@ -49,6 +49,7 @@ export async function addExpense(formData: FormData) {
 
   await prisma.transaction.create({
     data: {
+      recordedByUserId: user.id,
       propertyId,
       type,
       direction: "OUTGOING",

@@ -6,6 +6,7 @@ import { prisma } from "@/lib/prisma";
 import { redirect } from "@/i18n/navigation";
 
 import { requireCurrentUser, requireAdmin } from "@/lib/auth/session";
+import { recordAudit } from "@/lib/audit";
 import { isValidUnitCount, MAX_UNITS_PER_FORM } from "@/lib/unit-limits";
 function str(formData: FormData, key: string) {
   const v = formData.get(key);
@@ -312,14 +313,23 @@ export async function updateProperty(formData: FormData) {
 }
 
 export async function deleteProperty(formData: FormData) {
-  await requireAdmin();
+  const user = await requireAdmin();
   const locale = await getLocale();
   const propertyId = formData.get("propertyId") as string;
   if (!propertyId) throw new Error("Missing property id");
 
+  const before = await prisma.property.findUnique({ where: { id: propertyId }, select: { name: true, status: true, type: true } });
   await prisma.property.update({
     where: { id: propertyId },
     data: { status: "INACTIVE", deletedAt: new Date() },
+  });
+  await recordAudit(user, {
+    action: "property.delete",
+    entity: "Property",
+    entityId: propertyId,
+    propertyId,
+    summary: `Property deleted: ${before?.name ?? propertyId}`,
+    details: before,
   });
 
   revalidatePath("/properties");

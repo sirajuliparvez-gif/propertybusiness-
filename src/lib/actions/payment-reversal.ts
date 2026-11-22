@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { getLocale } from "next-intl/server";
 import { prisma } from "@/lib/prisma";
 import { requireAdmin } from "@/lib/auth/session";
+import { recordAudit } from "@/lib/audit";
 import { localizedMutationPaths } from "@/lib/localized-revalidation";
 import { reversedPaymentState } from "@/lib/payment-reversal";
 
@@ -25,14 +26,14 @@ async function refresh(paths: string[]) {
 // Takes one mistaken salary payment back: the cash-flow entry is deleted and the month's
 // "paid so far" goes down by that amount, so the salary shows as owed again.
 export async function reverseSalaryPayment(formData: FormData): Promise<PaymentReversalResult> {
-  await requireAdmin();
+  const user = await requireAdmin();
   const transactionId = str(formData, "transactionId");
   if (!transactionId) return { ok: false, error: "missingFields" };
 
   const result = await prisma.$transaction(async (tx) => {
     const payment = await tx.transaction.findUnique({
       where: { id: transactionId },
-      select: { type: true, amount: true, payrollRecordId: true },
+      select: { type: true, amount: true, date: true, method: true, propertyId: true, payrollRecordId: true },
     });
     if (!payment) return "notFound" as const;
     if (payment.type !== "PAYROLL_EXPENSE" || !payment.payrollRecordId) return "notReversible" as const;
@@ -62,10 +63,18 @@ export async function reverseSalaryPayment(formData: FormData): Promise<PaymentR
       },
     });
     await tx.transaction.delete({ where: { id: transactionId } });
-    return "ok" as const;
+    return { payment, recordId: record.id, paidBefore: Number(record.amountPaid), paidAfter: next.paid };
   }, { isolationLevel: "Serializable" });
 
-  if (result !== "ok") return { ok: false, error: result };
+  if (typeof result === "string") return { ok: false, error: result };
+  await recordAudit(user, {
+    action: "salaryPayment.reverse",
+    entity: "PayrollRecord",
+    entityId: result.recordId,
+    propertyId: result.payment.propertyId,
+    summary: `Salary payment ৳${result.payment.amount} reversed (paid ৳${result.paidBefore} -> ৳${result.paidAfter})`,
+    details: { transactionId, payment: result.payment, paidBefore: result.paidBefore, paidAfter: result.paidAfter },
+  });
   await refresh(["/transactions", "/employees"]);
   return { ok: true };
 }
@@ -75,14 +84,14 @@ export async function reverseSalaryPayment(formData: FormData): Promise<PaymentR
 // toward the bill, so it shows as owed again. Payments that came in through a printed rent
 // bill receipt are left alone, because that receipt records them too.
 export async function reverseUtilityPayment(formData: FormData): Promise<PaymentReversalResult> {
-  await requireAdmin();
+  const user = await requireAdmin();
   const transactionId = str(formData, "transactionId");
   if (!transactionId) return { ok: false, error: "missingFields" };
 
   const result = await prisma.$transaction(async (tx) => {
     const payment = await tx.transaction.findUnique({
       where: { id: transactionId },
-      select: { type: true, amount: true, utilityBillId: true, paymentReceiptId: true },
+      select: { type: true, amount: true, date: true, method: true, propertyId: true, utilityBillId: true, paymentReceiptId: true },
     });
     if (!payment) return "notFound" as const;
     if (!(UTILITY_PAYMENT_TYPES as readonly string[]).includes(payment.type) || !payment.utilityBillId) {
@@ -107,10 +116,18 @@ export async function reverseUtilityPayment(formData: FormData): Promise<Payment
       });
     }
     await tx.transaction.delete({ where: { id: transactionId } });
-    return "ok" as const;
+    return { payment };
   }, { isolationLevel: "Serializable" });
 
-  if (result !== "ok") return { ok: false, error: result };
+  if (typeof result === "string") return { ok: false, error: result };
+  await recordAudit(user, {
+    action: "utilityPayment.reverse",
+    entity: "UtilityBill",
+    entityId: result.payment.utilityBillId,
+    propertyId: result.payment.propertyId,
+    summary: `${result.payment.type} ৳${result.payment.amount} reversed`,
+    details: { transactionId, payment: result.payment },
+  });
   await refresh(["/transactions", "/utility-bills", "/utility-bills/arrears"]);
   return { ok: true };
 }

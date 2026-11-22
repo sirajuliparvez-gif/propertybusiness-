@@ -1,5 +1,7 @@
 import { getTranslations } from "next-intl/server";
-import { Languages, SunMoon, Info, UserCircle } from "lucide-react";
+import { Languages, SunMoon, Info, UserCircle, ScrollText } from "lucide-react";
+import { Link } from "@/i18n/navigation";
+import { buttonVariants } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { LanguageSetting } from "@/components/settings/language-setting";
 import { ThemeSetting } from "@/components/settings/theme-setting";
@@ -38,6 +40,23 @@ export default async function SettingsPage() {
           <LogoutButton variant="full" />
         </CardContent>
       </Card>
+
+      {user.role === "ADMIN" ? (
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2 text-base">
+              <span className="flex size-7 items-center justify-center rounded-lg bg-linear-to-br from-amber-500/25 to-amber-500/5 text-amber-600 dark:text-amber-400">
+                <ScrollText className="size-3.5" />
+              </span>
+              {t("auditLogTitle")}
+            </CardTitle>
+            <CardDescription>{t("auditLogDesc")}</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <Link href="/audit-log" className={buttonVariants({ variant: "outline", size: "sm" })}>{t("auditLogOpen")}</Link>
+          </CardContent>
+        </Card>
+      ) : null}
 
       <Card>
         <CardHeader>

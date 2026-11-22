@@ -11,6 +11,7 @@ import { prisma } from "@/lib/prisma";
 import { redirect } from "@/i18n/navigation";
 import { applyUtilityBillInstallment } from "@/lib/payment-progress";
 import { requireCurrentUser, requireAdmin } from "@/lib/auth/session";
+import { recordAudit } from "@/lib/audit";
 import { isValidTransactionDate } from "@/lib/transaction-edit";
 import { readUtilityType, serializeUtilityBillDefaults, utilityBillTypes } from "@/lib/utility-bill-defaults";
 
@@ -241,7 +242,7 @@ export async function addTenantUtilityBills(
 // default from the bill's own paidByCompany flag when omitted, so the old
 // one-click "pay the whole thing" flow still works unchanged.
 export async function payUtilityBill(formData: FormData) {
-  await requireCurrentUser();
+  const user = await requireCurrentUser();
   const locale = await getLocale();
   const billId = formData.get("billId") as string;
   const propertyId = formData.get("propertyId") as string;
@@ -325,6 +326,7 @@ export async function payUtilityBill(formData: FormData) {
       // real income). Older bills without an explicit lease use the unit’s active lease.
       await tx.transaction.create({
         data: {
+          recordedByUserId: user.id,
           propertyId,
           type: "UTILITY_REIMBURSEMENT_FROM_TENANT",
           direction: "INCOMING",
@@ -345,6 +347,7 @@ export async function payUtilityBill(formData: FormData) {
       // unlike the reimbursement above, so it counts toward netProfit.
       await tx.transaction.create({
         data: {
+          recordedByUserId: user.id,
           propertyId,
           type: "UTILITY_PROFIT_FROM_TENANT",
           direction: "INCOMING",
@@ -363,6 +366,7 @@ export async function payUtilityBill(formData: FormData) {
       // so it counts toward netProfit.
       await tx.transaction.create({
         data: {
+          recordedByUserId: user.id,
           propertyId,
           type: "UTILITY_EXPENSE",
           direction: "OUTGOING",
@@ -400,7 +404,7 @@ export async function updateUtilityBill(
   formData: FormData,
   invoice?: { leaseId: string; month: string; quickEdit?: true },
 ): Promise<UtilityBillActionResult> {
-  await requireCurrentUser();
+  const user = await requireCurrentUser();
   const locale = await getLocale();
   const billId = str(formData, "billId");
   const propertyId = str(formData, "propertyId");
@@ -424,6 +428,8 @@ export async function updateUtilityBill(
   const returnTo = str(formData, "returnTo") ?? `/properties/${propertyId}`;
 
   const month = dueDate.slice(0, 7);
+  // Set inside the transaction below; the cast stops TypeScript from narrowing it to null.
+  let auditBefore = null as { type: string; amount: number; dueDate: Date; unitId: string | null; paidByCompany: boolean; meterReading: number | null } | null;
   const problem = await prisma.$transaction(async (tx) => {
     const bill = await tx.utilityBill.findUnique({
       where: { id: billId },
@@ -433,6 +439,10 @@ export async function updateUtilityBill(
       },
     });
     if (!bill || bill.propertyId !== propertyId) return "notFound" as const;
+    auditBefore = {
+      type: bill.type, amount: Number(bill.amount), dueDate: bill.dueDate, unitId: bill.unitId,
+      paidByCompany: bill.paidByCompany, meterReading: bill.meterReading == null ? null : Number(bill.meterReading),
+    };
     let updatedAmount = amount;
     let updatedPayer = paidByCompany;
     if (invoice) {
@@ -537,6 +547,14 @@ export async function updateUtilityBill(
     throw error;
   });
   if (problem) return { ok: false, error: problem };
+  await recordAudit(user, {
+    action: "utilityBill.update",
+    entity: "UtilityBill",
+    entityId: billId,
+    propertyId,
+    summary: `${type} bill: ৳${auditBefore?.amount ?? "?"} -> ৳${amount}`,
+    details: { before: auditBefore, after: { type, amount, dueDate, unitId, paidByCompany } },
+  });
 
   if (invoice) {
     revalidatePath(`/${locale}/rent/${invoice.leaseId}/invoice`);
@@ -559,17 +577,24 @@ export async function updateUtilityBill(
 // that money — refused with a code (the dialog shows how much has already
 // been collected) rather than deleted or thrown.
 export async function deleteUtilityBill(formData: FormData): Promise<UtilityBillActionResult> {
-  await requireAdmin();
+  const user = await requireAdmin();
   const locale = await getLocale();
   const billId = str(formData, "billId");
   const propertyId = str(formData, "propertyId");
   if (!billId || !propertyId) return { ok: false, error: "missingFields" };
   const returnTo = str(formData, "returnTo") ?? `/properties/${propertyId}`;
 
+  // Set inside the transaction below; the cast stops TypeScript from narrowing it to null.
+  let auditBill = null as { type: string; month: string; amount: number; dueDate: Date; unitId: string | null } | null;
   const problem = await prisma.$transaction(async (tx) => {
     const bill = await tx.utilityBill.findUnique({
       where: { id: billId },
       select: {
+        type: true,
+        month: true,
+        amount: true,
+        dueDate: true,
+        unitId: true,
         paidAmount: true,
         transactions: { select: { id: true }, take: 1 },
         documents: { select: { id: true } },
@@ -577,6 +602,7 @@ export async function deleteUtilityBill(formData: FormData): Promise<UtilityBill
     });
     if (!bill) return "notFound" as const;
     if (Number(bill.paidAmount) > 0 || bill.transactions.length > 0) return "hasPayments" as const;
+    auditBill = { type: bill.type, month: bill.month, amount: Number(bill.amount), dueDate: bill.dueDate, unitId: bill.unitId };
     // Attached file rows go with the bill — left alone they'd point at
     // nothing (the uploaded file itself stays in storage either way).
     if (bill.documents.length > 0) {
@@ -586,6 +612,14 @@ export async function deleteUtilityBill(formData: FormData): Promise<UtilityBill
     return null;
   });
   if (problem) return { ok: false, error: problem };
+  await recordAudit(user, {
+    action: "utilityBill.delete",
+    entity: "UtilityBill",
+    entityId: billId,
+    propertyId,
+    summary: `${auditBill?.type ?? ""} bill ${auditBill?.month ?? ""}: ৳${auditBill?.amount ?? "?"} deleted`,
+    details: auditBill,
+  });
 
   revalidatePath(returnTo);
   redirect({ href: returnTo, locale });

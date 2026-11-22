@@ -6,6 +6,7 @@ import { prisma } from "@/lib/prisma";
 import { redirect } from "@/i18n/navigation";
 
 import { requireAdmin } from "@/lib/auth/session";
+import { recordAudit } from "@/lib/audit";
 import { parseMoneyAmount, isPastOrTodayDate } from "@/lib/money-input";
 function str(formData: FormData, key: string) {
   const v = formData.get(key);
@@ -20,7 +21,7 @@ function str(formData: FormData, key: string) {
 // cash flow but never reported net profit, same pass-through treatment as
 // the DOWNPAYMENT_* types.
 export async function recordOwnerWithdrawal(formData: FormData) {
-  await requireAdmin();
+  const user = await requireAdmin();
   const locale = await getLocale();
 
   const amount = str(formData, "amount");
@@ -42,7 +43,7 @@ export async function recordOwnerWithdrawal(formData: FormData) {
   if (!validAmount) throw new Error("Invalid withdrawal amount");
   if (!isPastOrTodayDate(date)) throw new Error("Invalid withdrawal date");
 
-  await prisma.transaction.create({
+  const withdrawal = await prisma.transaction.create({
     data: {
       propertyId: null,
       type: "OWNER_WITHDRAWAL",
@@ -51,7 +52,15 @@ export async function recordOwnerWithdrawal(formData: FormData) {
       date: new Date(date),
       notes: notes ? `${recipientName} — ${notes}` : recipientName,
       method,
+      recordedByUserId: user.id,
     },
+  });
+  await recordAudit(user, {
+    action: "ownerWithdrawal.create",
+    entity: "Transaction",
+    entityId: withdrawal.id,
+    summary: `Owner withdrawal ৳${validAmount} to ${recipientName}`,
+    details: { amount: validAmount, date, recipientName, method },
   });
 
   const returnTo = str(formData, "returnTo") ?? "/transactions";
