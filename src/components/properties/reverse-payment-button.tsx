@@ -24,7 +24,7 @@ import {
 
 // Admin-only undo for a mistaken salary or utility payment. The payment entry is deleted and
 // the salary month / bill shows as owed again.
-export function ReversePaymentButton({ transactionId, kind }: { transactionId: string; kind: "salary" | "utility" }) {
+export function ReversePaymentButton({ transactionId, kind, compact = false }: { transactionId: string; kind: "salary" | "utility"; compact?: boolean }) {
   const t = useTranslations("Properties");
   const router = useRouter();
   const [open, setOpen] = useState(false);
@@ -43,14 +43,15 @@ export function ReversePaymentButton({ transactionId, kind }: { transactionId: s
           <Button
             type="button"
             variant="ghost"
-            size="sm"
+            size={compact ? "icon-sm" : "sm"}
             title={t("reversePayment")}
+            aria-label={t("reversePayment")}
             className="text-destructive hover:bg-destructive/10 hover:text-destructive"
           />
         }
       >
         <Undo2 className="size-3.5" />
-        {t("reversePayment")}
+        {compact ? null : t("reversePayment")}
       </DialogTrigger>
       <DialogContent>
         <DialogHeader>

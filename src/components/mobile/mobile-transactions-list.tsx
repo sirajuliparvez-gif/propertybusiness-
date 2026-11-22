@@ -11,6 +11,7 @@ import { cn } from "@/lib/utils";
 import type { AllTransactionsData } from "@/lib/transactions-data";
 import { EditTransactionDialog } from "@/components/properties/edit-transaction-dialog";
 import { DeleteTransactionButton } from "@/components/properties/delete-transaction-button";
+import { ReversePaymentButton } from "@/components/properties/reverse-payment-button";
 
 type Direction = "ALL" | "INCOMING" | "OUTGOING";
 
@@ -35,8 +36,10 @@ const TYPE_LABEL_KEYS: Record<string, string> = {
 
 export function MobileTransactionsList({
   transactions,
+  canReverse = false,
 }: {
   transactions: AllTransactionsData["transactions"];
+  canReverse?: boolean;
 }) {
   const t = useTranslations("Properties");
   const [direction, setDirection] = useState<Direction>("ALL");
@@ -126,6 +129,7 @@ export function MobileTransactionsList({
                     {tx.direction === "INCOMING" ? "+" : "−"}
                     {formatTaka(tx.amount)}
                   </span>
+                  {canReverse && tx.reversal ? <ReversePaymentButton transactionId={tx.id} kind={tx.reversal} compact /> : null}
                   {tx.canEditDirectly ? (
                     <>
                       <EditTransactionDialog transaction={tx} compact />
