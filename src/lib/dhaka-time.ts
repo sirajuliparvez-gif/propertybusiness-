@@ -49,3 +49,11 @@ export function dhakaISO(date: Date | string): string {
 export function dhakaToday(): Date {
   return new Date(dhakaTodayISO());
 }
+
+// "YYYY-MM" of a Date that already carries Bangladesh wall-clock time in its local
+// getters — what dhakaNow() returns. Do not pass such a Date to dhakaISO(): that
+// formats the instant in Asia/Dhaka a second time, adding another 6 hours on a UTC
+// server, so from 18:00 on the last day of a month the "current month" flipped early.
+export function dhakaMonthKey(wallClock: Date): string {
+  return `${wallClock.getFullYear()}-${String(wallClock.getMonth() + 1).padStart(2, "0")}`;
+}

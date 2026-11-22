@@ -7,5 +7,7 @@ export function computeServiceChargeAmount(
   serviceChargeValue: number | null
 ): number {
   if (!serviceChargeType || serviceChargeValue == null) return 0;
-  return serviceChargeType === "PERCENTAGE" ? (monthlyRentAmount * serviceChargeValue) / 100 : serviceChargeValue;
+  // Rounded to whole paisa: a percentage like 3442.989 can never be paid off in 2-decimal amounts,
+  // which left such rent "partly paid" and overdue forever.
+  return serviceChargeType === "PERCENTAGE" ? Math.round(monthlyRentAmount * serviceChargeValue) / 100 : serviceChargeValue;
 }

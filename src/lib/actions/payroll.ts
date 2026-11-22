@@ -1,6 +1,6 @@
 "use server";
 
-import { dhakaISO, dhakaNow } from "@/lib/dhaka-time";
+import { dhakaISO, dhakaNow, dhakaMonthKey } from "@/lib/dhaka-time";
 import { revalidatePath } from "next/cache";
 import { getLocale } from "next-intl/server";
 import { prisma } from "@/lib/prisma";
@@ -69,7 +69,7 @@ export async function recordPayrollPayment(formData: FormData) {
       : billingMonth && existing ? alreadyPaid : Number(employee.salaryAmount);
     if (billingMonth && (
       employee.status !== "ACTIVE" ||
-      month > dhakaISO(dhakaNow()).slice(0, 7) ||
+      month > dhakaMonthKey(dhakaNow()) ||
       (!existing && (month < LEDGER_START_MONTH || month < dhakaISO(employee.joinedAt).slice(0, 7)))
     )) {
       throw new Error("Salary payment is not allowed for this employee or month");

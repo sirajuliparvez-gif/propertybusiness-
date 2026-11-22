@@ -1,6 +1,7 @@
 import { resolveListMonth } from "@/lib/list-month";
 import { dashboardMonthKeys, dashboardFinancialBuckets, dashboardYearlyBuckets } from "@/lib/dashboard-period";
 import { dhakaNow } from "@/lib/dhaka-time";
+import { lettableUnitWhere, occupiedUnitWhere, vacantUnitWhere } from "@/lib/unit-scope";
 import { cache } from "react";
 import { prisma } from "@/lib/prisma";
 import { isIncomeType, isExpenseType } from "@/lib/finance-types";
@@ -51,6 +52,7 @@ export const getActionRequiredData = cache(async function getActionRequiredData(
       where: {
         status: { in: ["UNPAID", "PARTIAL"] },
         month: rentPastDueNow ? { lte: currentMonth } : { lt: currentMonth },
+        tenantLease: { unit: { unitType: { property: { deletedAt: null } } } },
       },
       orderBy: { dueDate: "asc" },
       take: 20,
@@ -103,7 +105,7 @@ export const getActionRequiredData = cache(async function getActionRequiredData(
     }),
     // Vacant units (no active tenant lease)
     prisma.unit.findMany({
-      where: { tenantLeases: { none: { status: "ACTIVE" } } },
+      where: vacantUnitWhere,
       take: 20,
       include: { unitType: { include: { property: { select: { name: true } } } } },
     }),
@@ -179,9 +181,13 @@ export const getActionRequiredData = cache(async function getActionRequiredData(
   // Second batch: what the first queries cannot see (rent months with no row at
   // all, staff nobody has paid yet) plus true totals, because each list above is
   // capped at 20 rows and the tab badges must show the real number.
+  // A lease that starts next month, or sits in a deleted property, owes nothing this month.
+  const nextMonthStart = new Date(now.getFullYear(), now.getMonth() + 1, 1);
   const unrecordedRentWhere = {
     status: "ACTIVE" as const,
     monthlyRentAmount: { gt: 0 },
+    startDate: { lt: nextMonthStart },
+    unit: { unitType: { property: { deletedAt: null } } },
     rentPayments: { none: { month: currentMonth } },
   };
   const utilityWhere = {
@@ -205,6 +211,7 @@ export const getActionRequiredData = cache(async function getActionRequiredData(
       where: {
         status: { in: ["UNPAID", "PARTIAL"] },
         month: rentPastDueNow ? { lte: currentMonth } : { lt: currentMonth },
+        tenantLease: { unit: { unitType: { property: { deletedAt: null } } } },
       },
     }),
     salaryPastDueNow
@@ -215,7 +222,7 @@ export const getActionRequiredData = cache(async function getActionRequiredData(
         })
       : Promise.resolve([]),
     prisma.utilityBill.count({ where: utilityWhere }),
-    prisma.unit.count({ where: { tenantLeases: { none: { status: "ACTIVE" } } } }),
+    prisma.unit.count({ where: vacantUnitWhere }),
     prisma.tenantLease.count({ where: { status: "ACTIVE", endDate: { not: null, lte: daysFromNow(30) } } }),
     prisma.ownerLeaseAgreement.count({
       where: { status: "ACTIVE", endDate: { not: null, lte: daysFromNow(30) } },
@@ -526,8 +533,8 @@ export async function getTotalOutstanding() {
 
 export async function getOccupancyStats() {
   const [totalUnits, occupiedUnits, checkedInGuests] = await Promise.all([
-    prisma.unit.count(),
-    prisma.unit.count({ where: { tenantLeases: { some: { status: "ACTIVE" } } } }),
+    prisma.unit.count({ where: lettableUnitWhere }),
+    prisma.unit.count({ where: occupiedUnitWhere }),
     prisma.guestStay.count({ where: { status: "CHECKED_IN" } }),
   ]);
 

@@ -526,7 +526,7 @@
     "vacateTenant": "Remove Tenant & Vacate Unit",
     "vacateTenantConfirm": "Confirm — {name} will be removed and this unit vacated",
     "vacateTenantConfirmHint": "This tenant's lease history stays on record — only the unit becomes vacant for a new tenant.",
-    "vacateTenantDuesWarning": "Check first: unpaid rent or bills this tenant still owes may stop showing in the dashboard totals once the unit is vacated. Collect or note any dues before you continue.",
+    "vacateTenantDuesWarning": "Check first: only rent already recorded as unpaid stays in the dashboard totals after move-out. Months nobody recorded are not counted, so collect or note any dues before you continue.",
     "confirmVacate": "Yes, vacate unit",
     "tenantVacatedToast": "Tenant removed, unit is now vacant.",
 
