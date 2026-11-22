@@ -417,6 +417,8 @@
     "ownerRentAmountOptionalHint": "Optional if using a fixed rent for the whole property",
     "customizePerUnit": "Customize each unit individually",
     "addUnit": "Add Unit",
+    "billTarget": "Unit (or whole property)",
+    "billTargetPlaceholder": "Choose a unit",
     "reversePayment": "Reverse payment",
     "reversePaymentTitle": "Reverse this payment?",
     "reversePaymentSalaryDesc": "The payment entry is deleted and this salary month shows as owed again. Use this only for a payment that was entered by mistake.",

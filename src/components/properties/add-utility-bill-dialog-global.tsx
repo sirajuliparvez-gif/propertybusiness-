@@ -15,7 +15,9 @@ import { Input } from "@/components/ui/input";
 import {
   Select,
   SelectContent,
+  SelectGroup,
   SelectItem,
+  SelectLabel,
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
@@ -123,9 +125,21 @@ export function AddUtilityBillDialogGlobal({
     setUnitRate("");
   }
 
-  function handlePropertyChange(v: string | null) {
-    setPropertyId(v ?? "");
-    setUnitId(NONE_VALUE);
+  // One choice picks both the market and the unit, so a bill cannot end up in a market
+  // different from its unit. The value is "<propertyId>::<unitId>" ("" unit = whole property).
+  const targetValue = propertyId ? `${propertyId}::${unitId === NONE_VALUE ? "" : unitId}` : "";
+  const targetItems = useMemo(
+    () => properties.flatMap((p) => [
+      { value: `${p.id}::`, label: `${p.name} — ${t("noSpecificUnit")}` },
+      ...p.units.map((u) => ({ value: `${p.id}::${u.id}`, label: `${p.name} · ${unitPickerLabel(u)}` })),
+    ]),
+    [properties, t]
+  );
+
+  function handleTargetChange(v: string | null) {
+    const [nextPropertyId = "", nextUnitId = ""] = (v ?? "").split("::");
+    setPropertyId(nextPropertyId);
+    setUnitId(nextUnitId || NONE_VALUE);
     resetBillFields();
   }
 
@@ -158,20 +172,22 @@ export function AddUtilityBillDialogGlobal({
           <input type="hidden" name="unitId" value={unitId === NONE_VALUE ? "" : unitId} />
           <input type="hidden" name="returnTo" value="/utility-bills" />
 
-          <FormField label={t("propertyLabel")} htmlFor="utilityBillProperty" required className="sm:col-span-2">
-            <Select
-              value={propertyId}
-              onValueChange={handlePropertyChange}
-              items={properties.map((p) => ({ value: p.id, label: p.name }))}
-            >
-              <SelectTrigger id="utilityBillProperty" className="w-full">
-                <SelectValue placeholder={t("choosePropertyFirst")} />
+          <FormField label={t("billTarget")} htmlFor="utilityBillTarget" required className="sm:col-span-2">
+            <Select value={targetValue} onValueChange={handleTargetChange} items={targetItems}>
+              <SelectTrigger id="utilityBillTarget" className="w-full">
+                <SelectValue placeholder={t("billTargetPlaceholder")} />
               </SelectTrigger>
               <SelectContent>
                 {properties.map((p) => (
-                  <SelectItem key={p.id} value={p.id}>
-                    {p.name}
-                  </SelectItem>
+                  <SelectGroup key={p.id}>
+                    <SelectLabel>{p.name}</SelectLabel>
+                    <SelectItem value={`${p.id}::`}>{t("noSpecificUnit")}</SelectItem>
+                    {p.units.map((u) => (
+                      <SelectItem key={u.id} value={`${p.id}::${u.id}`} className="[&_span]:whitespace-normal">
+                        {unitPickerLabel(u)}
+                      </SelectItem>
+                    ))}
+                  </SelectGroup>
                 ))}
               </SelectContent>
             </Select>
@@ -193,29 +209,6 @@ export function AddUtilityBillDialogGlobal({
                 {utilityBillTypes.map((k) => (
                   <SelectItem key={k} value={k}>
                     {typeLabels[k]}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </FormField>
-
-          <FormField label={t("unitOptional")} htmlFor="utilityBillUnit" className="sm:col-span-2">
-            <Select
-              value={unitId}
-              onValueChange={(v) => { setUnitId(v ?? NONE_VALUE); resetBillFields(); }}
-              items={[
-                { value: NONE_VALUE, label: t("noSpecificUnit") },
-                ...unitsForProperty.map((u) => ({ value: u.id, label: unitPickerLabel(u) })),
-              ]}
-            >
-              <SelectTrigger id="utilityBillUnit" className="w-full">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value={NONE_VALUE}>{t("noSpecificUnit")}</SelectItem>
-                {unitsForProperty.map((u) => (
-                  <SelectItem key={u.id} value={u.id} className="[&_span]:whitespace-normal">
-                    {unitPickerLabel(u)}
                   </SelectItem>
                 ))}
               </SelectContent>
