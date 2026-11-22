@@ -5,9 +5,9 @@ import { numericRentRates } from "@/lib/rent-terms";
 import { dashboardLedgerTotals, dashboardRentCollection, type DashboardLease, type DashboardEmployee } from "@/lib/dashboard-ledger";
 
 // One request-scoped read shared by outstanding balances, forecasts and the
-// mobile rent summary. Active accounts only, with no directory/UI joins.
+// mobile rent summary. Active accounts, plus rent still recorded as owed by tenants who moved out.
 export const getDashboardLedgerData = cache(async function getDashboardLedgerData() {
-  const [leaseRows, employeeRows] = await Promise.all([
+  const [leaseRows, departedRows, employeeRows] = await Promise.all([
     prisma.tenantLease.findMany({
       where: { status: "ACTIVE", unit: { unitType: { property: { deletedAt: null } } } },
       select: {
@@ -17,6 +17,14 @@ export const getDashboardLedgerData = cache(async function getDashboardLedgerDat
         rentRates: { orderBy: { effectiveMonth: "asc" } },
         rentPayments: { select: { id: true, month: true, dueDate: true, dueAmount: true, paidAmount: true, status: true, paidAt: true } },
       },
+    }),
+    // Rent recorded as still owed by tenants who have since moved out (see departedRentDue).
+    prisma.rentPayment.findMany({
+      where: {
+        status: { in: ["UNPAID", "PARTIAL"] },
+        tenantLease: { status: { not: "ACTIVE" }, unit: { unitType: { property: { deletedAt: null } } } },
+      },
+      select: { id: true, month: true, dueDate: true, dueAmount: true, paidAmount: true, status: true, paidAt: true },
     }),
     prisma.employee.findMany({
       where: { status: "ACTIVE" },
@@ -42,7 +50,8 @@ export const getDashboardLedgerData = cache(async function getDashboardLedgerDat
       status: payment.status === "PENDING" ? "UNPAID" : payment.status,
     })),
   }));
-  return { leases, totals: dashboardLedgerTotals(leases, employees) };
+  const departedRent = departedRows.map((payment) => ({ ...payment, dueAmount: Number(payment.dueAmount), paidAmount: Number(payment.paidAmount) }));
+  return { leases, totals: dashboardLedgerTotals(leases, employees, dhakaNow(), departedRent) };
 });
 
 export async function getDashboardRentCollection(month: string) {

@@ -1,6 +1,6 @@
 import { meterNames } from "@/lib/meter-names";
 import { cache } from "react";
-import { dhakaISO, dhakaNow } from "@/lib/dhaka-time";
+import { dhakaNow, dhakaMonthKey } from "@/lib/dhaka-time";
 import { prisma } from "@/lib/prisma";
 import { computeServiceChargeAmount } from "@/lib/service-charge";
 import { attachElectricityConsumption } from "@/lib/electricity-consumption";
@@ -17,6 +17,7 @@ import {
 } from "@/lib/rent-ledger";
 import { splitUtilityBillTransactions } from "@/lib/utility-bill-split";
 import { paymentMonthRange, resolveRentCollectionMonth } from "@/lib/payment-month";
+import { collectionRatePercent } from "@/lib/collection-rate";
 import { numericRentRates, rentTermsDueAmount, resolveRentTermsForMonth } from "@/lib/rent-terms";
 
 function monthRange(now: Date) {
@@ -135,7 +136,7 @@ export const getAllTenantsData = cache(async function getAllTenantsData() {
             serviceChargeValue: tl.serviceChargeValue != null ? Number(tl.serviceChargeValue) : null,
           };
           const rentRates = numericRentRates(tl.rentRates);
-          const currentTerms = resolveRentTermsForMonth(fallbackTerms, rentRates, dhakaISO(now).slice(0, 7));
+          const currentTerms = resolveRentTermsForMonth(fallbackTerms, rentRates, dhakaMonthKey(now));
           const serviceChargeAmount = computeServiceChargeAmount(
             currentTerms.monthlyRentAmount,
             currentTerms.serviceChargeType,
@@ -355,13 +356,12 @@ export async function getRentCollectionData(requestedMonth?: string, tenantLease
   const totalDue = payments.reduce((sum, payment) => sum + payment.selectedDueAmount, 0);
   const totalCollected = payments.reduce((sum, payment) => sum + payment.selectedPaidAmount, 0);
   const totalRemaining = payments.reduce((sum, payment) => sum + payment.overdueAmount, 0);
-  const settledCount = payments.filter((payment) => payment.overdueAmount === 0).length;
   return {
     payments,
     totalDue,
     totalCollected,
     totalRemaining,
-    collectionRate: payments.length > 0 ? Math.round((settledCount / payments.length) * 100) : 0,
+    collectionRate: collectionRatePercent(totalCollected, totalDue),
     selectedMonth,
     availableMonths: Array.from(new Set([currentMonth, ...trackedMonths, ...recordedMonths.map((row) => row.month)])).sort().reverse(),
   };
@@ -467,7 +467,7 @@ export async function getTenantProfile(leaseId: string) {
     serviceChargeValue: lease.serviceChargeValue != null ? Number(lease.serviceChargeValue) : null,
   };
   const rentRates = numericRentRates(lease.rentRates);
-  const currentTerms = resolveRentTermsForMonth(fallbackTerms, rentRates, dhakaISO(dhakaNow()).slice(0, 7));
+  const currentTerms = resolveRentTermsForMonth(fallbackTerms, rentRates, dhakaMonthKey(dhakaNow()));
   const leaseServiceChargeAmount = computeServiceChargeAmount(
     currentTerms.monthlyRentAmount,
     currentTerms.serviceChargeType,

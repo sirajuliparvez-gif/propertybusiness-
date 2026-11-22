@@ -1,5 +1,5 @@
 import { meterNames } from "@/lib/meter-names";
-import { dhakaISO, dhakaNow } from "@/lib/dhaka-time";
+import { dhakaISO, dhakaNow, dhakaMonthKey } from "@/lib/dhaka-time";
 import { prisma } from "@/lib/prisma";
 import { isExpenseType, isIncomeType } from "@/lib/finance-types";
 import { reportingMonthKey } from "@/lib/reporting-period";
@@ -45,7 +45,7 @@ function monthRange(now: Date) {
 // month it moved, and only real income/expense types (never pass-through reimbursements).
 async function currentMonthResult(now: Date) {
   const { monthStart, monthEnd } = monthRange(now);
-  const month = dhakaISO(now).slice(0, 7);
+  const month = dhakaMonthKey(now);
   const rows = await prisma.transaction.findMany({
     where: { propertyId: { not: null }, OR: [{ date: { gte: monthStart, lt: monthEnd } }, { rentPayment: { month } }] },
     select: { type: true, amount: true, date: true, propertyId: true, rentPayment: { select: { month: true } } },
@@ -124,7 +124,7 @@ export async function getPropertiesList() {
     }),
   ]);
   const displayIdByPropertyId = new Map(idOrder.map((p, i) => [p.id, `P-${String(i + 1).padStart(3, "0")}`]));
-  const currentMonth = dhakaISO(now).slice(0, 7);
+  const currentMonth = dhakaMonthKey(now);
   const resultOf = await currentMonthResult(now);
 
   return properties.map((p) => {
@@ -455,7 +455,7 @@ export async function getPropertyDetail(id: string) {
           ? resolveRentTermsForMonth(
               activeLeaseFallback,
               activeLeaseRates,
-              dhakaISO(dhakaNow()).slice(0, 7)
+              dhakaMonthKey(dhakaNow())
             )
           : null;
         // "Rent due" is rent + service charge bundled as one figure — see
