@@ -3,6 +3,7 @@
 import { dhakaTodayISO } from "@/lib/dhaka-time";
 import { useState, useTransition } from "react";
 import { useTranslations } from "next-intl";
+import { useRouter } from "@/i18n/navigation";
 import { Loader2, Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -42,10 +43,14 @@ const ROLE_PRESETS = [
 
 export function AddEmployeeDialogGlobal({
   properties,
+  dismissTo,
 }: {
   properties: { id: string; name: string }[];
+  // When set, the dialog opens straight away (a "+" shortcut link) and goes back here on close.
+  dismissTo?: string;
 }) {
   const t = useTranslations("Properties");
+  const router = useRouter();
   const [isPending, startTransition] = useTransition();
   const [propertyId, setPropertyId] = useState(properties[0]?.id ?? COMPANY_STAFF_VALUE);
   const [role, setRole] = useState("");
@@ -58,7 +63,12 @@ export function AddEmployeeDialogGlobal({
   }
 
   return (
-    <Dialog>
+    <Dialog
+      defaultOpen={dismissTo != null}
+      onOpenChange={(open) => {
+        if (!open && dismissTo) router.replace(dismissTo, { scroll: false });
+      }}
+    >
       <DialogTrigger render={<Button size="sm" />}>
         <Plus className="size-3.5" />
         {t("addEmployee")}

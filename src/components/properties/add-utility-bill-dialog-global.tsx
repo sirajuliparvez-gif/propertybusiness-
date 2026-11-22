@@ -52,7 +52,8 @@ export function AddUtilityBillDialogGlobal({
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
   const [type, setType] = useState<UtilityType>("ELECTRICITY");
-  const [propertyId, setPropertyId] = useState(properties[0]?.id ?? "");
+  // No property is pre-selected: defaulting to the first one let a bill go to the wrong market unnoticed.
+  const [propertyId, setPropertyId] = useState("");
   const [unitId, setUnitId] = useState(NONE_VALUE);
   const [payerOverride, setPayerOverride] = useState<boolean | null>(null);
   const [meterReading, setMeterReading] = useState("");
@@ -164,7 +165,7 @@ export function AddUtilityBillDialogGlobal({
               items={properties.map((p) => ({ value: p.id, label: p.name }))}
             >
               <SelectTrigger id="utilityBillProperty" className="w-full">
-                <SelectValue />
+                <SelectValue placeholder={t("choosePropertyFirst")} />
               </SelectTrigger>
               <SelectContent>
                 {properties.map((p) => (

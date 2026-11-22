@@ -41,6 +41,7 @@ import { cn } from "@/lib/utils";
 import { getPropertyDetail, getAllTenants } from "@/lib/properties-data";
 import { DeletePropertyButton } from "@/components/properties/delete-property-button";
 import { AddUnitTypeDialog } from "@/components/properties/add-unit-type-dialog";
+import { AddUnitDialog } from "@/components/properties/add-unit-dialog";
 import { EditUnitTypeDialog } from "@/components/properties/edit-unit-type-dialog";
 import { UnitDetailDialog } from "@/components/properties/unit-detail-dialog";
 import { AddExpenseDialog } from "@/components/properties/add-expense-dialog";
@@ -577,12 +578,15 @@ export default async function PropertyDetailPage({
                             : t("ownerRentNotSetYet")}
                       </p>
                     </div>
-                    <EditUnitTypeDialog
-                      propertyId={property.id}
-                      propertyType={property.type}
-                      unitType={ut}
-                      totalUnitCount={property.totalUnits}
-                    />
+                    <div className="flex items-center gap-2">
+                      <AddUnitDialog propertyId={property.id} unitTypeId={ut.id} unitTypeLabel={ut.label} />
+                      <EditUnitTypeDialog
+                        propertyId={property.id}
+                        propertyType={property.type}
+                        unitType={ut}
+                        totalUnitCount={property.totalUnits}
+                      />
+                    </div>
                   </div>
                   <div className="flex flex-wrap gap-1.5">
                     {ut.units.map((u) => {

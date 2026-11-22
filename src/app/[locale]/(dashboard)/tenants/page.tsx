@@ -5,7 +5,9 @@ import { TenantsTable } from "@/components/properties/tenants-table";
 import { MobileTenantsList } from "@/components/mobile/mobile-tenants-list";
 import { AddTenantDialogGlobal } from "@/components/properties/add-tenant-dialog-global";
 
-export default async function TenantsPage() {
+export default async function TenantsPage({ searchParams }: { searchParams: Promise<{ add?: string }> }) {
+  const { add } = await searchParams;
+  const openAddForm = add === "tenant";
   const t = await getTranslations("Properties");
   const [
     {
@@ -23,7 +25,12 @@ export default async function TenantsPage() {
           <p className="text-sm text-muted-foreground">{t("tenantsPageSubtitle")}</p>
         </div>
         {propertiesWithVacantUnits.length > 0 ? (
-          <AddTenantDialogGlobal properties={propertiesWithVacantUnits} existingTenants={existingTenants} />
+          <AddTenantDialogGlobal
+            key={String(openAddForm)}
+            properties={propertiesWithVacantUnits}
+            existingTenants={existingTenants}
+            dismissTo={openAddForm ? "/tenants" : undefined}
+          />
         ) : null}
       </div>
 

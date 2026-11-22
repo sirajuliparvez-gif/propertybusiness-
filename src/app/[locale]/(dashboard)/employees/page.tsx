@@ -10,8 +10,9 @@ import { AddEmployeeDialogGlobal } from "@/components/properties/add-employee-di
 import { StatTile } from "@/components/stat-tile";
 import { formatTaka } from "@/lib/format";
 
-export default async function EmployeesPage({ searchParams }: { searchParams: Promise<{ month?: string }> }) {
-  const { month } = await searchParams;
+export default async function EmployeesPage({ searchParams }: { searchParams: Promise<{ month?: string; add?: string }> }) {
+  const { month, add } = await searchParams;
+  const openAddForm = add === "employee";
   const t = await getTranslations("Properties");
   const {
     staff,
@@ -36,7 +37,11 @@ export default async function EmployeesPage({ searchParams }: { searchParams: Pr
         <div className="flex flex-wrap items-center gap-2 sm:justify-end">
           <ReportMonthSelect month={selectedMonth ?? "ALL"} months={availableMonths} basePath="/employees" allowAll />
           <Button variant="outline" render={<Link href={`/employees/report${selectedMonth ? `?month=${selectedMonth}` : ""}`} />} nativeButton={false}><FileText className="size-4" />{t("salaryReportTitle")}</Button>
-          <AddEmployeeDialogGlobal properties={properties} />
+          <AddEmployeeDialogGlobal
+            key={String(openAddForm)}
+            properties={properties}
+            dismissTo={openAddForm ? "/employees" : undefined}
+          />
         </div>
       </div>
 

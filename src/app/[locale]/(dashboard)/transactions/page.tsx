@@ -14,6 +14,7 @@ import { formatTaka } from "@/lib/format";
 export default async function TransactionsPage({ searchParams }: { searchParams: Promise<{ month?: string; add?: string }> }) {
   const { month, add } = await searchParams;
   const openAddForm = add === "expense";
+  const openWithdrawalForm = add === "withdrawal";
   const t = await getTranslations("Properties");
   const [{ transactions, totalIncome, totalExpense, net, entryCount, selectedMonth, availableMonths }, propertyUnitOptions] =
     await Promise.all([getAllTransactionsData(month), getPropertyUnitOptions()]);
@@ -30,7 +31,10 @@ export default async function TransactionsPage({ searchParams }: { searchParams:
         <div className="flex flex-wrap items-center gap-2">
           <ReportMonthSelect month={selectedMonth ?? "ALL"} months={availableMonths} basePath="/transactions" allowAll />
           <Button variant="outline" render={<Link href={`/transactions/report${selectedMonth ? `?month=${selectedMonth}` : ""}`} />} nativeButton={false}><FileText className="size-4" />{t("transactionReportTitle")}</Button>
-          <AddOwnerWithdrawalDialogGlobal />
+          <AddOwnerWithdrawalDialogGlobal
+            key={`withdrawal-${openWithdrawalForm}`}
+            dismissTo={openWithdrawalForm ? dismissAddFormTo : undefined}
+          />
           <AddExpenseDialogGlobal
             key={String(openAddForm)}
             properties={propertyUnitOptions}
